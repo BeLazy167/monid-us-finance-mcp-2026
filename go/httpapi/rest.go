@@ -162,6 +162,9 @@ func restRoutes(rt *restAPI) []restRoute {
 
 		// ---- SEC registration statements (get_ipos) ----
 		{http.MethodGet, "/ipos", rt.ipos},
+
+		// ---- Asynchronous filing-item requests (see filingItemsRequest) ----
+		{http.MethodGet, "/filings/items/requests/{request_id}", rt.filingItemsRequest},
 	}
 	for _, path := range notImplementedPaths {
 		routes = append(routes, restRoute{http.MethodGet, path, notImplemented})
@@ -812,6 +815,25 @@ func (rt *restAPI) institutionalInvestors(w http.ResponseWriter, r *http.Request
 }
 
 // ---- SEC registration statements (get_ipos) ----
+
+// ---- Asynchronous filing-item requests ----
+
+// filingItemsRequest answers /filings/items/requests/{request_id}.
+//
+// Financial Datasets can accept a filing-item extraction and hand back a
+// request id to poll. This server has no such queue: /filings/items runs
+// the extraction inline and returns the items on the same response, so no
+// request id it could be given ever existed. Any id is therefore a
+// not_found rather than a pending or failed request, which is the honest
+// answer - reporting "pending" for work that will never complete would
+// leave a client polling forever.
+//
+// It costs nothing and never reaches Caller.
+func (rt *restAPI) filingItemsRequest(w http.ResponseWriter, r *http.Request, id callerIdentity) {
+	writeFDError(w, http.StatusNotFound, "not_found",
+		"No such filing-items request. This server extracts filing items synchronously: "+
+			"/filings/items returns the items directly and never issues a request id to poll.")
+}
 
 // ipos answers /ipos via Service.GetIPOs: one issuer's S-1 and S-1/A
 // registration statements. ticker is required by the tool itself, and

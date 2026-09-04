@@ -4903,6 +4903,54 @@
         }
       }
     },
+    "/filings/items/requests/{request_id}": {
+      "get": {
+        "operationId": "get_filing_items_request",
+        "tags": [
+          "Filings"
+        ],
+        "summary": "Get the result of an accepted filing items request",
+        "description": "Always answers HTTP 404 not_found, for any request id. Financial Datasets can accept a filing-item extraction and hand back a request id to poll; this server has no such queue. /filings/items runs the extraction inline and returns the items on the same response, so no request id it could be given ever existed. Reporting a request as pending, when it will never complete, would leave a client polling forever, so a not_found is the honest answer. Costs nothing and makes no upstream call.",
+        "parameters": [
+          {
+            "name": "request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "The request id to look up. No id resolves, because this server never issues one."
+          }
+        ],
+        "responses": {
+          "404": {
+            "description": "No such request; this server has no asynchronous request queue.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "examples": {
+                  "example": {
+                    "value": {
+                      "error": "not_found",
+                      "message": "No such filing-items request. This server extracts filing items synchronously: /filings/items returns the items directly and never issues a request id to poll."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          }
+        }
+      }
+    },
     "/ipos": {
       "get": {
         "operationId": "get_ipos",
