@@ -2205,17 +2205,11 @@ func (c *callCtx) getInterestRates(args map[string]any) (Result, error) {
 	for i, spec := range bankSpecs {
 		go func(i int, spec bankSpec) {
 			defer wg.Done()
-			run, err := c.run(contextDev, scrapeEndpoint, nil, interestRateScrapeQuery(spec.URL))
+			rate, err := spec.Read(c, spec)
 			if err != nil {
 				failures[i] = fmt.Errorf("%s: %w", spec.Bank, err)
 				return
 			}
-			markdown, perr := parseInterestRateScrapeMarkdown(run.Output, spec.URL)
-			if perr != nil {
-				failures[i] = fmt.Errorf("%s: %w", spec.Bank, perr)
-				return
-			}
-			rate := parsePolicyRate(markdown, spec.Bank)
 			if rate == nil {
 				failures[i] = fmt.Errorf("%s: no policy rate found on %s", spec.Bank, spec.URL)
 				return

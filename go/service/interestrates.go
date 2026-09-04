@@ -1,13 +1,16 @@
-// Current policy rates from four central-bank pages, fetched through
-// Context.dev /web/scrape/markdown and parsed by the shape each bank
-// publishes: the Fed and the ECB list decisions in a table, newest first;
-// the BOE and BOJ state the rate in prose beside the announcement it came
-// from. A bank whose page cannot be fetched or parsed is omitted; rates
+// Current policy rates from four central banks, each read the way that
+// bank publishes it. The Fed and the ECB list decisions in a table on
+// one page, newest first; the BOE states the rate under a heading beside
+// the announcement it came from; the BOJ publishes each decision only as
+// a PDF statement, so its releases listing supplies the newest statement
+// and its date, and Context.dev's extractor reads the rate out of the
+// PDF. A bank whose page cannot be fetched or parsed is omitted; rates
 // and dates are never guessed from anything other than the page text.
 package service
 
 import (
 	"encoding/json"
+	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
@@ -16,28 +19,121 @@ import (
 	"github.com/belazy/monid-finance/providers"
 )
 
-// bankSpec mirrors interest_rates.BankSpec.
+// bankSpec names one central bank and how its current rate is read.
 type bankSpec struct {
 	Bank string
 	Name string
+	// URL is the page read; for the BOJ it is a format string taking the
+	// year of the releases listing.
 	URL  string
+	Read func(c *callCtx, spec bankSpec) (*bankRate, error)
 }
 
-// bankSpecs mirrors interest_rates.BANK_SPECS exactly, including order.
+// bankSpecs is the coverage list; /macro/interest-rates/banks derives from it.
 var bankSpecs = []bankSpec{
-	{Bank: "FED", Name: "Federal Reserve", URL: "https://www.federalreserve.gov/monetarypolicy/openmarket.htm"},
+	{Bank: "FED", Name: "Federal Reserve", URL: "https://www.federalreserve.gov/monetarypolicy/openmarket.htm", Read: readScrapedRate},
 	{Bank: "ECB", Name: "European Central Bank", URL: "https://www.ecb.europa.eu/stats/policy_and_exchange_rates/" +
-		"key_ecb_interest_rates/html/index.en.html"},
-	{Bank: "BOE", Name: "Bank of England", URL: "https://www.bankofengland.co.uk/monetary-policy"},
-	{Bank: "BOJ", Name: "Bank of Japan", URL: "https://www.boj.or.jp/en/mopo/mpr_2026/index.htm"},
+		"key_ecb_interest_rates/html/index.en.html", Read: readScrapedRate},
+	{Bank: "BOE", Name: "Bank of England", URL: "https://www.bankofengland.co.uk/monetary-policy", Read: readScrapedRate},
+	{Bank: "BOJ", Name: "Bank of Japan", URL: "https://www.boj.or.jp/en/mopo/mpmdeci/mpr_%d/index.htm", Read: readBOJRate},
 }
 
-// interestRateScrapeQuery mirrors interest_rates.scrape_query(url, timeout_ms=60_000).
-func interestRateScrapeQuery(url string) map[string]any {
+// interestRateScrapeQuery is the Context.dev markdown scrape for one page;
+// links are kept only where the page's links are the data.
+func interestRateScrapeQuery(url string, links bool) map[string]any {
 	return map[string]any{
-		"url": url, "includeLinks": false, "includeImages": false,
+		"url": url, "includeLinks": links, "includeImages": false,
 		"useMainContentOnly": true, "timeoutMS": 60_000,
 	}
+}
+
+// readScrapedRate reads a bank whose page states the rate in its text.
+func readScrapedRate(c *callCtx, spec bankSpec) (*bankRate, error) {
+	run, err := c.run(contextDev, scrapeEndpoint, nil, interestRateScrapeQuery(spec.URL, false))
+	if err != nil {
+		return nil, err
+	}
+	markdown, err := parseInterestRateScrapeMarkdown(run.Output, spec.URL)
+	if err != nil {
+		return nil, err
+	}
+	rate, date := parsePolicyRate(markdown, spec.Bank)
+	if rate == nil {
+		return nil, nil
+	}
+	return &bankRate{Bank: spec.Bank, Name: spec.Name, Rate: *rate, Date: date}, nil
+}
+
+// bojStatementRE matches one row of the BOJ releases table that links a
+// Statement on Monetary Policy, newest first:
+//
+//	| July 31, 2026 | [Statement on Monetary Policy \[PDF 160KB\]](https://.../k260731a.pdf) |
+var bojStatementRE = regexp.MustCompile(`(?m)^\|\s*([A-Za-z]{3,9})\.?\s+(\d{1,2}),\s+(\d{4})\s*\|\s*\[Statement on Monetary Policy.*?\]\((https?://\S+?\.pdf)\)`)
+
+// bojStatementRow finds the newest statement row. The page sets its dates
+// with no-break spaces, which Go's \s does not match, so they are
+// normalised first.
+func bojStatementRow(markdown string) []string {
+	return bojStatementRE.FindStringSubmatch(strings.ReplaceAll(markdown, "\u00a0", " "))
+}
+
+var bojExtractSchema = map[string]any{
+	"type": "object",
+	"properties": map[string]any{
+		"rate_percent": map[string]any{
+			"type":        "number",
+			"description": "The short-term policy interest rate this statement sets (the uncollateralized overnight call rate target), as a percent, for example 0.75.",
+		},
+	},
+	"required": []string{"rate_percent"},
+}
+
+const bojExtractInstructions = "Read this Bank of Japan Statement on Monetary Policy. Return the short-term policy interest rate it sets, the uncollateralized overnight call rate target, as a percent number. If the statement sets no such rate, return null."
+
+// readBOJRate lists the year's releases, takes the newest Statement on
+// Monetary Policy and its date, and has the extractor read the rate from
+// the PDF. In January the new year's listing may hold no statement yet,
+// so the previous year is tried next.
+func readBOJRate(c *callCtx, spec bankSpec) (*bankRate, error) {
+	year := time.Now().UTC().Year()
+	for _, y := range []int{year, year - 1} {
+		url := fmt.Sprintf(spec.URL, y)
+		run, err := c.run(contextDev, scrapeEndpoint, nil, interestRateScrapeQuery(url, true))
+		if err != nil {
+			return nil, err
+		}
+		markdown, err := parseInterestRateScrapeMarkdown(run.Output, url)
+		if err != nil {
+			return nil, err
+		}
+		statement := bojStatementRow(markdown)
+		if statement == nil {
+			continue
+		}
+		rate, err := c.extractBOJRate(statement[4])
+		if err != nil {
+			return nil, err
+		}
+		return &bankRate{Bank: spec.Bank, Name: spec.Name, Rate: rate, Date: monthDayYearToISO(statement[1], statement[2], statement[3])}, nil
+	}
+	return nil, nil
+}
+
+// extractBOJRate reads the policy rate out of one statement PDF.
+func (c *callCtx) extractBOJRate(pdfURL string) (float64, error) {
+	run, err := c.run(contextDev, extractEndpoint, extractRequestBody(pdfURL, bojExtractSchema, bojExtractInstructions), nil)
+	if err != nil {
+		return 0, err
+	}
+	data, err := parseExtractOutput(run.Output)
+	if err != nil {
+		return 0, err
+	}
+	rate, ok := data["rate_percent"].(float64)
+	if !ok || rate < -1 || rate > 10 {
+		return 0, &providers.SchemaDriftError{Msg: "BOJ statement extract did not yield a policy rate percent"}
+	}
+	return rate, nil
 }
 
 // parseInterestRateScrapeMarkdown mirrors interest_rates.parse_scrape_markdown.
@@ -118,46 +214,23 @@ var (
 	boeCurrentRE  = regexp.MustCompile(`(?i)current\s+bank\s+rate\s+(\d{1,2}\.\d{1,2})\s*%`)
 	boeDecisionRE = regexp.MustCompile(`(?i)#+\s*bank\s+rate\s+(?:maintained|held|increased|raised|reduced|cut)\s+(?:at|to)\s+\d{1,2}\.\d{1,2}\s*%`)
 
-	// The BOJ states its rate in the prose of each policy statement.
-	bojRateRE = regexp.MustCompile(`(?i)(?:short-term\s+policy\s+interest\s+rate|uncollateralized\s+overnight\s+call\s+rate|policy\s+rate)[^\n]{0,180}?(\d{1,2}(?:\.\d{1,2})?)\s*(?:percent|%)`)
-
 	dateUSRE   = regexp.MustCompile(`(?i)(` + monthAlt + `)\s+(\d{1,2}),?\s+(\d{4})`)
 	dateLongRE = regexp.MustCompile(`(?i)(\d{1,2})\s+(` + monthAlt + `)\s+(\d{4})`)
 	dateISORE  = regexp.MustCompile(`(20\d{2})-(\d{2})-(\d{2})`)
 )
 
-// parsePolicyRate reads one bank's page. It returns nil, not an error,
-// when the page does not carry the rate in the shape that bank publishes.
-func parsePolicyRate(markdown, bank string) *bankRate {
-	spec := bankSpecByCode(bank)
-	if spec == nil {
-		return nil
-	}
-	var rate *float64
-	var date *string
+// parsePolicyRate reads one bank's page. A nil rate, not an error, means
+// the page does not carry the rate in the shape that bank publishes.
+func parsePolicyRate(markdown, bank string) (rate *float64, date *string) {
 	switch bank {
 	case "FED":
-		rate, date = fedTable(markdown)
+		return fedTable(markdown)
 	case "ECB":
-		rate, date = ecbTable(markdown)
+		return ecbTable(markdown)
 	case "BOE":
-		rate, date = boeProse(markdown)
-	case "BOJ":
-		rate, date = bojProse(markdown)
+		return boeProse(markdown)
 	}
-	if rate == nil {
-		return nil
-	}
-	return &bankRate{Bank: spec.Bank, Name: spec.Name, Rate: *rate, Date: date}
-}
-
-func bankSpecByCode(bank string) *bankSpec {
-	for i := range bankSpecs {
-		if bankSpecs[i].Bank == bank {
-			return &bankSpecs[i]
-		}
-	}
-	return nil
+	return nil, nil
 }
 
 // fedTable reads the first decision row under the newest year heading.
@@ -220,20 +293,6 @@ func boeProse(markdown string) (*float64, *string) {
 	return &rate, date
 }
 
-// bojProse reads the rate from statement prose and dates it from the
-// text just before the statement.
-func bojProse(markdown string) (*float64, *string) {
-	loc := bojRateRE.FindStringSubmatchIndex(markdown)
-	if loc == nil {
-		return nil, nil
-	}
-	rate, err := strconv.ParseFloat(markdown[loc[2]:loc[3]], 64)
-	if err != nil {
-		return nil, nil
-	}
-	return &rate, dateBefore(markdown, loc[0])
-}
-
 // dateBeforeWindow bounds how far back dateBefore looks for the date a
 // heading is announced under: a few lines, never another section.
 const dateBeforeWindow = 300
@@ -271,11 +330,11 @@ func dateBefore(text string, position int) *string {
 	return found
 }
 
-// monthNumber accepts a full month name or its three-letter abbreviation.
+// monthNumber accepts a full month name or any abbreviation of three or more letters.
 func monthNumber(name string) (int, bool) {
 	name = strings.ToLower(name)
 	for full, n := range monthNames {
-		if name == full || (len(name) == 3 && strings.HasPrefix(full, name)) {
+		if name == full || (len(name) >= 3 && strings.HasPrefix(full, name)) {
 			return n, true
 		}
 	}

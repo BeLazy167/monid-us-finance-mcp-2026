@@ -62,7 +62,7 @@ route itself:
 - `/company/facts/ciks` returns the 8,005-CIK SEC ticker-file universe
   against Financial Datasets' 21,005, which also covers filers with no
   listed ticker. Every CIK returned is present in theirs.
-- `/macro/interest-rates` reads each bank's current rate from its own page (Fed target-range midpoint, ECB deposit facility rate, BOE Bank Rate, BOJ policy rate) with `date` as the decision date. `bank` filters the list; `start_date`/`end_date` answer `bad_request` since no history is sourced. `/macro/interest-rates/banks` lists only those four banks. A bank whose page cannot be read is omitted; if none can, the call answers `upstream_error`.
+- `/macro/interest-rates` reads each bank's current rate from its own publication (Fed target-range midpoint, ECB deposit facility rate, BOE Bank Rate, BOJ policy rate) with `date` as the decision date. The Bank of Japan publishes each decision only as a PDF statement, so its rate takes two Monid calls: the year's releases listing supplies the newest Statement on Monetary Policy and its date, and Context.dev's extractor reads the rate out of that PDF. `bank` filters the list; `start_date`/`end_date` answer `bad_request` since no history is sourced. `/macro/interest-rates/banks` lists only those four banks. A bank whose page cannot be read is omitted; if none can, the call answers `upstream_error`.
   scrapes, not Financial Datasets' ten.
 - `/filings/items/requests/{request_id}` answers `not_found` for any id.
   Filing-item extraction runs inline, so no request id is ever issued.

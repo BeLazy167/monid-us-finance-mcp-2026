@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -1050,5 +1051,40 @@ func TestLookupFilingIdentity_ToleratesFeedDateDisagreement(t *testing.T) {
 	}
 	if none := lookupFilingIdentity(nil, reportDay); none != nil {
 		t.Fatal("a nil identity map must yield no identity")
+	}
+}
+
+// The BOJ path is two Monid calls: the releases listing for the newest
+// statement and its date, then the extractor reading the rate from that
+// PDF. fakeTransport keys on provider+endpoint, so the other three banks
+// receive the BOJ listing, fail its URL check, and are omitted.
+func TestInterestRates_BOJReadsTheStatementPDF(t *testing.T) {
+	listing, err := os.ReadFile("testdata/rates/boj_listing.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	listingURL := fmt.Sprintf(bankSpecs[3].URL, time.Now().UTC().Year())
+	outcomes := map[string]fakeOutcome{
+		"context.dev /web/scrape/markdown": {output: map[string]any{
+			"success": true, "url": listingURL, "markdown": string(listing), "contentLength": len(listing),
+		}},
+		"context.dev /web/extract": {output: map[string]any{
+			"status": "ok", "url": "https://www.boj.or.jp/en/mopo/mpmdeci/mpr_2026/k260731a.pdf",
+			"urls_analyzed": []any{"https://www.boj.or.jp/en/mopo/mpmdeci/mpr_2026/k260731a.pdf"},
+			"data":          map[string]any{"rate_percent": 1.0},
+		}},
+	}
+	svc, _ := newTestService(t, outcomes)
+	result, err := svc.Call(context.Background(), "key", "get_interest_rates", map[string]any{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	records := asRecords(t, result.Value)
+	if len(records) != 1 {
+		t.Fatalf("expected the BOJ record alone, got %d", len(records))
+	}
+	rate := jsonRoundTrip(t, records[0])
+	if rate["bank"] != "BOJ" || rate["rate"] != 1.0 || rate["date"] != "2026-07-31" {
+		t.Fatalf("unexpected BOJ record: %#v", rate)
 	}
 }
