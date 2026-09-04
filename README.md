@@ -1,5 +1,17 @@
 # Monid US Finance MCP (Financial Datasets API Alternative)
 
+**Live API:** https://monid-finance-api.fly.dev
+**Docs site:** https://monid-us-finance-mcp-2026.vercel.app
+**MCP endpoint:** `https://monid-finance-api.fly.dev/mcp` (also served at `/api`)
+
+Bring your own Monid API key: send it as `X-API-KEY` and every upstream call bills
+your own Monid wallet. We never store or log keys.
+
+```bash
+curl -H "X-API-KEY: monid_live_..." \
+  "https://monid-finance-api.fly.dev/financials/income-statements?ticker=AAPL&period=annual&limit=1"
+```
+
 An agent-native, US-first financial data MCP server built for the September 2026 Monid Hackathon.
 
 It replaces the paid research layer of **Financial Datasets API** (financialdatasets.ai — $200/month Build Plan or $20/1k credits) with live, pay-per-call routing across SEC EDGAR, DefiLlama US equities, and Context.dev via Monid.

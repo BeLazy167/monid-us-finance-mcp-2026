@@ -28,3 +28,4 @@ receipts/private/
 .DS_Store
 .idea/
 .vscode/
+.vercel
