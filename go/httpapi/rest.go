@@ -797,7 +797,14 @@ func (rt *restAPI) beneficialOwnershipRoute(pinnedType, wrapperKey string) route
 // optional case-insensitive prefix filter.
 func (rt *restAPI) institutionalInvestors(w http.ResponseWriter, r *http.Request, id callerIdentity) {
 	args := map[string]any{}
-	putQueryString(args, r.URL.Query(), "name")
+	q := r.URL.Query()
+	putQueryString(args, q, "name")
+	// ticker is not a Financial Datasets parameter on this route. The
+	// underlying 13F feed is keyed on one issuer's CIK and cannot
+	// enumerate filers across all issuers, so this server scopes the
+	// lookup (see go/service/institutionalinvestors.go). An omitted
+	// ticker reaches the tool's own bad_request, which explains why.
+	putQueryString(args, q, "ticker")
 	rt.callAndRespond(w, r, id, "get_institutional_investors", args, nil)
 }
 

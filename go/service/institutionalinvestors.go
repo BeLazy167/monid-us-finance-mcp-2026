@@ -17,6 +17,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/belazy/monid-finance/fd"
 	"github.com/belazy/monid-finance/providers"
 )
 
@@ -28,20 +29,52 @@ type institutionalInvestor struct {
 }
 
 // getInstitutionalInvestors answers get_institutional_investors: the
-// unscoped SECForm4 institution-holders feed carries rows across many
-// issuers, so this dedupes them down to one row per distinct filer name,
-// optionally narrowed by a case-insensitive name prefix. Unlike
-// get_institutional_holdings, this tool's schema takes no ticker or
-// filer_cik (only an optional name filter), so there is no per-filer
-// lookup here for /get_hedge_fund_portfolio to serve; that route stays
-// reserved for a tool whose schema actually accepts a filer.
+// distinct 13F filers reported against one issuer, with the CIK
+// get_institutional_holdings takes, optionally narrowed by a
+// case-insensitive name prefix.
+//
+// This route is scoped by ticker, and Financial Datasets' is not. That is
+// a deliberate deviation, forced by the source. This file previously
+// called the SECForm4 institution-holders feed unscoped, on the
+// assumption that it returns rows across many issuers; it does not. The
+// endpoint requires a CIK on every call and answers HTTP 422
+// ("cik parameter is required") without one, so the unscoped directory
+// this tool advertised never worked and returned 502 on every request
+// (measured 2026-09-04).
+//
+// A ticker-scoped filer list still serves the purpose Financial Datasets
+// documents for this route, discovering the filer_cik to pass to
+// get_institutional_holdings. It just answers "who holds this issuer"
+// rather than "every filer we know of". An omitted ticker is a
+// bad_request naming the requirement, which is a more useful answer than
+// the upstream 422 this used to surface.
 func (c *callCtx) getInstitutionalInvestors(args map[string]any) (Result, error) {
 	nameArg, err := argString(args, "name")
 	if err != nil {
 		return Result{}, err
 	}
+	tickerArg, err := argString(args, "ticker")
+	if err != nil {
+		return Result{}, err
+	}
+	if tickerArg == nil {
+		return Result{}, &providers.InputError{Msg: "ticker is required: the underlying 13F feed is keyed on a " +
+			"single issuer's CIK and cannot enumerate filers across all issuers"}
+	}
+	symbol, err := validateTicker(*tickerArg)
+	if err != nil {
+		return Result{}, err
+	}
+	cik, found, err := c.resolveIssuerCIK(symbol)
+	if err != nil {
+		return Result{}, err
+	}
+	if !found {
+		return Result{Value: fd.NewErrorResponse("not_found",
+			"No SEC CIK could be resolved for ticker "+symbol+".")}, nil
+	}
 
-	run, err := c.run(secform4, institutionalEndpoint, nil, nil)
+	run, err := c.run(secform4, institutionalEndpoint, nil, map[string]any{"cik": cik})
 	if err != nil {
 		return Result{}, err
 	}
@@ -73,7 +106,14 @@ func (c *callCtx) getInstitutionalInvestors(args map[string]any) (Result, error)
 	seen := make(map[string]bool, len(rows))
 	investors := make([]institutionalInvestor, 0, len(rows))
 	for _, row := range rows {
-		filerName := firstStringGeneric(row, "filer_name", "institution", "holder", "manager", "name")
+		// SECForm4 sends the filer as an HTML cell holding both the
+		// display name and, in its portfolio link, the CIK. Shared with
+		// get_institutional_holdings (institutionalholdings.go).
+		raw := firstStringGeneric(row, "filer_name", "institution", "holder", "manager", "name")
+		if raw == nil {
+			continue
+		}
+		filerName := holderName(*raw)
 		if filerName == nil {
 			continue
 		}
@@ -82,7 +122,10 @@ func (c *callCtx) getInstitutionalInvestors(args map[string]any) (Result, error)
 			continue
 		}
 		seen[key] = true
-		cik := firstStringGeneric(row, "filer_cik", "institution_cik", "manager_cik", "cik")
+		cik := holderCIK(*raw)
+		if cik == nil {
+			cik = firstStringGeneric(row, "filer_cik", "institution_cik", "manager_cik", "cik")
+		}
 		investors = append(investors, institutionalInvestor{CIK: cik, Name: filerName})
 	}
 

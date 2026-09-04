@@ -344,14 +344,17 @@ func TestGetInstitutionalInvestors_DirectoryAndNameFilter(t *testing.T) {
 	}
 	svc, _ := newTestService(t, map[string]fakeOutcome{
 		"secform4 /get_institution_holders": {output: payload},
+		"defillama /equities/v1/filings": {output: map[string]any{"filings": []any{
+			map[string]any{"form": "10-K", "primaryDocumentUrl": "https://www.sec.gov/Archives/edgar/data/320193/000032019325000079/aapl.htm"},
+		}}},
 	})
-	result := mustCall(t, svc, "get_institutional_investors", map[string]any{})
+	result := mustCall(t, svc, "get_institutional_investors", map[string]any{"ticker": "AAPL"})
 	records := asRecords(t, result.Value)
 	if len(records) != 2 {
 		t.Fatalf("expected 2 distinct investors, got %d: %#v", len(records), records)
 	}
 
-	filtered := mustCall(t, svc, "get_institutional_investors", map[string]any{"name": "berk"})
+	filtered := mustCall(t, svc, "get_institutional_investors", map[string]any{"ticker": "AAPL", "name": "berk"})
 	filteredRecords := asRecords(t, filtered.Value)
 	if len(filteredRecords) != 1 {
 		t.Fatalf("expected 1 investor matching 'berk', got %d", len(filteredRecords))
