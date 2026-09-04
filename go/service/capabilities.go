@@ -116,6 +116,13 @@ func (s *Service) GetKPISectors(ctx context.Context, apiKey string, args map[str
 	return s.newCallCtx(ctx, apiKey, "get_kpi_sectors").getKPISectors(args)
 }
 
+// GetIPOs returns one issuer's S-1 and S-1/A registration statements from
+// the same filings feed get_filings reads (see ipos.go). Distinct from
+// GetIPOCalendar, which is a forward calendar of upcoming offerings.
+func (s *Service) GetIPOs(ctx context.Context, apiKey string, args map[string]any) (Result, error) {
+	return s.newCallCtx(ctx, apiKey, "get_ipos").getIPOs(args)
+}
+
 // GetIPOCalendar returns the flattened this-week/next-week/later IPO
 // calendar via stockanalysis's /get_ipo_calendar route (ipocalendar.go).
 func (s *Service) GetIPOCalendar(ctx context.Context, apiKey string, args map[string]any) (Result, error) {

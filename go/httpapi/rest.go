@@ -159,6 +159,9 @@ func restRoutes(rt *restAPI) []restRoute {
 
 		// ---- Market-wide price snapshot (get_market_snapshot) ----
 		{http.MethodGet, "/prices/snapshot/market", rt.marketSnapshot},
+
+		// ---- SEC registration statements (get_ipos) ----
+		{http.MethodGet, "/ipos", rt.ipos},
 	}
 	for _, path := range notImplementedPaths {
 		routes = append(routes, restRoute{http.MethodGet, path, notImplemented})
@@ -806,6 +809,29 @@ func (rt *restAPI) institutionalInvestors(w http.ResponseWriter, r *http.Request
 	// ticker reaches the tool's own bad_request, which explains why.
 	putQueryString(args, q, "ticker")
 	rt.callAndRespond(w, r, id, "get_institutional_investors", args, nil)
+}
+
+// ---- SEC registration statements (get_ipos) ----
+
+// ipos answers /ipos via Service.GetIPOs: one issuer's S-1 and S-1/A
+// registration statements. ticker is required by the tool itself, and
+// classification is forwarded so the caller receives that tool's own
+// explanation of why this server cannot classify a filing.
+func (rt *restAPI) ipos(w http.ResponseWriter, r *http.Request, id callerIdentity) {
+	q := r.URL.Query()
+	limit, err := queryInt(q, "limit", 10)
+	if err != nil {
+		writeFDError(w, http.StatusBadRequest, "bad_request", err.Error())
+		return
+	}
+	args := map[string]any{"limit": float64(limit)}
+	putQueryString(args, q, "ticker")
+	putQueryString(args, q, "cik")
+	putQueryString(args, q, "classification")
+	for _, name := range filingDateFilterNames {
+		putQueryString(args, q, name)
+	}
+	rt.callCapabilityAndRespond(w, r, id, "get_ipos", args, nil)
 }
 
 // ---- Market-wide price snapshot (get_market_snapshot) ----
