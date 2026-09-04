@@ -73,6 +73,7 @@ class ReceiptsLedger:
     def __init__(self, path: Path = DEFAULT_LEDGER_PATH) -> None:
         self._path = path
         self._handle: TextIO | None = None
+        self._spent_usd = 0.0
 
     def record_success(
         self,
@@ -127,6 +128,16 @@ class ReceiptsLedger:
             self._handle = self._path.open("a", encoding="utf-8")
         self._handle.write(json.dumps(receipt.to_dict(), sort_keys=False) + "\n")
         self._handle.flush()
+        cost = receipt.measured_cost
+        if cost is not None and cost.get("currency") == "USD":
+            value = cost.get("value")
+            if isinstance(value, int | float) and not isinstance(value, bool):
+                self._spent_usd += float(value)
+
+    @property
+    def spent_usd(self) -> float:
+        """Cumulative measured USD spend recorded through this ledger."""
+        return self._spent_usd
 
     @property
     def path(self) -> Path:
