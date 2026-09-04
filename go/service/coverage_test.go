@@ -134,9 +134,29 @@ func TestCoverage_StaticListsAreZeroCost(t *testing.T) {
 	if len(bankList) != len(bankSpecs) {
 		t.Fatalf("expected %d banks (derived from bankSpecs), got %d", len(bankSpecs), len(bankList))
 	}
-	first, _ := bankList[0].(map[string]any)
-	if first["bank"] != bankSpecs[0].Bank || first["name"] != bankSpecs[0].Name {
-		t.Fatalf("expected the first bank to match bankSpecs[0] exactly, got %v", first)
+	// Financial Datasets answers a flat, sorted array of bank codes here
+	// (verified live 2026-09-04), not objects. Codes must still all come
+	// from bankSpecs, so this list cannot claim a bank we never scrape.
+	if banksBody["resource"] != "interest_rates" {
+		t.Fatalf("resource = %v, want interest_rates", banksBody["resource"])
+	}
+	known := make(map[string]bool, len(bankSpecs))
+	for _, spec := range bankSpecs {
+		known[spec.Bank] = true
+	}
+	prev := ""
+	for _, item := range bankList {
+		code, ok := item.(string)
+		if !ok {
+			t.Fatalf("expected a bare bank code string, got %#v", item)
+		}
+		if !known[code] {
+			t.Fatalf("bank %q is not in bankSpecs; this route must never claim a bank we do not scrape", code)
+		}
+		if code < prev {
+			t.Fatalf("bank codes must be sorted, got %q after %q", code, prev)
+		}
+		prev = code
 	}
 
 	itemTypes, err := svc.ListFilingItemTypes(context.Background(), "key", map[string]any{})

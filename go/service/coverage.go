@@ -200,16 +200,25 @@ func (c *callCtx) listFilingTypes(args map[string]any) (Result, error) {
 // actually scrapes, derived from bankSpecs (interestrates.go) rather than
 // hand-typed a second time, so this list can never drift from what
 // get_interest_rates actually reads.
+//
+// Shape follows Financial Datasets' live response, verified 2026-09-04:
+// a flat array of bank codes under "banks", sorted, with resource
+// "interest_rates" (not "interest_rate_banks"). An earlier version of
+// this file answered objects of {bank, name}, which no Financial Datasets
+// client would parse. The human-readable name is still reachable: every
+// get_interest_rates row carries its own name alongside the rate.
 func (c *callCtx) listInterestRateBanks(args map[string]any) (Result, error) {
-	banks := make([]any, len(bankSpecs))
+	codes := make([]string, len(bankSpecs))
 	for i, spec := range bankSpecs {
-		bank := newOrderedJSONObject()
-		bank.set("bank", spec.Bank)
-		bank.set("name", spec.Name)
-		banks[i] = bank
+		codes[i] = spec.Bank
+	}
+	sort.Strings(codes)
+	banks := make([]any, len(codes))
+	for i, code := range codes {
+		banks[i] = code
 	}
 	out := newOrderedJSONObject()
-	out.set("resource", "interest_rate_banks")
+	out.set("resource", "interest_rates")
 	out.set("banks", banks)
 	return Result{Value: out}, nil
 }

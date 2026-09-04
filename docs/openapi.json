@@ -2604,24 +2604,12 @@
                 "examples": {
                   "example": {
                     "value": {
-                      "resource": "interest_rate_banks",
+                      "resource": "interest_rates",
                       "banks": [
-                        {
-                          "bank": "FED",
-                          "name": "Federal Reserve"
-                        },
-                        {
-                          "bank": "ECB",
-                          "name": "European Central Bank"
-                        },
-                        {
-                          "bank": "BOE",
-                          "name": "Bank of England"
-                        },
-                        {
-                          "bank": "BOJ",
-                          "name": "Bank of Japan"
-                        }
+                        "BOE",
+                        "BOJ",
+                        "ECB",
+                        "FED"
                       ]
                     }
                   }
@@ -7338,22 +7326,26 @@
       "InterestRateBanksResponse": {
         "type": "object",
         "title": "InterestRateBanksResponse",
-        "description": "Static coverage-list response for /macro/interest-rates/banks: the central banks get_interest_rates can currently scrape a rate for, derived directly from go/service/interestrates.go's bankSpecs (Service.ListInterestRateBanks) rather than a second, hand-typed copy, so this list can never drift from what get_interest_rates actually reads.",
+        "description": "The central bank codes get_interest_rates can report a rate for. Shape follows Financial Datasets' live response, verified 2026-09-04: a flat sorted array of codes, not objects. Derived from bankSpecs (go/service/interestrates.go), so this list can never claim a bank this server does not actually scrape. Makes no Monid call.",
         "properties": {
           "resource": {
             "type": "string",
-            "description": "Label identifying what this catalog is a list of."
+            "example": "interest_rates"
           },
           "banks": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/InterestRateBank"
+              "type": "string"
             },
-            "description": "Central banks, in bankSpecs order."
+            "example": [
+              "BOE",
+              "BOJ",
+              "ECB",
+              "FED"
+            ]
           }
         },
         "required": [
-          "resource",
           "banks"
         ]
       },
@@ -7556,25 +7548,6 @@
         },
         "required": [
           "institutional_holdings"
-        ]
-      },
-      "InterestRateBank": {
-        "type": "object",
-        "title": "InterestRateBank",
-        "description": "One central bank get_interest_rates can scrape a policy rate for, from go/service/interestrates.go's bankSpecs.",
-        "properties": {
-          "bank": {
-            "type": "string",
-            "description": "Bank code (matches the `bank` field on InterestRate records)."
-          },
-          "name": {
-            "type": "string",
-            "description": "Full bank name."
-          }
-        },
-        "required": [
-          "bank",
-          "name"
         ]
       },
       "CoverageTickersResponse": {
