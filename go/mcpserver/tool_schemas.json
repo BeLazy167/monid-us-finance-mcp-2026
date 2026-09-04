@@ -1,0 +1,1125 @@
+[
+ {
+  "name": "get_beneficial_owners",
+  "description": "Lists beneficial owners (holders of more than 5% of a company's shares, from SEC Schedules 13D/13G) with their filer CIK and reporting-person name. Optionally filter by case-insensitive name prefix. The response's `total` is the full match count; when it exceeds the returned page, narrow the search with `name`. Use this to discover the filer_cik to pass to get_beneficial_ownership.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "name": {
+     "type": "string",
+     "description": "Optional case-insensitive name prefix to filter the beneficial-owner list (e.g. 'Saba'). Use this tool to discover the filer_cik to pass to get_beneficial_ownership."
+    },
+    "limit": {
+     "type": "integer",
+     "exclusiveMinimum": 0,
+     "maximum": 1000,
+     "default": 100,
+     "description": "Number of owners to return (default: 100, max: 1000). The response's `total` is the full match count; when it exceeds the page, narrow with `name`."
+    }
+   },
+   "additionalProperties": false,
+   "$schema": "http://json-schema.org/draft-07/schema#"
+  }
+ },
+ {
+  "name": "get_beneficial_ownership",
+  "description": "Retrieves beneficial-ownership stakes (holders of more than 5% of a class of shares) from SEC Schedules 13D and 13G. Schedule 13D stakes are ACTIVIST (intent to influence control: proxy fights, board seats, pushing for a sale); Schedule 13G stakes are passive (large asset managers). Query by ticker (who owns this company) OR by filer_cik (what stakes does this owner hold) \u2014 exactly one is required. Use type=activist to isolate activist stakes. By default each stake's CURRENT state is returned; set history=true for the full amendment chain. Each row is one reporting person with voting/dispositive powers, percent_of_class, and (for 13D) the stated purpose_of_transaction. Coverage begins January 2025.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "ticker": {
+     "type": "string",
+     "description": "The subject company's ticker (e.g. 'BB'). Returns its 5%+ beneficial owners. Provide exactly one of ticker or filer_cik."
+    },
+    "filer_cik": {
+     "type": "string",
+     "description": "SEC CIK of the beneficial owner (e.g. '0001510281' for Saba Capital). Returns their stakes across companies. Will be zero-padded to 10 digits. Provide exactly one of ticker or filer_cik. Use get_beneficial_owners to look up CIKs by owner name."
+    },
+    "type": {
+     "type": "string",
+     "enum": [
+      "activist",
+      "passive"
+     ],
+     "description": "Filter by stake type: 'activist' (Schedule 13D, intent to influence control) or 'passive' (Schedule 13G). Omit for both."
+    },
+    "history": {
+     "type": "boolean",
+     "description": "When true, returns the full amendment history of each stake instead of only its current state (the default)."
+    },
+    "filing_date": {
+     "type": "string",
+     "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+     "description": "Exact filing date filter in YYYY-MM-DD format"
+    },
+    "filing_date_gte": {
+     "type": "string",
+     "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+     "description": "Filing date greater than or equal to (YYYY-MM-DD)"
+    },
+    "filing_date_lte": {
+     "type": "string",
+     "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+     "description": "Filing date less than or equal to (YYYY-MM-DD)"
+    },
+    "limit": {
+     "type": "integer",
+     "exclusiveMinimum": 0,
+     "maximum": 1000,
+     "default": 10,
+     "description": "Number of rows to return (default: 10, max: 1000)."
+    }
+   },
+   "additionalProperties": false,
+   "$schema": "http://json-schema.org/draft-07/schema#"
+  }
+ },
+ {
+  "name": "get_company_facts",
+  "description": "Get comprehensive company facts data for a stock ticker or CIK from Financial Datasets. Returns real-time information including market cap, number of employees, sector/industry classification, exchange listing, company location, website URL, SIC codes, weighted average shares, and historical events like ticker changes.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "ticker": {
+     "type": "string",
+     "description": "The stock ticker symbol (e.g., 'AAPL', 'MSFT', 'TSLA'). Either ticker or cik is required."
+    },
+    "cik": {
+     "type": "string",
+     "description": "The CIK (Central Index Key) identifier. Either ticker or cik is required."
+    }
+   },
+   "additionalProperties": false,
+   "$schema": "http://json-schema.org/draft-07/schema#"
+  }
+ },
+ {
+  "name": "get_earnings",
+  "description": "Retrieves earnings data from SEC filings. Returns a flat list of `EarningsRecord` entries \u2014 same shape in either mode.\n  \u2022 COMPANY EARNINGS \u2014 pass a `ticker` to get the most recent SEC filings (8-K / 10-Q / 10-K / 20-F) for that company. The same `report_period` may appear in two consecutive entries when an 8-K announcement and the matching 10-Q have both been filed; the 8-K comes first because it filed earlier. Sorted `(report_period DESC, filing_date ASC)`.\n  \u2022 EARNINGS FEED \u2014 omit `ticker` to get the real-time feed of the most recently filed earnings across all covered companies, sorted by `filing_date` descending and deduped by `(ticker, report_period)`.\nEach entry exposes `ticker`, `report_period`, `fiscal_period`, `currency`, `source_type`, `filing_date`, `filing_url`, `accession_number`, plus `quarterly` and/or `annual` financial blocks (revenue, EPS, surprise vs estimates, etc.).",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "ticker": {
+     "type": "string",
+     "description": "Optional. The stock ticker symbol (e.g., 'AAPL', 'MSFT', 'TSLA') to fetch a single company's most recent earnings. Omit this parameter to instead fetch the real-time Earnings Feed \u2014 the most recently filed earnings across ALL covered companies."
+    }
+   },
+   "additionalProperties": false,
+   "$schema": "http://json-schema.org/draft-07/schema#"
+  }
+ },
+ {
+  "name": "get_filing_items",
+  "description": "Retrieves specific sections (items) from a company's SEC filings (10-K, 10-Q, or 8-K). Useful for extracting detailed information such as 'Business', 'Risk Factors', or 'Financial Statements and Supplementary Data'.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "ticker": {
+     "type": "string",
+     "description": "The ticker symbol."
+    },
+    "filing_type": {
+     "type": "string",
+     "enum": [
+      "10-K",
+      "10-Q",
+      "8-K"
+     ],
+     "description": "The type of filing."
+    },
+    "year": {
+     "type": "integer",
+     "exclusiveMinimum": 0,
+     "description": "The year of the filing. Required for 10-K and 10-Q filings."
+    },
+    "quarter": {
+     "type": "integer",
+     "exclusiveMinimum": 0,
+     "minimum": 1,
+     "maximum": 4,
+     "description": "The quarter of the filing if 10-Q."
+    },
+    "accession_number": {
+     "type": "string",
+     "description": "The accession number for the filing. Required for 8-K filings."
+    },
+    "item": {
+     "type": "array",
+     "items": {
+      "type": "string",
+      "enum": [
+       "Item-1",
+       "Item-1A",
+       "Item-1B",
+       "Item-2",
+       "Item-3",
+       "Item-4",
+       "Item-5",
+       "Item-6",
+       "Item-7",
+       "Item-7A",
+       "Item-8",
+       "Item-9",
+       "Item-9A",
+       "Item-9B",
+       "Item-10",
+       "Item-11",
+       "Item-12",
+       "Item-13",
+       "Item-14",
+       "Item-15",
+       "Item-16",
+       "Item-1.01",
+       "Item-1.02",
+       "Item-1.03",
+       "Item-1.04",
+       "Item-2.01",
+       "Item-2.02",
+       "Item-2.03",
+       "Item-2.04",
+       "Item-2.05",
+       "Item-2.06",
+       "Item-3.01",
+       "Item-3.02",
+       "Item-3.03",
+       "Item-4.01",
+       "Item-4.02",
+       "Item-5.01",
+       "Item-5.02",
+       "Item-5.03",
+       "Item-5.04",
+       "Item-5.05",
+       "Item-5.06",
+       "Item-5.07",
+       "Item-5.08",
+       "Item-6.01",
+       "Item-6.02",
+       "Item-6.03",
+       "Item-6.04",
+       "Item-6.05",
+       "Item-7.01",
+       "Item-8.01",
+       "Item-9.01"
+      ]
+     },
+     "description": "The item or items to get."
+    }
+   },
+   "required": [
+    "ticker",
+    "filing_type"
+   ],
+   "additionalProperties": false,
+   "$schema": "http://json-schema.org/draft-07/schema#"
+  }
+ },
+ {
+  "name": "list_filing_item_types",
+  "description": "Provides a list of all available item names that can be extracted from 10-K, 10-Q, and 8-K reports, grouped by filing type.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {},
+   "additionalProperties": false,
+   "$schema": "http://json-schema.org/draft-07/schema#"
+  }
+ },
+ {
+  "name": "get_filings",
+  "description": "Get SEC filings data for a stock ticker or CIK. Returns a list of filings, including the accession number, filing type, report date, and URLs to the filing documents.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "ticker": {
+     "type": "string",
+     "description": "The stock ticker symbol (e.g., 'AAPL', 'MSFT', 'TSLA'). Either ticker or cik is required."
+    },
+    "cik": {
+     "type": "string",
+     "description": "The CIK (Central Index Key) identifier. Either ticker or cik is required."
+    },
+    "limit": {
+     "type": "integer",
+     "exclusiveMinimum": 0,
+     "maximum": 1000,
+     "default": 100,
+     "description": "Number of filings to retrieve (default: 100, max: 1000)"
+    },
+    "filing_type": {
+     "type": "string",
+     "description": "Filter by specific filing type (e.g., '10-K', '10-Q', '8-K', 'DEF 14A')"
+    }
+   },
+   "additionalProperties": false,
+   "$schema": "http://json-schema.org/draft-07/schema#"
+  }
+ },
+ {
+  "name": "get_financial_metrics",
+  "description": "Retrieves historical financial metrics for a company, such as P/E ratio, revenue per share, and enterprise value, over a specified period. Useful for trend analysis and historical performance evaluation.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "ticker": {
+     "type": "string",
+     "description": "The stock ticker symbol (e.g., 'AAPL', 'MSFT', 'TSLA')"
+    },
+    "period": {
+     "type": "string",
+     "enum": [
+      "annual",
+      "quarterly",
+      "ttm"
+     ],
+     "default": "ttm",
+     "description": "The reporting period (default: 'ttm' for trailing twelve months)"
+    },
+    "limit": {
+     "type": "integer",
+     "exclusiveMinimum": 0,
+     "maximum": 100,
+     "default": 4,
+     "description": "Number of periods to retrieve (default: 4, max: 100)"
+    },
+    "report_period_gte": {
+     "type": "string",
+     "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+     "description": "Start date filter in YYYY-MM-DD format (inclusive)"
+    },
+    "report_period_lte": {
+     "type": "string",
+     "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+     "description": "End date filter in YYYY-MM-DD format (inclusive)"
+    },
+    "report_period_gt": {
+     "type": "string",
+     "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+     "description": "Start date filter in YYYY-MM-DD format (exclusive)"
+    },
+    "report_period_lt": {
+     "type": "string",
+     "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+     "description": "End date filter in YYYY-MM-DD format (exclusive)"
+    },
+    "report_period": {
+     "type": "string",
+     "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+     "description": "Exact report period date in YYYY-MM-DD format"
+    }
+   },
+   "required": [
+    "ticker"
+   ],
+   "additionalProperties": false,
+   "$schema": "http://json-schema.org/draft-07/schema#"
+  }
+ },
+ {
+  "name": "get_financial_metrics_snapshot",
+  "description": "Fetches a snapshot of the most current financial metrics for a company, including key indicators like market capitalization, P/E ratio, and dividend yield. Useful for a quick overview of a company's financial health.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "ticker": {
+     "type": "string",
+     "description": "The stock ticker symbol (e.g., 'AAPL', 'MSFT', 'TSLA')"
+    }
+   },
+   "required": [
+    "ticker"
+   ],
+   "additionalProperties": false,
+   "$schema": "http://json-schema.org/draft-07/schema#"
+  }
+ },
+ {
+  "name": "get_balance_sheet",
+  "description": "Retrieves a company's balance sheet, which provides a snapshot of its assets, liabilities, and shareholders' equity at a specific point in time. Essential for assessing a company's financial position.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "ticker": {
+     "type": "string",
+     "description": "The stock ticker symbol (e.g., 'AAPL', 'MSFT', 'TSLA')"
+    },
+    "period": {
+     "type": "string",
+     "enum": [
+      "annual",
+      "quarterly",
+      "ttm"
+     ],
+     "default": "ttm",
+     "description": "The reporting period (default: 'ttm' for trailing twelve months)"
+    },
+    "limit": {
+     "type": "integer",
+     "exclusiveMinimum": 0,
+     "maximum": 100,
+     "default": 4,
+     "description": "Number of periods to retrieve (default: 4, max: 100)"
+    },
+    "report_period_gte": {
+     "type": "string",
+     "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+     "description": "Start date filter in YYYY-MM-DD format (inclusive)"
+    },
+    "report_period_lte": {
+     "type": "string",
+     "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+     "description": "End date filter in YYYY-MM-DD format (inclusive)"
+    },
+    "report_period_gt": {
+     "type": "string",
+     "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+     "description": "Start date filter in YYYY-MM-DD format (exclusive)"
+    },
+    "report_period_lt": {
+     "type": "string",
+     "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+     "description": "End date filter in YYYY-MM-DD format (exclusive)"
+    },
+    "report_period": {
+     "type": "string",
+     "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+     "description": "Exact report period date in YYYY-MM-DD format"
+    },
+    "as_reported": {
+     "type": "boolean",
+     "default": false,
+     "description": "When true, returns raw as-reported line items exactly as they appear in the company's filing, rather than the standardized fields. Only supports 'annual' or 'quarterly' periods (a 'ttm' period is treated as 'annual')."
+    }
+   },
+   "required": [
+    "ticker"
+   ],
+   "additionalProperties": false,
+   "$schema": "http://json-schema.org/draft-07/schema#"
+  }
+ },
+ {
+  "name": "get_income_statement",
+  "description": "Fetches a company's income statement, detailing its revenues, expenses, and net income over a reporting period. Useful for evaluating a company's profitability and operational efficiency.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "ticker": {
+     "type": "string",
+     "description": "The stock ticker symbol (e.g., 'AAPL', 'MSFT', 'TSLA')"
+    },
+    "period": {
+     "type": "string",
+     "enum": [
+      "annual",
+      "quarterly",
+      "ttm"
+     ],
+     "default": "ttm",
+     "description": "The reporting period (default: 'ttm' for trailing twelve months)"
+    },
+    "limit": {
+     "type": "integer",
+     "exclusiveMinimum": 0,
+     "maximum": 100,
+     "default": 4,
+     "description": "Number of periods to retrieve (default: 4, max: 100)"
+    },
+    "report_period_gte": {
+     "type": "string",
+     "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+     "description": "Start date filter in YYYY-MM-DD format (inclusive)"
+    },
+    "report_period_lte": {
+     "type": "string",
+     "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+     "description": "End date filter in YYYY-MM-DD format (inclusive)"
+    },
+    "report_period_gt": {
+     "type": "string",
+     "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+     "description": "Start date filter in YYYY-MM-DD format (exclusive)"
+    },
+    "report_period_lt": {
+     "type": "string",
+     "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+     "description": "End date filter in YYYY-MM-DD format (exclusive)"
+    },
+    "report_period": {
+     "type": "string",
+     "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+     "description": "Exact report period date in YYYY-MM-DD format"
+    },
+    "as_reported": {
+     "type": "boolean",
+     "default": false,
+     "description": "When true, returns raw as-reported line items exactly as they appear in the company's filing, rather than the standardized fields. Only supports 'annual' or 'quarterly' periods (a 'ttm' period is treated as 'annual')."
+    }
+   },
+   "required": [
+    "ticker"
+   ],
+   "additionalProperties": false,
+   "$schema": "http://json-schema.org/draft-07/schema#"
+  }
+ },
+ {
+  "name": "get_cash_flow_statement",
+  "description": "Provides a company's cash flow statement, showing how cash is generated and used across operating, investing, and financing activities. Key for understanding a company's liquidity and solvency.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "ticker": {
+     "type": "string",
+     "description": "The stock ticker symbol (e.g., 'AAPL', 'MSFT', 'TSLA')"
+    },
+    "period": {
+     "type": "string",
+     "enum": [
+      "annual",
+      "quarterly",
+      "ttm"
+     ],
+     "default": "ttm",
+     "description": "The reporting period (default: 'ttm' for trailing twelve months)"
+    },
+    "limit": {
+     "type": "integer",
+     "exclusiveMinimum": 0,
+     "maximum": 100,
+     "default": 4,
+     "description": "Number of periods to retrieve (default: 4, max: 100)"
+    },
+    "report_period_gte": {
+     "type": "string",
+     "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+     "description": "Start date filter in YYYY-MM-DD format (inclusive)"
+    },
+    "report_period_lte": {
+     "type": "string",
+     "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+     "description": "End date filter in YYYY-MM-DD format (inclusive)"
+    },
+    "report_period_gt": {
+     "type": "string",
+     "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+     "description": "Start date filter in YYYY-MM-DD format (exclusive)"
+    },
+    "report_period_lt": {
+     "type": "string",
+     "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+     "description": "End date filter in YYYY-MM-DD format (exclusive)"
+    },
+    "report_period": {
+     "type": "string",
+     "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+     "description": "Exact report period date in YYYY-MM-DD format"
+    },
+    "as_reported": {
+     "type": "boolean",
+     "default": false,
+     "description": "When true, returns raw as-reported line items exactly as they appear in the company's filing, rather than the standardized fields. Only supports 'annual' or 'quarterly' periods (a 'ttm' period is treated as 'annual')."
+    }
+   },
+   "required": [
+    "ticker"
+   ],
+   "additionalProperties": false,
+   "$schema": "http://json-schema.org/draft-07/schema#"
+  }
+ },
+ {
+  "name": "get_index_fund",
+  "description": "Get an ETF or index fund's holdings and each position's weight (percent of net assets) for a fund ticker (e.g. SPY), sourced from SEC fund-holdings filings. Returns the fund's latest filing by default, or the composition as of a past date. Response includes a fund header (as-of period, total net assets, coverage counts) and the holdings sorted by weight descending.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "ticker": {
+     "type": "string",
+     "description": "The fund ticker symbol (e.g., 'SPY', 'QQQ', 'VTI'). Required."
+    },
+    "as_of": {
+     "type": "string",
+     "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+     "description": "Return the fund composition in effect on or before this date (YYYY-MM-DD). Defaults to the latest filing."
+    },
+    "asset_class": {
+     "type": "string",
+     "enum": [
+      "equity",
+      "bond"
+     ],
+     "description": "Filter holdings by instrument type. Omit for all holdings."
+    },
+    "limit": {
+     "type": "integer",
+     "exclusiveMinimum": 0,
+     "maximum": 1000,
+     "default": 50,
+     "description": "Number of holdings to return (default: 50, max: 1000)."
+    },
+    "offset": {
+     "type": "integer",
+     "minimum": 0,
+     "default": 0,
+     "description": "Number of holdings to skip, for pagination (default: 0)."
+    }
+   },
+   "required": [
+    "ticker"
+   ],
+   "additionalProperties": false,
+   "$schema": "http://json-schema.org/draft-07/schema#"
+  }
+ },
+ {
+  "name": "get_insider_ownership",
+  "description": "Retrieves insider ownership statements for a company: what officers, directors, and 10% owners actually HOLD (common shares, options, RSUs), sourced from SEC Form 3 (an insider's initial statement of ownership) and Form 5 (the annual statement). Complements get_insider_trades, which covers the buys and sells in between: trades are the events, ownership statements are the state. Positions are returned as reported per filing, newest first. To find available insider names for a ticker, use: https://api.financialdatasets.ai/insider-ownership/names/?ticker={ticker}",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "ticker": {
+     "type": "string",
+     "description": "The stock ticker symbol (e.g., 'AAPL', 'MSFT', 'TSLA')"
+    },
+    "name": {
+     "type": "string",
+     "description": "Filter by insider name (case-insensitive contains, e.g. 'cook'). Use the /insider-ownership/names/?ticker={ticker} endpoint to discover available names for a ticker."
+    },
+    "form_type": {
+     "type": "string",
+     "enum": [
+      "3",
+      "3/A",
+      "5",
+      "5/A"
+     ],
+     "description": "Filter by SEC form type: 3 for initial ownership statements (what a new insider owned on day one), 5 for annual statements, or their amendments."
+    },
+    "filing_date": {
+     "type": "string",
+     "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+     "description": "Exact filing date filter in YYYY-MM-DD format"
+    },
+    "filing_date_gte": {
+     "type": "string",
+     "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+     "description": "Filing date greater than or equal to (YYYY-MM-DD)"
+    },
+    "filing_date_lte": {
+     "type": "string",
+     "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+     "description": "Filing date less than or equal to (YYYY-MM-DD)"
+    },
+    "filing_date_gt": {
+     "type": "string",
+     "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+     "description": "Filing date strictly greater than (YYYY-MM-DD)"
+    },
+    "filing_date_lt": {
+     "type": "string",
+     "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+     "description": "Filing date strictly less than (YYYY-MM-DD)"
+    },
+    "limit": {
+     "type": "integer",
+     "exclusiveMinimum": 0,
+     "maximum": 1000,
+     "default": 10,
+     "description": "Number of ownership rows to retrieve (default: 10, max: 1000)"
+    }
+   },
+   "required": [
+    "ticker"
+   ],
+   "additionalProperties": false,
+   "$schema": "http://json-schema.org/draft-07/schema#"
+  }
+ },
+ {
+  "name": "get_insider_trades",
+  "description": "Retrieves insider trading transactions for a company, including purchases, sales, and other transactions by company officers, directors, and major shareholders. Useful for tracking insider sentiment and ownership changes. To find available insider names for a ticker, use: https://api.financialdatasets.ai/insider-trades/names/?ticker={ticker}",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "ticker": {
+     "type": "string",
+     "description": "The stock ticker symbol (e.g., 'AAPL', 'MSFT', 'TSLA')"
+    },
+    "name": {
+     "type": "string",
+     "description": "Filter by insider name (e.g., 'Timothy D Cook'). Use the /insider-trades/names/?ticker={ticker} endpoint to discover available names for a ticker."
+    },
+    "filing_date": {
+     "type": "string",
+     "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+     "description": "Exact filing date filter in YYYY-MM-DD format"
+    },
+    "filing_date_gte": {
+     "type": "string",
+     "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+     "description": "Filing date greater than or equal to (YYYY-MM-DD)"
+    },
+    "filing_date_lte": {
+     "type": "string",
+     "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+     "description": "Filing date less than or equal to (YYYY-MM-DD)"
+    },
+    "limit": {
+     "type": "integer",
+     "exclusiveMinimum": 0,
+     "maximum": 5000,
+     "default": 100,
+     "description": "Number of insider trades to retrieve (default: 100, max: 5000)"
+    }
+   },
+   "required": [
+    "ticker"
+   ],
+   "additionalProperties": false,
+   "$schema": "http://json-schema.org/draft-07/schema#"
+  }
+ },
+ {
+  "name": "get_institutional_investors",
+  "description": "Lists institutional investors (SEC 13F filers) with their CIK and most recent reported name. Optionally filter by case-insensitive name prefix. Use this to discover the filer_cik to pass to get_institutional_holdings.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "name": {
+     "type": "string",
+     "description": "Optional case-insensitive name prefix to filter the filer list (e.g. 'Berkshire'). Use this tool to discover the filer_cik to pass to get_institutional_holdings."
+    }
+   },
+   "additionalProperties": false,
+   "$schema": "http://json-schema.org/draft-07/schema#"
+  }
+ },
+ {
+  "name": "get_institutional_holdings",
+  "description": "Retrieves SEC 13F institutional holdings sourced directly from EDGAR. Query by filer_cik (what positions a filer holds) OR by ticker (which institutional filers hold this security) \u2014 exactly one is required. When no report_period filter is supplied, returns the latest available quarter for the filer or ticker. Ticker-mode rows include filer_cik and filer_name per position; filer-mode rows omit those (the filer is already implied by the query).",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "filer_cik": {
+     "type": "string",
+     "description": "Zero-padded 10-digit SEC CIK of the institutional filer (e.g. '0001067983' for Berkshire Hathaway). Provide exactly one of filer_cik or ticker. Use get_institutional_investors to look up CIKs by name."
+    },
+    "ticker": {
+     "type": "string",
+     "description": "Stock ticker of the held security (e.g. 'AAPL'). Returns the list of institutional filers holding that security. Provide exactly one of filer_cik or ticker."
+    },
+    "report_period": {
+     "type": "string",
+     "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+     "description": "Exact 13F report period (quarter-end date) in YYYY-MM-DD format."
+    },
+    "report_period_gte": {
+     "type": "string",
+     "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+     "description": "Report period greater than or equal to (YYYY-MM-DD)."
+    },
+    "report_period_lte": {
+     "type": "string",
+     "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+     "description": "Report period less than or equal to (YYYY-MM-DD)."
+    },
+    "limit": {
+     "type": "integer",
+     "exclusiveMinimum": 0,
+     "maximum": 200,
+     "default": 10,
+     "description": "Number of holdings to return (default: 10, max: 200)."
+    }
+   },
+   "additionalProperties": false,
+   "$schema": "http://json-schema.org/draft-07/schema#"
+  }
+ },
+ {
+  "name": "get_interest_rates",
+  "description": "Retrieves the latest policy interest rates from major central banks (e.g., FED, ECB, BOE, BOJ). Returns a snapshot of each bank's current rate \u2014 no parameters required.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {},
+   "additionalProperties": false,
+   "$schema": "http://json-schema.org/draft-07/schema#"
+  }
+ },
+ {
+  "name": "get_kpi_guidance",
+  "description": "Retrieves forward-looking KPI guidance items issued by company management in earnings releases and SEC filings. Filter by ticker, period (quarterly/annual), metric name, and date range. Available to Pro and Enterprise customers only.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "ticker": {
+     "type": "string",
+     "description": "The stock ticker symbol (e.g., 'AAPL', 'MSFT', 'TSLA')"
+    },
+    "period": {
+     "type": "string",
+     "enum": [
+      "quarterly",
+      "annual"
+     ],
+     "default": "quarterly",
+     "description": "The reporting period (default: 'quarterly')"
+    },
+    "metric_name": {
+     "type": "string",
+     "description": "Optional filter to a specific guidance metric name (e.g., 'Revenue', 'EPS')"
+    },
+    "report_period_gte": {
+     "type": "string",
+     "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+     "description": "Start date filter in YYYY-MM-DD format (inclusive)"
+    },
+    "report_period_lte": {
+     "type": "string",
+     "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+     "description": "End date filter in YYYY-MM-DD format (inclusive)"
+    },
+    "limit": {
+     "type": "integer",
+     "exclusiveMinimum": 0,
+     "maximum": 50,
+     "default": 4,
+     "description": "Number of records to retrieve (default: 4, max: 50)"
+    }
+   },
+   "required": [
+    "ticker"
+   ],
+   "additionalProperties": false,
+   "$schema": "http://json-schema.org/draft-07/schema#"
+  }
+ },
+ {
+  "name": "get_kpi_metrics",
+  "description": "Retrieves historical KPI taxonomy metrics extracted from SEC filings for a company (e.g., subscriber counts, ARPU, units sold). Filter by ticker, period (quarterly/annual), metric name, and date range. Available to Pro and Enterprise customers only.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "ticker": {
+     "type": "string",
+     "description": "The stock ticker symbol (e.g., 'AAPL', 'MSFT', 'TSLA')"
+    },
+    "period": {
+     "type": "string",
+     "enum": [
+      "quarterly",
+      "annual"
+     ],
+     "default": "quarterly",
+     "description": "The reporting period (default: 'quarterly')"
+    },
+    "metric_name": {
+     "type": "string",
+     "description": "Optional filter to a specific KPI metric name (e.g., 'iPhone units sold')"
+    },
+    "report_period_gte": {
+     "type": "string",
+     "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+     "description": "Start date filter in YYYY-MM-DD format (inclusive)"
+    },
+    "report_period_lte": {
+     "type": "string",
+     "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+     "description": "End date filter in YYYY-MM-DD format (inclusive)"
+    },
+    "limit": {
+     "type": "integer",
+     "exclusiveMinimum": 0,
+     "maximum": 50,
+     "default": 4,
+     "description": "Number of records to retrieve (default: 4, max: 50)"
+    }
+   },
+   "required": [
+    "ticker"
+   ],
+   "additionalProperties": false,
+   "$schema": "http://json-schema.org/draft-07/schema#"
+  }
+ },
+ {
+  "name": "get_kpi_non_gaap",
+  "description": "Retrieves non-GAAP KPIs reported by a company (e.g., Adjusted EBITDA, Free Cash Flow as defined by the company). Filter by ticker, period (quarterly/annual), metric name, and date range. Available to Pro and Enterprise customers only.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "ticker": {
+     "type": "string",
+     "description": "The stock ticker symbol (e.g., 'AAPL', 'MSFT', 'TSLA')"
+    },
+    "period": {
+     "type": "string",
+     "enum": [
+      "quarterly",
+      "annual"
+     ],
+     "default": "quarterly",
+     "description": "The reporting period (default: 'quarterly')"
+    },
+    "metric_name": {
+     "type": "string",
+     "description": "Optional filter to a specific non-GAAP metric name (e.g., 'Adjusted EBITDA', 'Free Cash Flow')"
+    },
+    "report_period_gte": {
+     "type": "string",
+     "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+     "description": "Start date filter in YYYY-MM-DD format (inclusive)"
+    },
+    "report_period_lte": {
+     "type": "string",
+     "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+     "description": "End date filter in YYYY-MM-DD format (inclusive)"
+    },
+    "limit": {
+     "type": "integer",
+     "exclusiveMinimum": 0,
+     "maximum": 50,
+     "default": 4,
+     "description": "Number of records to retrieve (default: 4, max: 50)"
+    }
+   },
+   "required": [
+    "ticker"
+   ],
+   "additionalProperties": false,
+   "$schema": "http://json-schema.org/draft-07/schema#"
+  }
+ },
+ {
+  "name": "get_news",
+  "description": "Fetches recent news articles for a specific company or the broad market. Pass a ticker for company-specific news. Call with no arguments for the latest market-moving news, covering AI, macro, rates, earnings, geopolitics, war, energy, crypto, IPOs, housing, and other market-wide topics. Also useful when trying to explain broad price moves \u2014 omit the ticker to check for market-wide catalysts.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "ticker": {
+     "type": "string",
+     "description": "The stock ticker symbol (e.g., 'AAPL', 'MSFT'). Omit for broad market news."
+    },
+    "limit": {
+     "type": "integer",
+     "exclusiveMinimum": 0,
+     "maximum": 10,
+     "default": 5,
+     "description": "Number of news articles to retrieve (default: 5, max: 10)"
+    }
+   },
+   "additionalProperties": false,
+   "$schema": "http://json-schema.org/draft-07/schema#"
+  }
+ },
+ {
+  "name": "get_segmented_financials",
+  "description": "Retrieves segment breakdowns from all three financial statement types (income statement, balance sheet, cash flow) in a single call. Returns revenue, operating income, and depreciation by product/segment; assets, goodwill, and long-lived assets by segment; and capital expenditure by segment. Essential for sum-of-the-parts valuation and segment-level analysis.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "ticker": {
+     "type": "string",
+     "description": "The stock ticker symbol (e.g., 'AAPL', 'MSFT', 'TSLA')"
+    },
+    "period": {
+     "type": "string",
+     "enum": [
+      "annual",
+      "quarterly"
+     ],
+     "default": "annual",
+     "description": "The reporting period (default: 'annual')"
+    },
+    "limit": {
+     "type": "integer",
+     "exclusiveMinimum": 0,
+     "maximum": 100,
+     "default": 4,
+     "description": "Number of periods to retrieve (default: 4, max: 100)"
+    },
+    "report_period_gte": {
+     "type": "string",
+     "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+     "description": "Start date filter in YYYY-MM-DD format (inclusive)"
+    },
+    "report_period_lte": {
+     "type": "string",
+     "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+     "description": "End date filter in YYYY-MM-DD format (inclusive)"
+    },
+    "report_period_gt": {
+     "type": "string",
+     "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+     "description": "Start date filter in YYYY-MM-DD format (exclusive)"
+    },
+    "report_period_lt": {
+     "type": "string",
+     "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+     "description": "End date filter in YYYY-MM-DD format (exclusive)"
+    },
+    "report_period": {
+     "type": "string",
+     "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+     "description": "Exact report period date in YYYY-MM-DD format"
+    }
+   },
+   "required": [
+    "ticker"
+   ],
+   "additionalProperties": false,
+   "$schema": "http://json-schema.org/draft-07/schema#"
+  }
+ },
+ {
+  "name": "get_stock_price",
+  "description": "Fetches the most recent price snapshot for a specific stock, including the latest price, trading volume, and other open, high, low, and close price data.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "ticker": {
+     "type": "string",
+     "description": "The stock ticker symbol (e.g., 'AAPL', 'MSFT', 'TSLA')"
+    }
+   },
+   "required": [
+    "ticker"
+   ],
+   "additionalProperties": false,
+   "$schema": "http://json-schema.org/draft-07/schema#"
+  }
+ },
+ {
+  "name": "get_stock_prices",
+  "description": "Retrieves historical price data for a stock over a specified date range, including open, high, low, close prices, and volume.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "ticker": {
+     "type": "string",
+     "description": "The stock ticker symbol (e.g., 'AAPL', 'MSFT', 'TSLA')"
+    },
+    "interval": {
+     "type": "string",
+     "enum": [
+      "second",
+      "minute",
+      "day",
+      "week",
+      "month",
+      "year"
+     ],
+     "default": "day",
+     "description": "The time interval for price data (default: 'day')"
+    },
+    "interval_multiplier": {
+     "type": "integer",
+     "exclusiveMinimum": 0,
+     "default": 1,
+     "description": "Multiplier for the interval (default: 1)"
+    },
+    "start_date": {
+     "type": "string",
+     "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+     "description": "Start date in YYYY-MM-DD format (default: 1 year before end_date)"
+    },
+    "end_date": {
+     "type": "string",
+     "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+     "description": "End date in YYYY-MM-DD format (default: today in Eastern time)"
+    }
+   },
+   "required": [
+    "ticker"
+   ],
+   "additionalProperties": false,
+   "$schema": "http://json-schema.org/draft-07/schema#"
+  }
+ },
+ {
+  "name": "screen_stocks",
+  "description": "Screens and filters stocks by financial metrics, valuation ratios, and company attributes. Combine multiple filter conditions to find stocks matching your investment criteria (e.g., revenue > $1B and P/E ratio < 20). Use list_stock_screener_filters first to see all available fields and operators.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "filters": {
+     "type": "array",
+     "items": {
+      "type": "object",
+      "properties": {
+       "field": {
+        "type": "string",
+        "description": "The financial metric or company attribute to filter on (e.g., 'revenue', 'net_income', 'pe_ratio', 'sector', 'industry')"
+       },
+       "operator": {
+        "type": "string",
+        "enum": [
+         "gt",
+         "lt",
+         "gte",
+         "lte",
+         "eq",
+         "in"
+        ],
+        "description": "The comparison operator. Use 'gt', 'lt', 'gte', 'lte', 'eq' for numeric fields. Use 'eq' or 'in' for sector/industry."
+       },
+       "value": {
+        "anyOf": [
+         {
+          "type": "number"
+         },
+         {
+          "type": "string"
+         },
+         {
+          "type": "array",
+          "items": {
+           "type": [
+            "number",
+            "string"
+           ]
+          }
+         }
+        ],
+        "description": "The value to compare against. Use numbers for financial metrics, strings for sector/industry, or arrays for the 'in' operator."
+       }
+      },
+      "required": [
+       "field",
+       "operator",
+       "value"
+      ],
+      "additionalProperties": false
+     },
+     "minItems": 1,
+     "description": "Array of filter conditions. At least one filter is required. Use list_stock_screener_filters to see all available fields and operators."
+    },
+    "currency": {
+     "type": "string",
+     "default": "USD",
+     "description": "The currency for financial data (default: 'USD')"
+    },
+    "limit": {
+     "type": "integer",
+     "exclusiveMinimum": 0,
+     "maximum": 100,
+     "default": 10,
+     "description": "Maximum number of results to return (default: 10, max: 100)"
+    }
+   },
+   "required": [
+    "filters"
+   ],
+   "additionalProperties": false,
+   "$schema": "http://json-schema.org/draft-07/schema#"
+  }
+ },
+ {
+  "name": "list_stock_screener_filters",
+  "description": "Retrieves all available filter fields and operators for the stock screener, grouped by category (income statement, balance sheet, cash flow statement, financial metrics, and company attributes like sector and industry). Use this to discover which fields and operators you can use with the screen_stocks tool.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {},
+   "additionalProperties": false,
+   "$schema": "http://json-schema.org/draft-07/schema#"
+  }
+ }
+]
