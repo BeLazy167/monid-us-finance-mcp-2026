@@ -142,6 +142,20 @@ func TestProviderErrorStatusIsClassified(t *testing.T) {
 	}
 }
 
+// A 429 from the Monid API itself must surface as ErrRateLimited (mapped to
+// HTTP 429 rate_limited), so a client's retry logic fires instead of
+// reading an outage.
+func TestMonidRateLimitIsClassified(t *testing.T) {
+	c, _ := newTestClient(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = w.Write([]byte(`{"code":429,"message":"rate limit exceeded"}`))
+	})
+	_, err := c.Run(context.Background(), "defillama", "/equities/v1/summary", Input{})
+	if !errors.Is(err, ErrRateLimited) {
+		t.Fatalf("err = %v, want ErrRateLimited", err)
+	}
+}
+
 // An endpoint outside the validated discovery artifact must never be called.
 func TestAllowlistBlocksBeforeAnyRequest(t *testing.T) {
 	calls := 0

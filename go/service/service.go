@@ -19,6 +19,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"sort"
@@ -2192,12 +2193,13 @@ func (c *callCtx) getKPINonGAAP(args map[string]any) (Result, error) {
 // --- get_interest_rates ---
 
 // getInterestRates mirrors service.get_interest_rates. Per this port's
-// brief, the four central-bank scrapes fan out over goroutines instead of
-// the Python source's sequential loop; a bank whose page can't be fetched
-// or parsed is omitted, exactly as Python's `except (UpstreamError,
-// SchemaDriftError): continue` does, and never fails the whole call.
+// brief, the four central-bank scrapes fan out over goroutines. A bank
+// whose page cannot be fetched or parsed is omitted from the list, but
+// when every bank fails the call fails too: an empty list would read as
+// "no rates exist", which is never true.
 func (c *callCtx) getInterestRates(args map[string]any) (Result, error) {
 	results := make([]*fd.InterestRate, len(bankSpecs))
+	failures := make([]error, len(bankSpecs))
 	var wg sync.WaitGroup
 	wg.Add(len(bankSpecs))
 	for i, spec := range bankSpecs {
@@ -2205,14 +2207,17 @@ func (c *callCtx) getInterestRates(args map[string]any) (Result, error) {
 			defer wg.Done()
 			run, err := c.run(contextDev, scrapeEndpoint, nil, interestRateScrapeQuery(spec.URL))
 			if err != nil {
+				failures[i] = fmt.Errorf("%s: %w", spec.Bank, err)
 				return
 			}
 			markdown, perr := parseInterestRateScrapeMarkdown(run.Output, spec.URL)
 			if perr != nil {
+				failures[i] = fmt.Errorf("%s: %w", spec.Bank, perr)
 				return
 			}
 			rate := parsePolicyRate(markdown, spec.Bank)
 			if rate == nil {
+				failures[i] = fmt.Errorf("%s: no policy rate found on %s", spec.Bank, spec.URL)
 				return
 			}
 			bank, name, value := rate.Bank, rate.Name, rate.Rate
@@ -2225,6 +2230,9 @@ func (c *callCtx) getInterestRates(args map[string]any) (Result, error) {
 		if r != nil {
 			records = append(records, *r)
 		}
+	}
+	if len(records) == 0 {
+		return Result{}, fmt.Errorf("no central bank page could be read: %w", errors.Join(failures...))
 	}
 	return Result{Value: records, WrapperKey: "interest_rates"}, nil
 }

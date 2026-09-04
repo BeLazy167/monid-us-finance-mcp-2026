@@ -555,7 +555,10 @@ func TestSegmentedFinancials_IncomeStatementHoistsRevenue(t *testing.T) {
 		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
 	}
 	body := decodeBody(t, rec)
-	records := body["segmented_financials"].([]any)
+	if _, stale := body["segmented_financials"]; stale {
+		t.Fatalf("per-statement route must answer under its own key, got segmented_financials: %#v", body)
+	}
+	records := body["income_statement_segments"].([]any)
 	record := records[0].(map[string]any)
 	if _, ok := record["income_statement"]; ok {
 		t.Fatalf("income-statement route must hoist revenue, not nest it: %#v", record)
@@ -576,10 +579,11 @@ func TestSegmentedFinancials_IncomeStatementHoistsRevenue(t *testing.T) {
 func TestSegmentedFinancials_BalanceSheetAndCashFlowOmitUnsourcedFields(t *testing.T) {
 	for _, tc := range []struct {
 		path   string
+		key    string
 		absent []string
 	}{
-		{"/financials/balance-sheets/segments", []string{"assets", "goodwill", "long_lived_assets", "income_statement", "revenue"}},
-		{"/financials/cash-flow-statements/segments", []string{"capital_expenditure", "income_statement", "revenue"}},
+		{"/financials/balance-sheets/segments", "balance_sheet_segments", []string{"assets", "goodwill", "long_lived_assets", "income_statement", "revenue"}},
+		{"/financials/cash-flow-statements/segments", "cash_flow_statement_segments", []string{"capital_expenditure", "income_statement", "revenue"}},
 	} {
 		t.Run(tc.path, func(t *testing.T) {
 			caller := newFakeCaller()
@@ -602,7 +606,10 @@ func TestSegmentedFinancials_BalanceSheetAndCashFlowOmitUnsourcedFields(t *testi
 				t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
 			}
 			body := decodeBody(t, rec)
-			records := body["segmented_financials"].([]any)
+			records, ok := body[tc.key].([]any)
+			if !ok {
+				t.Fatalf("%s must answer under %q, got keys %v", tc.path, tc.key, body)
+			}
 			record := records[0].(map[string]any)
 			if record["ticker"] != "AAPL" {
 				t.Fatalf("ticker = %v, want AAPL (metadata must survive)", record["ticker"])

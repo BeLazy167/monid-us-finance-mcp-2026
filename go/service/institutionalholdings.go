@@ -9,6 +9,7 @@ import (
 	"math"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -59,10 +60,34 @@ func holderName(raw string) *string {
 // holderCIK extracts the filer CIK from the holder cell's portfolio link.
 func holderCIK(raw string) *string {
 	if m := holderCIKHref.FindStringSubmatch(raw); m != nil {
-		cik := m[1]
+		// The portfolio link carries the CIK unpadded (1364742); every
+		// other CIK this API emits is the SEC's ten-digit form.
+		cik := strings.Repeat("0", cikDigits-len(m[1])) + m[1]
 		return &cik
 	}
 	return nil
+}
+
+const cikDigits = 10
+
+var instHoldingsQuarter = regexp.MustCompile(`^(\d{4})Q([1-4])$`)
+
+// instHoldingsQuarterEnd reads the feed's "2026Q2" quarter label as the
+// last day of that calendar quarter, which is the report_period of a 13F.
+func instHoldingsQuarterEnd(row map[string]any) *time.Time {
+	label, ok := row["quarter"].(string)
+	if !ok {
+		return nil
+	}
+	m := instHoldingsQuarter.FindStringSubmatch(label)
+	if m == nil {
+		return nil
+	}
+	// The pattern admits digits only, so Atoi cannot fail here.
+	year, _ := strconv.Atoi(m[1])
+	quarter, _ := strconv.Atoi(m[2])
+	end := time.Date(year, time.Month(quarter*3)+1, 0, 0, 0, 0, 0, time.UTC)
+	return &end
 }
 
 // instHoldingsRoundedInt reads a money-like field that the feed reports as
@@ -125,10 +150,18 @@ func normalizeInstitutionalHoldings(raw json.RawMessage, ticker string, limit in
 	}
 	var records []scored
 	for _, row := range rows {
-		reportDay := instHoldingsFirstDate(row, "report_period", "reportDate", "date", "as_of", "periodEnd", "report_date_time")
+		// SECForm4 labels each row with the 13F quarter ("2026Q2") and the
+		// moment the filer submitted it ("2026-08-07<BR>12:29:42"). The
+		// quarter end is the report_period. The submission is the
+		// filing_date; it used to be read as report_period, six weeks late.
+		reportDay := instHoldingsQuarterEnd(row)
+		if reportDay == nil {
+			reportDay = instHoldingsFirstDate(row, "report_period", "reportDate", "date", "as_of", "periodEnd")
+		}
 		if !instHoldingsMatches(reportDay, reportPeriod) {
 			continue
 		}
+		filingDay := instHoldingsFirstDate(row, "report_date_time", "filing_date", "filed")
 		// SECForm4 sends the filer as an HTML cell carrying both the name
 		// and, in its portfolio link, the filer CIK. Everything else in
 		// this feed is a plain value.
@@ -156,6 +189,10 @@ func normalizeInstitutionalHoldings(raw json.RawMessage, ticker string, limit in
 		if reportDay != nil {
 			s := reportDay.Format(dateLayout)
 			record.ReportPeriod = &s
+		}
+		if filingDay != nil {
+			s := filingDay.Format(dateLayout)
+			record.FilingDate = &s
 		}
 		record.Shares = shares
 		record.ValueUSD = valueUSD

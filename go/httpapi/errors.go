@@ -56,6 +56,8 @@ func classifyError(err error) (status int, code string, message string) {
 			return http.StatusPaymentRequired, "payment_required", runErr.Error()
 		case errors.Is(runErr, monid.ErrTimeout):
 			return http.StatusGatewayTimeout, "upstream_timeout", runErr.Error()
+		case errors.Is(runErr, monid.ErrRateLimited):
+			return http.StatusTooManyRequests, "rate_limited", "Monid rate limit exceeded. Retry shortly."
 		default:
 			return http.StatusBadGateway, "upstream_error", runErr.Error()
 		}

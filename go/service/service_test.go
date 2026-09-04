@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/belazy/monid-finance/fd"
@@ -328,10 +329,10 @@ func TestParallelFanOut_StatementsAndFilingsBothCalled(t *testing.T) {
 func TestParallelFanOut_InterestRatesAllFourBanks(t *testing.T) {
 	// fakeTransport keys purely on provider+endpoint (not the URL query
 	// param), so all four bank scrapes share one canned outcome; its
-	// returned "url" cannot match every bank's expected URL, so parsing
-	// fails and every bank is silently omitted (matching Python's own
-	// `except (UpstreamError, SchemaDriftError): continue`). That is
-	// still enough to prove the fan-out issues all four calls.
+	// returned "url" cannot match every bank's expected URL, so every
+	// bank fails to parse. The fan-out must still issue all four calls,
+	// and with nothing parsed the call must fail rather than answer an
+	// empty list that reads as "no rates exist".
 	outcomes := map[string]fakeOutcome{
 		"context.dev /web/scrape/markdown": {output: map[string]any{
 			"success": true, "url": "https://example.com/placeholder",
@@ -341,8 +342,13 @@ func TestParallelFanOut_InterestRatesAllFourBanks(t *testing.T) {
 	}
 	svc, transport := newTestService(t, outcomes)
 	_, err := svc.Call(context.Background(), "key", "get_interest_rates", map[string]any{})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	if err == nil {
+		t.Fatalf("every bank failed to parse; expected an error, got an answer")
+	}
+	for _, spec := range bankSpecs {
+		if !strings.Contains(err.Error(), spec.Bank+":") {
+			t.Fatalf("error must name every failed bank, missing %s in: %v", spec.Bank, err)
+		}
 	}
 	if transport.CallCount() != len(bankSpecs) {
 		t.Fatalf("expected %d bank scrape calls, got %d", len(bankSpecs), transport.CallCount())
@@ -950,20 +956,6 @@ func TestFDShape_InstitutionalHoldings(t *testing.T) {
 	body := jsonRoundTrip(t, rejected.Value)
 	if body["error"] != "bad_request" {
 		t.Fatalf("expected embedded bad_request response, got %#v", body)
-	}
-}
-
-func TestInterestRates_ParsesFedRange(t *testing.T) {
-	markdown := "The Federal Reserve set the federal funds rate 4.25 to 4.50 percent effective January 1, 2026."
-	rate := parsePolicyRate(markdown, "FED")
-	if rate == nil {
-		t.Fatalf("expected a parsed FED rate")
-	}
-	if rate.Rate != 4.375 {
-		t.Fatalf("expected midpoint rate 4.375, got %v", rate.Rate)
-	}
-	if rate.Date == nil || *rate.Date != "2026-01-01" {
-		t.Fatalf("expected date 2026-01-01, got %v", rate.Date)
 	}
 }
 

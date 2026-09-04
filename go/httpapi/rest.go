@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"github.com/belazy/monid-finance/fd"
 	"net/http"
 	"net/url"
 	"reflect"
@@ -533,6 +534,23 @@ type incomeStatementSegmentsView struct {
 	Depreciation    *segmentCategory `json:"depreciation,omitempty"`
 }
 
+// wrapperKey is the envelope key each segments route answers under. The
+// published Financial Datasets OpenAPI spec names all four routes
+// "segmented_financials"; the live API answers the three per-statement
+// routes under their own key, and a client switching base URLs reads the
+// live one.
+func (v segmentVariant) wrapperKey() string {
+	switch v {
+	case segmentVariantIncomeStatement:
+		return "income_statement_segments"
+	case segmentVariantBalanceSheet:
+		return "balance_sheet_segments"
+	case segmentVariantCashFlow:
+		return "cash_flow_statement_segments"
+	}
+	return "segmented_financials"
+}
+
 func (rt *restAPI) segmentedFinancialsRoute(variant segmentVariant) routeHandler {
 	return func(w http.ResponseWriter, r *http.Request, id callerIdentity) {
 		q := r.URL.Query()
@@ -558,6 +576,7 @@ func (rt *restAPI) segmentedFinancialsRoute(variant segmentVariant) routeHandler
 		// response (WrapperKey == "") passes straight through unchanged.
 		if variant != segmentVariantCombined && result.WrapperKey == "segmented_financials" {
 			result.Value = reshapeSegmentRecords(result.Value, variant)
+			result.WrapperKey = variant.wrapperKey()
 		}
 		respond(w, r, result, nil)
 	}
@@ -643,11 +662,41 @@ func (rt *restAPI) kpiRoute(tool string) routeHandler {
 
 // ---- Central bank interest rates (get_interest_rates) ----
 
+// interestRates answers /macro/interest-rates and /macro/interest-rates/snapshot.
+// The tool itself takes no parameters (see tool_schemas.json) and always
+// returns the current rate for every bank it can reach, so the Financial
+// Datasets query parameters are applied here: bank narrows the list, and
+// a date range is refused rather than silently answered with today's
+// snapshot, because no rate history is sourced.
 func (rt *restAPI) interestRates(w http.ResponseWriter, r *http.Request, id callerIdentity) {
-	// get_interest_rates takes no parameters (see tool_schemas.json): it
-	// always scrapes and returns the current rate for every bank it can
-	// reach, so there is nothing to read off the query string here.
-	rt.callAndRespond(w, r, id, "get_interest_rates", map[string]any{}, nil)
+	q := r.URL.Query()
+	if q.Has("start_date") || q.Has("end_date") {
+		writeFDError(w, http.StatusBadRequest, "bad_request", "start_date and end_date are not supported: only each bank's current rate is sourced, no history")
+		return
+	}
+	result, err := rt.caller.Call(r.Context(), id.monidAPIKey, "get_interest_rates", map[string]any{})
+	if err != nil {
+		writeServiceError(w, err)
+		return
+	}
+	if bank := strings.ToUpper(q.Get("bank")); bank != "" {
+		if records, ok := result.Value.([]any); ok {
+			result.Value = interestRatesForBank(records, bank)
+		}
+	}
+	respond(w, r, result, nil)
+}
+
+// interestRatesForBank keeps the records whose bank code matches.
+func interestRatesForBank(records []any, bank string) []any {
+	kept := make([]any, 0, 1)
+	for _, record := range records {
+		rate, ok := record.(fd.InterestRate)
+		if ok && rate.Bank != nil && *rate.Bank == bank {
+			kept = append(kept, record)
+		}
+	}
+	return kept
 }
 
 // interestRateBanks answers /macro/interest-rates/banks via

@@ -22,7 +22,7 @@ var nonTerminalStatuses = map[string]bool{
 
 const (
 	pollInitialDelay = 750 * time.Millisecond
-	pollMaxDelay     = 4 * time.Second
+	pollMaxDelay     = 1500 * time.Millisecond
 )
 
 // awaitRun polls until the run reaches a terminal state, the context expires,

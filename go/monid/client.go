@@ -44,6 +44,7 @@ var (
 	ErrBlocked      = errors.New("monid: run blocked by a workspace control")
 	ErrProviderHTTP = errors.New("monid: provider returned an error status")
 	ErrTimeout      = errors.New("monid: run timed out")
+	ErrRateLimited  = errors.New("monid: rate limit exceeded")
 	ErrSchema       = errors.New("monid: unexpected response shape")
 	ErrNotAllowed   = errors.New("monid: endpoint is not in the discovery allowlist")
 )
@@ -156,6 +157,10 @@ func (c *Client) Run(ctx context.Context, provider, endpoint string, input Input
 		return nil, &RunError{Kind: ErrUnauthorized, Message: ErrUnauthorized.Error(), Provider: provider, Endpoint: endpoint}
 	case resp.StatusCode == http.StatusPaymentRequired:
 		return nil, &RunError{Kind: ErrBlocked, Message: "monid: wallet balance is insufficient for this run", Provider: provider, Endpoint: endpoint}
+	case resp.StatusCode == http.StatusTooManyRequests:
+		// Surfaced as 429 so a client's retry logic fires; a 502 would
+		// read as an outage and stop it.
+		return nil, &RunError{Kind: ErrRateLimited, Message: ErrRateLimited.Error(), Provider: provider, Endpoint: endpoint}
 	case resp.StatusCode >= 500:
 		return nil, &RunError{Kind: ErrProviderHTTP, Message: fmt.Sprintf("monid: API returned HTTP %d", resp.StatusCode), Provider: provider, Endpoint: endpoint}
 	}
