@@ -1,0 +1,30 @@
+# Secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.pyright/
+*.egg-info/
+dist/
+build/
+
+# Local data and receipts
+*.db
+*.sqlite*
+*.csv
+*.xlsx
+runs/
+receipts/private/
+
+# Editors and OS
+.DS_Store
+.idea/
+.vscode/
