@@ -10,7 +10,5 @@ scripts
 pyproject.toml
 uv.lock
 receipts
-docs/fd-live-samples
-docs/fd-docs-specs
 *.md
 !docs/monid_finance_discovery.json

@@ -24,6 +24,10 @@ import (
 	"github.com/belazy/monid-finance/service"
 )
 
+// version is the short commit the binary was built from, stamped by the
+// Makefile and Dockerfile with -ldflags "-X main.version=<sha>".
+var version = "dev"
+
 func main() {
 	cfg, err := loadEnvConfig()
 	if err != nil {
@@ -65,6 +69,7 @@ func main() {
 	}
 
 	router := httpapi.NewRouter(httpapi.Config{
+		Version:            version,
 		Caller:             callerAdapter{svc: svc},
 		MCPHandler:         mcpServer,
 		StaticDir:          cfg.staticDir,

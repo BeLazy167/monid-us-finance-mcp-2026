@@ -1,0 +1,55 @@
+name: CI
+
+# Verify every change before it lands: format, build, vet, and the full
+# test suite under the race detector, on every push to main and every
+# pull request. A red check blocks the merge button.
+#
+# A push to main that passes is then deployed to Fly when the repository
+# holds a FLY_API_TOKEN secret (flyctl tokens create deploy). Without the
+# secret the deploy job is skipped, so a fork's CI stays green.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: go
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go/go.mod
+          # Pure standard library, no go.sum to key a module cache on.
+          cache: false
+      - name: Format
+        run: test -z "$(gofmt -l .)" || { gofmt -l .; echo 'run gofmt -w'; exit 1; }
+      - name: Build
+        run: go build ./...
+      - name: Vet
+        run: go vet ./...
+      - name: Test
+        run: go test ./... -race -count=1
+      - name: Static linux binary builds (the Dockerfile's build stage)
+        run: CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /tmp/server ./cmd/server
+
+  deploy:
+    needs: verify
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    concurrency: deploy
+    steps:
+      - uses: actions/checkout@v4
+      - id: token
+        run: echo "present=${{ secrets.FLY_API_TOKEN != '' }}" >> "$GITHUB_OUTPUT"
+      - if: steps.token.outputs.present == 'true'
+        uses: superfly/flyctl-actions/setup-flyctl@master
+      - if: steps.token.outputs.present == 'true'
+        run: flyctl deploy --remote-only --build-arg VERSION=${GITHUB_SHA::7}
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      - if: steps.token.outputs.present == 'true'
+        run: make verify VERSION=${GITHUB_SHA::7}

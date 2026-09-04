@@ -5,8 +5,10 @@ COPY go/go.mod ./go/go.mod
 WORKDIR /src/go
 RUN go mod download
 COPY go/ ./
+# VERSION is the short commit sha, reported by /healthz (make deploy sets it).
+ARG VERSION=dev
 # CGO off gives a fully static binary; trimpath and -s -w keep it small.
-RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/server ./cmd/server
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o /out/server ./cmd/server
 
 # Runtime image carries the binary, the static site and the endpoint allowlist.
 FROM gcr.io/distroless/static-debian12:nonroot

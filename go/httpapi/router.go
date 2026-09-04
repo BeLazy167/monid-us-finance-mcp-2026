@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strings"
 )
@@ -67,6 +68,9 @@ type Config struct {
 	// DemoMonidAPIKey optionally enables keyless demo tryout (see
 	// AuthConfig.DemoMonidAPIKey).
 	DemoMonidAPIKey string
+	// Version is reported by /healthz so a deployment can be checked
+	// against the commit it was built from.
+	Version string
 	// RateLimitPerMinute is the token-bucket capacity/refill rate per
 	// caller key. Defaults to 60 when <= 0.
 	RateLimitPerMinute int
@@ -102,7 +106,7 @@ func NewRouter(cfg Config) *Router {
 
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("/healthz", handleHealthz)
+	mux.HandleFunc("/healthz", healthz(cfg.Version))
 
 	// REST routes: CORS (answers OPTIONS preflight before method/auth is
 	// even checked), method match, auth (caller's own Monid key), rate
@@ -165,13 +169,16 @@ func withMethod(method string, next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-func handleHealthz(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.NotFound(w, r)
-		return
+func healthz(version string) http.HandlerFunc {
+	body, _ := json.Marshal(map[string]string{"status": "ok", "version": version})
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(body)
 	}
-	w.Header().Set("Content-Type", "application/json")
-	_, _ = w.Write([]byte(`{"status":"ok"}`))
 }
 
 func toSet(values []string) map[string]bool {

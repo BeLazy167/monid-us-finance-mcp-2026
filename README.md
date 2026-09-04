@@ -19,7 +19,7 @@ It replaces the paid research layer of **Financial Datasets API** (financialdata
 ## Key Properties
 
 - **100% Contract Parity**: Implements the identical 27 MCP tool names, input parameters, and response schemas as Financial Datasets API. Responses contain only official schema keys in OpenAPI property order.
-- **Auditable Measured Receipts**: Provenance, costs, and run IDs are committed to `receipts/ledger.jsonl`. 51 priced live calls total **$0.0515 USD**, a mean of **$0.00101 per call**. Every figure below is read off that ledger, not estimated.
+- **Auditable Measured Receipts**: Provenance, costs, and run IDs are written to a receipts ledger (set `RECEIPTS_PATH`). 51 priced live calls total **$0.0515 USD**, a mean of **$0.00101 per call**. Every figure below is read off that ledger, not estimated.
 - **Zero Mock Data**: Never fabricates numbers. If a field or tool cannot be honestly sourced, it is omitted or returns a zero-cost typed error.
 - **Deterministic SEC Parsing**: `get_filing_items` extracts canonical 10-K/10-Q/8-K sections using rule-based parsing with zero LLM hallucination risk.
 
@@ -28,7 +28,7 @@ It replaces the paid research layer of **Financial Datasets API** (financialdata
 The server is a single Go binary. There is no Python, Node, CLI, or proxy hop.
 
 ```bash
-git clone https://github.com/belazy/monid-us-finance-mcp-2026.git
+git clone https://github.com/BeLazy167/monid-us-finance-mcp-2026.git
 cd monid-us-finance-mcp-2026/go
 
 go build ./...
@@ -47,6 +47,37 @@ curl -H "X-API-KEY: monid_live_..." \
 
 Every Monid call is appended to a receipts ledger when `RECEIPTS_PATH` is set; the
 ledger is best-effort observability and never a response dependency.
+
+## Self-deploy
+
+One command from a fresh clone. The server holds no secret of its own; callers
+bring their own Monid key on each request, so a deployment needs a Fly account
+and nothing else.
+
+```bash
+make deploy      # builds on Fly's remote builders (no local Docker), ships, verifies
+make connect     # prints the MCP connector config for Claude Code, Cursor, claude.ai
+```
+
+Other paths:
+
+```bash
+make run         # serve locally on :8080
+make docker      # build the 3.4 MB distroless image yourself
+make test        # full suite under the race detector
+make help        # every target
+```
+
+`make verify` compares the `version` that `/healthz` reports with your `HEAD`
+commit, so a stale deployment fails loudly. CI runs the same deploy on every
+green push to `main` once the repository holds a `FLY_API_TOKEN` secret
+(`flyctl tokens create deploy`); without the secret the deploy job is skipped.
+
+`fly.toml` keeps one machine warm so the connector never cold-starts. Set
+`RECEIPTS_PATH` to write a per-call cost ledger and `CORS_ALLOWED_ORIGINS` to
+lock browser access to your own domain; every variable is documented in
+`.env.example`. Any host that runs a container works: the `Dockerfile` is a
+two-stage static build onto `distroless/static`.
 
 ## Cost: measured, with the caveat stated
 
@@ -87,8 +118,9 @@ uptime SLAs, zero data retention, bulk delivery, or 30+ years of normalized hist
 
 Every tool in `go/mcpserver/tool_schemas.json` runs against a live Monid route and is
 contract-tested; see the `toolHandlers` table in `go/service/tools.go`. The advertised
-tool names, descriptions and input schemas are diffed against the captured Financial
-Datasets surface by test, so the two cannot silently drift.
+tool names and input schemas are diffed against the captured Financial Datasets
+surface by test, so the two cannot silently drift. Tool descriptions are this
+server's own prose.
 
 ### REST routes: all 54, with 2 honest stubs
 
