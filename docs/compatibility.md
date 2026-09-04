@@ -24,7 +24,7 @@ operator's. The server never logs or stores a caller's key. Get a key at
 - Success responses contain only Financial Datasets schema keys, in schema property order. Unsourced optional fields are omitted rather than nulled or fabricated.
 - All failures return the Financial Datasets `ErrorResponse` shape `{"error": <code>, "message": <detail>}`.
 - Error codes in use: `bad_request`, `not_found`, `invalid_cursor`, `upstream_error`, `timeout`, `schema_drift`, `not_implemented`.
-- Pagination matches the Financial Datasets style: `limit` is the total record budget across pages, `cursor` is an opaque base64url token, and `next_page_url` is present only when more records remain. Pages hold 10 records (100 for prices). `next_page_url` targets the documented facade base `https://api.monid-finance-mcp.example`; MCP clients should pass `cursor` back instead.
+- Pagination matches the Financial Datasets style: `limit` is the total record budget across pages, `cursor` is an opaque base64url token, and `next_page_url` is present only when more records remain. Pages hold 10 records (100 for prices). `next_page_url` is built from the inbound request's own scheme and host, so it always points back at the deployment that served it; MCP clients should pass `cursor` back instead.
 - Provenance, measured cost, and warnings never appear inside responses. They are appended to the ledger at `RECEIPTS_PATH` (conventionally `receipts/ledger.jsonl`) per Monid call, success or failure, by `fd.ReceiptsLedger` (`go/fd/receipts.go`); `ReceiptsLedger.SpentUSD()` totals it. Recording is best-effort observability: an unset or unwritable path disables it and never blocks a response.
 
 ## Tool status
@@ -62,7 +62,7 @@ route itself:
 - `/company/facts/ciks` returns the 8,005-CIK SEC ticker-file universe
   against Financial Datasets' 21,005, which also covers filers with no
   listed ticker. Every CIK returned is present in theirs.
-- `/macro/interest-rates/banks` lists the four central banks this server
+- `/macro/interest-rates` reads each bank's current rate from its own page (Fed target-range midpoint, ECB deposit facility rate, BOE Bank Rate, BOJ policy rate) with `date` as the decision date. `bank` filters the list; `start_date`/`end_date` answer `bad_request` since no history is sourced. `/macro/interest-rates/banks` lists only those four banks. A bank whose page cannot be read is omitted; if none can, the call answers `upstream_error`.
   scrapes, not Financial Datasets' ten.
 - `/filings/items/requests/{request_id}` answers `not_found` for any id.
   Filing-item extraction runs inline, so no request id is ever issued.
@@ -102,9 +102,9 @@ The defect was reported to the upstream provider on 2026-09-04.
 - TTM statements derive locally from four consecutive quarters (flows summed, weighted-average shares averaged, balances point-in-time). TTM records omit `fiscal_period` and `currency`.
 - `get_stock_prices` returns ascending time order and aggregates day bars into week/month/year locally; `time` is the bar end date in UTC.
 - `get_filing_items` accepts `include_exhibits` for parity but answers `bad_request` when set: exhibits are not sourced.
-- `get_filings` validates `filing_type` against the Financial Datasets enum (10-K, 10-Q, 8-K, 20-F, 6-K).
+- `get_filings` validates `filing_type` against the EDGAR form-type catalog served at `/filings/types` (715 types); an unknown type answers `bad_request` naming that route.
 - `list_filing_item_types` reuses each item's SEC title as `description`.
-- `get_earnings` composes records from 10-K and 10-Q filing events only; 8-K earnings releases and the market-wide real-time feed (no ticker) are not routed. Records omit blocks whose period is not in the statements matrix.
+- `get_earnings` with a ticker composes records from 10-K and 10-Q filing events only; 8-K earnings releases are not composed. Without a ticker it answers the Nasdaq earnings calendar feed (five records). Records omit blocks whose period is not in the statements matrix.
 - `get_financial_metrics` omits valuation fields (enterprise_value, price_to_* ratios, EV multiples, free_cash_flow_yield, peg_ratio, return_on_invested_capital, currency, filing_datetime): historical per-period market values are not sourceable without fabricating data. TTM rows omit filing identity (a TTM window spans filings). Margins/ROE/ROA use ending balances; turnovers use average balances.
 - `get_insider_trades` is capped at the validated 15-row SECForm4 feed (FD allows 5000); `form_type` filtering is rejected because the route does not report form types. `name` is the full insider relationship text; title, transaction_code, security_title, and shares_owned_before_transaction are omitted.
 - `screen_stocks` executes only `exchange` and `market_cap` filters with the `eq` operator via the Nasdaq screener; any other field or operator answers `bad_request` before spending. `list_stock_screener_filters` lists only those executable filters, not the full Financial Datasets catalog.

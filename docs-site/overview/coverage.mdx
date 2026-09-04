@@ -11,7 +11,7 @@ Every claim below was checked on 2026-09-04 by sending the same request to both 
 
 ## Tool status
 
-All 27 Financial Datasets MCP tool names are implemented against live Monid routes and contract tested. The advertised names, descriptions and input schemas are diffed against the captured Financial Datasets surface by test, so the two cannot silently drift.
+All 27 Financial Datasets MCP tool names are implemented against live Monid routes and contract tested. The advertised names and input schemas are diffed against the captured Financial Datasets surface by test, so the two cannot silently drift. Tool descriptions are this server's own prose.
 
 Call any of them over MCP at `/mcp` or `/api`.
 
@@ -43,7 +43,7 @@ These routes work, but not the way Financial Datasets does. Read them before poi
 | `/ipos` | Requires `ticker`. The filings feed behind it is keyed on one issuer and cannot list registrations market-wide. `classification` is rejected rather than silently ignored. Cover-page fields (`exchange`, `is_ipo_grade`, price range) are omitted. |
 | `/institutional-holdings/investors` | Requires `ticker`. The 13F feed needs an issuer CIK on every call, so it answers "who holds this issuer" rather than "every filer we know of". |
 | `/company/facts/ciks` | Returns 8,005 CIKs against Financial Datasets' 21,005. Ours is the SEC ticker-file universe; theirs also covers filers with no listed ticker. Every CIK we return is in their list too. |
-| `/macro/interest-rates/banks` | Four banks (FED, ECB, BOE, BOJ) against Financial Datasets' ten. We list only banks we actually scrape. |
+| `/macro/interest-rates` | Four banks (FED, ECB, BOE, BOJ) against Financial Datasets' ten; `/banks` lists only those. Each rate is read from the bank's own page: the Fed target-range midpoint, the ECB deposit facility rate, the BOE Bank Rate. `date` is the decision date, where Financial Datasets reports the month. `bank` filters; `start_date`/`end_date` answer `bad_request` because no history is sourced. Measured 2026-09-04, the Bank of Japan's page answered "Network Busy" to the scraper, so BOJ was omitted. |
 | `/news` | Requires `ticker`. Market-wide news is not routed. |
 | `/prices/snapshot/market` | Nasdaq's most-active set, not the whole market. Record shape matches exactly. |
 
@@ -88,7 +88,7 @@ A success response contains only Financial Datasets schema keys, in schema prope
     `/filings/items` runs the extraction inline and returns items on the same response. It never issues a request id, so `/filings/items/requests/{request_id}` answers `not_found` for any id rather than reporting a request as pending that will never complete.
   </Accordion>
   <Accordion title="Earnings composition is narrower">
-    `get_earnings` composes records from 10-K and 10-Q filing events only. 8-K earnings releases and the market-wide, no-ticker feed are not routed. Records omit any block whose period is absent from the underlying statements matrix.
+    `get_earnings` with a ticker composes records from 10-K and 10-Q filing events only; 8-K earnings releases are not composed. Without a ticker it answers the Nasdaq earnings calendar feed, five records. Records omit any block whose period is absent from the underlying statements matrix.
   </Accordion>
   <Accordion title="Financial metrics omit market-derived valuation fields">
     `get_financial_metrics` leaves out fields needing a historical market price we do not have: `enterprise_value`, `price_to_*` ratios, EV multiples, `free_cash_flow_yield`, `peg_ratio`, `return_on_invested_capital`, `currency`, `filing_datetime`.
@@ -114,4 +114,4 @@ A success response contains only Financial Datasets schema keys, in schema prope
 
 If your integration reads normalized statements, metrics, prices, filings, news, earnings, ownership or KPI data, and does not depend on the omitted fields above, pointing your base URL and key here is close to a drop-in swap.
 
-Do not migrate yet if you depend on `cik`-keyed company lookup, market-wide news, an unscoped IPO or investor listing, or the cash-flow investing line described above. The `as_reported=true` flag on the normalized statement tools is also still rejected; ask the dedicated `as-reported` routes above for that hierarchy instead. File an issue on [GitHub](https://github.com/BeLazy167/monid-us-finance-mcp-2026) if you need one of those.
+Do not migrate yet if you depend on `cik`-keyed company lookup, market-wide news, or an unscoped IPO or investor listing. The `as_reported=true` flag on the normalized statement tools is also still rejected; ask the dedicated `as-reported` routes above for that hierarchy instead. File an issue on [GitHub](https://github.com/BeLazy167/monid-us-finance-mcp-2026) if you need one of those.

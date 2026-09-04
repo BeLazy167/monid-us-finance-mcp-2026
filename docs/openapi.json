@@ -835,15 +835,21 @@
                       "cash_flow_statements": [
                         {
                           "ticker": "AAPL",
-                          "report_period": "2025-09-30",
+                          "report_period": "2025-09-27",
                           "fiscal_period": "FY2025",
                           "period": "annual",
+                          "accession_number": "0000320193-25-000079",
+                          "form_type": "10-K",
+                          "filing_url": "https://www.sec.gov/Archives/edgar/data/0000320193/000032019325000079/aapl-20250927.htm",
+                          "filing_date": "2025-10-31",
+                          "net_income": 112010000000,
+                          "depreciation_and_amortization": 11698000000,
                           "net_cash_flow_from_operations": 111482000000,
-                          "net_cash_flow_from_investing": 27910000000,
-                          "dividends_and_other_cash_distributions": -15421000000,
+                          "capital_expenditure": 12715000000,
+                          "net_cash_flow_from_investing": 15195000000,
+                          "dividends_and_other_cash_distributions": 15421000000,
                           "net_cash_flow_from_financing": -120686000000,
-                          "change_in_cash_and_equivalents": 18706000000,
-                          "ending_cash_balance": 35934000000,
+                          "change_in_cash_and_equivalents": 5991000000,
                           "free_cash_flow": 98767000000
                         }
                       ]
@@ -2820,8 +2826,24 @@
           "Macroeconomics"
         ],
         "summary": "Interest Rates (Historical)",
-        "description": "Returns each major central bank's current policy interest rate (Federal Reserve, European Central Bank, Bank of England, Bank of Japan), scraped live from each bank's own site and parsed on the fly by go/service/interestrates.go - not a historical time series database. This server has no historical rate storage, so both /macro/interest-rates (Financial Datasets' historical route) and /macro/interest-rates/snapshot (its real-time route) call the exact same tool and answer with today's scraped rate per bank; neither accepts a bank, start_date, or end_date parameter, since the underlying get_interest_rates tool takes no parameters at all (it always fetches every bank it can reach). A bank whose page cannot be scraped or parsed in a given call is left out of the response rather than failing the whole request.",
-        "parameters": [],
+        "description": "Returns each major central bank's current policy interest rate (Federal Reserve, European Central Bank, Bank of England, Bank of Japan), scraped live from each bank's own site and parsed on the fly by go/service/interestrates.go - not a historical time series database. This server has no historical rate storage, so both /macro/interest-rates (Financial Datasets' historical route) and /macro/interest-rates/snapshot (its real-time route) call the exact same tool and answer with today's scraped rate per bank; neither accepts a bank, start_date, or end_date parameter, since the underlying get_interest_rates tool takes no parameters at all (it always fetches every bank it can reach). A bank whose page cannot be scraped or parsed in a given call is left out of the response rather than failing the whole request. Query parameters: bank narrows the list. start_date and end_date answer 400 bad_request: only each bank's current rate is sourced, never a history. Rates come from each bank's own page: the Fed target-range midpoint, the ECB deposit facility rate, the BOE Bank Rate, the BOJ policy rate; date is the decision date. A bank whose page cannot be read is omitted; if none can be, the call answers 502 upstream_error.",
+        "parameters": [
+          {
+            "name": "bank",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "FED",
+                "ECB",
+                "BOE",
+                "BOJ"
+              ]
+            },
+            "description": "Keep only this central bank's row. Case-insensitive. Omit for every bank the server could read."
+          }
+        ],
         "responses": {
           "200": {
             "description": "Illustrative shape (no captured live sample committed for this route); values are structural placeholders, not a claim about real reported figures. A bank is omitted entirely, not nulled out, when its page could not be scraped or parsed this call.",
@@ -2893,8 +2915,24 @@
           "Macroeconomics"
         ],
         "summary": "Interest Rates (Real-Time)",
-        "description": "Returns each major central bank's current policy interest rate (Federal Reserve, European Central Bank, Bank of England, Bank of Japan), scraped live from each bank's own site and parsed on the fly by go/service/interestrates.go - not a historical time series database. This server has no historical rate storage, so both /macro/interest-rates (Financial Datasets' historical route) and /macro/interest-rates/snapshot (its real-time route) call the exact same tool and answer with today's scraped rate per bank; neither accepts a bank, start_date, or end_date parameter, since the underlying get_interest_rates tool takes no parameters at all (it always fetches every bank it can reach). A bank whose page cannot be scraped or parsed in a given call is left out of the response rather than failing the whole request.",
-        "parameters": [],
+        "description": "Returns each major central bank's current policy interest rate (Federal Reserve, European Central Bank, Bank of England, Bank of Japan), scraped live from each bank's own site and parsed on the fly by go/service/interestrates.go - not a historical time series database. This server has no historical rate storage, so both /macro/interest-rates (Financial Datasets' historical route) and /macro/interest-rates/snapshot (its real-time route) call the exact same tool and answer with today's scraped rate per bank; neither accepts a bank, start_date, or end_date parameter, since the underlying get_interest_rates tool takes no parameters at all (it always fetches every bank it can reach). A bank whose page cannot be scraped or parsed in a given call is left out of the response rather than failing the whole request. Query parameters: bank narrows the list. start_date and end_date answer 400 bad_request: only each bank's current rate is sourced, never a history. Rates come from each bank's own page: the Fed target-range midpoint, the ECB deposit facility rate, the BOE Bank Rate, the BOJ policy rate; date is the decision date. A bank whose page cannot be read is omitted; if none can be, the call answers 502 upstream_error.",
+        "parameters": [
+          {
+            "name": "bank",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "FED",
+                "ECB",
+                "BOE",
+                "BOJ"
+              ]
+            },
+            "description": "Keep only this central bank's row. Case-insensitive. Omit for every bank the server could read."
+          }
+        ],
         "responses": {
           "200": {
             "description": "Illustrative shape (no captured live sample committed for this route); values are structural placeholders, not a claim about real reported figures. A bank is omitted entirely, not nulled out, when its page could not be scraped or parsed this call.",
@@ -3292,7 +3330,7 @@
                 "examples": {
                   "example": {
                     "value": {
-                      "segmented_financials": [
+                      "income_statement_segments": [
                         {
                           "ticker": "AAPL",
                           "report_period": "2025-09-27",
@@ -3466,7 +3504,7 @@
                 "examples": {
                   "example": {
                     "value": {
-                      "segmented_financials": [
+                      "balance_sheet_segments": [
                         {
                           "ticker": "AAPL",
                           "report_period": "2025-09-27",
@@ -3618,7 +3656,7 @@
                 "examples": {
                   "example": {
                     "value": {
-                      "segmented_financials": [
+                      "cash_flow_statement_segments": [
                         {
                           "ticker": "AAPL",
                           "report_period": "2025-09-27",
@@ -5662,15 +5700,21 @@
                         "cash_flow_statements": [
                           {
                             "ticker": "AAPL",
-                            "report_period": "2025-09-30",
+                            "report_period": "2025-09-27",
                             "fiscal_period": "FY2025",
                             "period": "annual",
+                            "accession_number": "0000320193-25-000079",
+                            "form_type": "10-K",
+                            "filing_url": "https://www.sec.gov/Archives/edgar/data/0000320193/000032019325000079/aapl-20250927.htm",
+                            "filing_date": "2025-10-31",
+                            "net_income": 112010000000,
+                            "depreciation_and_amortization": 11698000000,
                             "net_cash_flow_from_operations": 111482000000,
-                            "net_cash_flow_from_investing": 27910000000,
-                            "dividends_and_other_cash_distributions": -15421000000,
+                            "capital_expenditure": 12715000000,
+                            "net_cash_flow_from_investing": 15195000000,
+                            "dividends_and_other_cash_distributions": 15421000000,
                             "net_cash_flow_from_financing": -120686000000,
-                            "change_in_cash_and_equivalents": 18706000000,
-                            "ending_cash_balance": 35934000000,
+                            "change_in_cash_and_equivalents": 5991000000,
                             "free_cash_flow": 98767000000
                           }
                         ]
@@ -7702,7 +7746,7 @@
         "title": "IncomeStatementSegmentsResponse",
         "description": "Wrapped list envelope: {\"segmented_financials\": [...], \"next_page_url\": \"...\"}. Page size is 10 records. May instead be a two-key ErrorResponse when no 10-K filing exists for the ticker.",
         "properties": {
-          "segmented_financials": {
+          "income_statement_segments": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/IncomeStatementSegmentsRecord"
@@ -7714,7 +7758,7 @@
           }
         },
         "required": [
-          "segmented_financials"
+          "income_statement_segments"
         ]
       },
       "BalanceSheetSegmentsRecord": {
@@ -7771,7 +7815,7 @@
         "title": "BalanceSheetSegmentsResponse",
         "description": "Wrapped list envelope: {\"segmented_financials\": [...], \"next_page_url\": \"...\"}. Page size is 10 records. May instead be a two-key ErrorResponse when no 10-K filing exists for the ticker.",
         "properties": {
-          "segmented_financials": {
+          "balance_sheet_segments": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/BalanceSheetSegmentsRecord"
@@ -7783,7 +7827,7 @@
           }
         },
         "required": [
-          "segmented_financials"
+          "balance_sheet_segments"
         ]
       },
       "CashFlowStatementSegmentsRecord": {
@@ -7834,7 +7878,7 @@
         "title": "CashFlowStatementSegmentsResponse",
         "description": "Wrapped list envelope: {\"segmented_financials\": [...], \"next_page_url\": \"...\"}. Page size is 10 records. May instead be a two-key ErrorResponse when no 10-K filing exists for the ticker.",
         "properties": {
-          "segmented_financials": {
+          "cash_flow_statement_segments": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/CashFlowStatementSegmentsRecord"
@@ -7846,7 +7890,7 @@
           }
         },
         "required": [
-          "segmented_financials"
+          "cash_flow_statement_segments"
         ]
       },
       "KPIMetric": {

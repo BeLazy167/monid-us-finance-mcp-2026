@@ -6,8 +6,8 @@ every route this server's HTTP router actually registers.
 
 ## Sources, in the order they were read
 
-1. `go/httpapi/rest.go` — the REST route table (`restRoutes`), the 15 implemented
-   handlers, the 20-entry `notImplementedPaths` stub list, the cursor pagination
+1. `go/httpapi/rest.go` — the REST route table (`restRoutes`): 54 registered paths, 52
+   with a handler and the 2-entry `notImplementedPaths` stub list, the cursor pagination
    mechanics (`respond`, `paginateValue`, `encodeCursor`/`cursorOffset`), and the
    envelope-wrapping helper (`wrapBody`).
 2. `go/httpapi/router.go`, `auth.go`, `ratelimit.go` — how every REST route (including
@@ -16,8 +16,9 @@ every route this server's HTTP router actually registers.
    call Monid.
 3. `go/httpapi/errors.go` — `classifyError`, the single source of truth for the
    HTTP-status/error-code mapping (400 bad_request/unsupported, 401 unauthorized,
-   402 payment_required, 429 rate_limited (set directly in router.go), 502
-   upstream_error/upstream_schema_changed, 504 upstream_timeout).
+   402 payment_required, 429 rate_limited (the local limiter in router.go, and a 429
+   from the Monid API itself), 502 upstream_error/upstream_schema_changed, 504
+   upstream_timeout).
 4. `go/service/tools.go` and `go/service/service.go` — per-tool argument parsing,
    validation order (always before any paid Monid call), and FD-schema defaults.
 5. `go/service/validate.go` — shared validators (`validateTicker`, `validatePeriod`,
@@ -130,8 +131,9 @@ examples from Financial Datasets' own captured output (not kept in this reposito
 not ours. That was both a licensing/provenance problem (this repo is headed for
 open-sourcing) and a factual bug: it asserted fields and values our own API does not
 emit (most visibly `filing_datetime`, and the accession `0000320193-25-000079` /
-`report_period` `2025-09-27` from a Financial Datasets 10-K capture that does not match
-our own AAPL FY2025 capture, `report_period` `2025-09-30`). Every response example in
+`report_period` `2025-09-27` from a Financial Datasets 10-K capture, at a time when our
+own AAPL FY2025 capture still read `2025-09-30`; since the filing join was fixed our
+own capture reads `2025-09-27` too, as a public SEC fact). Every response example in
 this document is now sourced exclusively from `docs/our-live-samples/*.json` — real,
 verified responses captured from our own live deployment
 (https://monid-finance-api.fly.dev) — or, where no live sample exists, built from
@@ -161,7 +163,7 @@ byte-for-byte, arrays trimmed to 1-2 records for readability):
   description and the gap list below).
 
 **Endpoints with no captured live sample** (`news`, `insider-trades`,
-`financials/search/screener`, `earnings`, `filings/items`, and the 20 `not_implemented`
+`financials/search/screener`, `earnings`, `filings/items`, and the 2 `not_implemented`
 stub paths): examples are built strictly from `go/fd/types.go` (or, for `/earnings`,
 also `go/providers/earnings.go`'s `EarningsTimeDimension`) field names, with clearly
 synthetic, round, illustrative values. No value here is copied from
@@ -189,7 +191,7 @@ our own captured samples never show them populated):
 
 - **IncomeStatement (`/financials/income-statements`)**: `currency`, `accession_number`, `form_type`, `filing_url`, `filing_date`, `filing_datetime`, `selling_general_and_administrative_expenses`, `interest_expense`, `net_income_discontinued_operations`, `net_income_non_controlling_interests`, `preferred_dividends_impact`, `consolidated_income`, `dividends_per_common_share`
 - **BalanceSheet (`/financials/balance-sheets`)**: `currency`, `accession_number`, `form_type`, `filing_url`, `filing_date`, `filing_datetime`, `current_investments`, `property_plant_and_equipment`, `goodwill_and_intangible_assets`, `investments`, `non_current_investments`, `outstanding_shares`, `tax_assets`, `trade_and_non_trade_payables`, `deferred_revenue`, `deposit_liabilities`, `tax_liabilities`, `accumulated_other_comprehensive_income`, `total_debt`
-- **CashFlowStatement (`/financials/cash-flow-statements`)**: `currency`, `accession_number`, `form_type`, `filing_url`, `filing_date`, `filing_datetime`, `net_income`, `depreciation_and_amortization`, `share_based_compensation`, `capital_expenditure`, `business_acquisitions_and_disposals`, `investment_acquisitions_and_disposals`, `issuance_or_repayment_of_debt_securities`, `issuance_or_purchase_of_equity_shares`, `effect_of_exchange_rate_changes`
+- **CashFlowStatement (`/financials/cash-flow-statements`)**: `currency`, `filing_datetime`, `share_based_compensation`, `business_acquisitions_and_disposals`, `investment_acquisitions_and_disposals`, `issuance_or_repayment_of_debt_securities`, `issuance_or_purchase_of_equity_shares`, `effect_of_exchange_rate_changes`, `ending_cash_balance`. Since 2026-09-04 the statement is sourced from marketbeat (see `docs/compatibility.md`), which populates `net_income`, `depreciation_and_amortization`, `capital_expenditure` and the dividends line, and the filing join fills `accession_number`, `form_type`, `filing_url` and `filing_date`.
 - **Filing (`/filings`)**: `cik`
 - **PriceSnapshot (`/prices/snapshot`)**: `time_milliseconds`
 - **CompanyFacts (`/company/facts`)**: `cik`, `industry`, `sector`, `exchange`, `is_active`, `location`, `sec_filings_url`, `sic_code`, `sic_industry`, `sic_sector`
@@ -228,19 +230,16 @@ not copied vendor data, and every such value traces back to `docs/our-live-sampl
   with **no REST route at all** — `rest.go`'s route table has no entry for it. It is
   omitted from openapi.json entirely, since this document only covers REST routes the
   server actually serves.
-- `get_segmented_financials`, `get_kpi_metrics`, `get_kpi_guidance`, `get_kpi_non_gaap`,
-  `get_interest_rates`, `get_index_fund`, and `get_institutional_holdings` all have real,
-  implemented Go handlers in `service.go` (reachable via MCP), but every REST path for
-  these datasets (`/financials/segments`, `/kpi/*`, `/macro/interest-rates*`,
-  `/index-funds*`, `/institutional-holdings*`) is unconditionally routed to the
-  zero-cost `notImplemented` stub handler in `rest.go`, regardless of the underlying
-  tool's real implementation status. openapi.json documents these 14 stub paths (plus
-  the 6 truly-unimplemented ownership tools' paths) purely as stubs, per the actual REST
-  route table — it does not describe the real MCP-only behavior those tools have, since
-  this document's scope is the REST surface only.
-- `docs/compatibility.md` states `get_earnings` "composes records from 10-K and 10-Q
-  filing events only" and that the market-wide feed "[is] not routed" — this is stale
-  versus the current `go/service/service.go`, which composes from 8-K/10-Q/10-K/20-F
-  filing events and does route the ticker-omitted market-wide feed via the Nasdaq
-  earnings calendar (`earningsFeed`). openapi.json's `/earnings` description follows the
-  current Go source, not `compatibility.md`, for this route.
+- Only two paths are stubs: `/kpi/metrics/sectors` (the shared ticker catalog carries no
+  sector dimension, so there is nothing honest to enumerate) and `/index-funds/tickers`
+  (holdings resolve by live web search, so no coverage catalog exists). Both answer HTTP
+  200 with a `not_implemented` body and make no Monid call.
+- The three per-statement segments routes answer under `income_statement_segments`,
+  `balance_sheet_segments` and `cash_flow_statement_segments`. Financial Datasets'
+  published spec names all four routes `segmented_financials`; its live API uses the
+  per-statement keys, and a client switching base URLs reads the live one, so this
+  server and this document follow the live API. `/financials/segments` keeps
+  `segmented_financials`.
+- `get_earnings` composes a ticker's records from 10-K and 10-Q filing events
+  (`providers.earningsForms`); the no-ticker call answers the Nasdaq earnings calendar
+  feed (`service.earningsFeed`). `docs/compatibility.md` says the same.
