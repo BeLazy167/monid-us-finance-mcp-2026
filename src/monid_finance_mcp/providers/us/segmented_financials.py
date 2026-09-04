@@ -107,10 +107,8 @@ def normalize_segmented_financials(
         record["period"] = "annual"
         if accession_number is not None:
             record["accession_number"] = accession_number
-        if filing_url is not None:
-            record["filing_url"] = filing_url
-        if form_type is not None:
-            del form_type
+        record["filing_url"] = filing_url
+        del form_type
         income_statement: JsonObject = {}
         if period.products:
             income_statement["revenue"] = {
