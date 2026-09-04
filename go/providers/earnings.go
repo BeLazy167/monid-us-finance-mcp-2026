@@ -156,7 +156,7 @@ func NormalizeEarnings(statementsValue any, filingsRows []RawFiling, ticker stri
 
 	var records []fd.EarningsRecord
 	for _, filing := range filings {
-		quarterValues, ok := quarterly[filing.ReportPeriod]
+		quarterValues, ok := nearestPeriodValues(quarterly, filing.ReportPeriod)
 		if !ok {
 			continue
 		}
@@ -188,7 +188,7 @@ func NormalizeEarnings(statementsValue any, filingsRows []RawFiling, ticker stri
 		record.Quarterly = quarterlyJSON
 
 		if filing.Form == "10-K" {
-			if annualValues, ok := annual[filing.ReportPeriod]; ok {
+			if annualValues, ok := nearestPeriodValues(annual, filing.ReportPeriod); ok {
 				annualBlock := buildTimeDimension(
 					annualValues,
 					previousYear(annual, filing.ReportPeriod),
@@ -209,6 +209,46 @@ func NormalizeEarnings(statementsValue any, filingsRows []RawFiling, ticker stri
 		}
 	}
 	return EarningsData{Records: records, FiscalEndMonth: fiscalEndMonth}, nil
+}
+
+// statementPeriodTolerance bounds how far a filing's reported period end
+// may sit from the statements feed's own period date and still be treated
+// as the same period.
+//
+// The two feeds disagree by construction. Filings carry the real fiscal
+// close while the statements feed rounds to month end, so for a 52/53
+// week fiscal year they differ by up to six days. Quarters are ~90 days
+// apart, so a window this size cannot reach an adjacent period.
+const statementPeriodTolerance = 10 * 24 * time.Hour
+
+// nearestPeriodValues looks up a filing's period in a statements-keyed
+// map, matching the exact date first and otherwise the closest key inside
+// statementPeriodTolerance.
+//
+// An exact lookup silently dropped every filing whose fiscal close was
+// not a month end, which is most of them: earnings then reported whichever
+// older filing happened to coincide as if it were the newest. Nothing
+// errored, the recent records were simply absent.
+func nearestPeriodValues(byDate map[time.Time]map[string]any, day time.Time) (map[string]any, bool) {
+	if values, ok := byDate[day]; ok {
+		return values, true
+	}
+	var best map[string]any
+	found := false
+	bestDelta := statementPeriodTolerance + time.Hour
+	for key, values := range byDate {
+		delta := key.Sub(day)
+		if delta < 0 {
+			delta = -delta
+		}
+		if delta < bestDelta {
+			bestDelta, best, found = delta, values, true
+		}
+	}
+	if !found || bestDelta > statementPeriodTolerance {
+		return nil, false
+	}
+	return best, true
 }
 
 func joinedByDate(seriesLists ...[]PeriodRow) map[time.Time]map[string]any {
