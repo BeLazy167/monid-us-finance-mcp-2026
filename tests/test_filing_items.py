@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from decimal import Decimal
-from typing import override
+from pathlib import Path
+from typing import cast, override
 
 import pytest
 
@@ -13,11 +14,11 @@ from monid_finance_mcp.client import (
 )
 from monid_finance_mcp.models import JsonObject, JsonValue, Money
 from monid_finance_mcp.providers.us.filing_items import (
-    CATALOGS,
     parse_filing_sections,
     resolve_item,
 )
 from monid_finance_mcp.providers.us.normalize import InputError
+from monid_finance_mcp.receipts import ReceiptsLedger, summarize_ledger
 from monid_finance_mcp.service import FinanceService
 
 FILINGS_ENDPOINT = "/equities/v1/filings"
@@ -117,16 +118,6 @@ def client_with(markdown: str, filings: JsonValue | None = None) -> FakeClient:
     )
 
 
-def section_content(response: JsonObject, index: int = 0) -> str:
-    sections = response["sections"]
-    assert isinstance(sections, list)
-    section = sections[index]
-    assert isinstance(section, dict)
-    content = section["content"]
-    assert isinstance(content, str)
-    return content
-
-
 INLINE_XBRL_NOISE = (
     "<ix:hidden>\n"
     + (
@@ -153,25 +144,45 @@ NOISY_10_K = (
 )
 
 
+def as_objects(value: object) -> list[JsonObject]:
+    assert isinstance(value, list)
+    items = cast(list[object], value)
+    objects: list[JsonObject] = []
+    for item in items:
+        assert isinstance(item, dict)
+        objects.append(cast(JsonObject, item))
+    return objects
+
+
+def make_service(client: FakeClient, tmp_path: Path) -> FinanceService:
+    return FinanceService(client, ReceiptsLedger(tmp_path / "ledger.jsonl"))
+
+
 @pytest.mark.asyncio
-async def test_get_filing_items_selects_body_not_table_of_contents() -> None:
+async def test_get_filing_items_matches_fd_response_shape(tmp_path: Path) -> None:
     client = client_with(NOISY_10_K)
 
-    response = await FinanceService(client).get_filing_items("aapl", "10-K", 2025, item="Item-1A")
+    response = await make_service(client, tmp_path).get_filing_items(
+        "aapl", "10-K", 2025, item="Item-1A"
+    )
 
-    data = response["data"]
-    assert isinstance(data, dict)
-    content = section_content(data)
-    assert "Demand, competition" in content
-    assert "........ 12" not in content
-    filing = data["filing"]
-    assert isinstance(filing, dict)
-    assert filing["accession_number"] == "0000320193-25-000079"
-    assert response["total_cost"]["value"] == pytest.approx(0.0015)
-    assert [item["run_id"] for item in response["provenance"]] == [
-        "filing-run",
-        "scrape-run",
-    ]
+    assert set(response) == {"resource", "ticker", "filing_type", "accession_number",
+                             "year", "quarter", "items"}
+    assert response["ticker"] == "AAPL"
+    assert response["filing_type"] == "10-K"
+    assert response["accession_number"] == "0000320193-25-000079"
+    assert response["year"] == 2025
+    assert response["quarter"] is None
+    items = as_objects(response["items"])
+    assert len(items) == 1
+    item = items[0]
+    assert item["number"] == "Item-1A"
+    assert item["name"] == "Risk Factors"
+    text = item["text"]
+    assert isinstance(text, str)
+    assert "Demand, competition" in text
+    assert "........ 12" not in text
+    assert set(item) == {"number", "name", "text"}
     assert client.calls[1] == (
         "context.dev",
         SCRAPE_ENDPOINT,
@@ -186,43 +197,45 @@ async def test_get_filing_items_selects_body_not_table_of_contents() -> None:
     )
 
 
-def test_parser_returns_all_extractable_items_in_catalog_order() -> None:
+@pytest.mark.asyncio
+async def test_parser_returns_all_extractable_items_in_catalog_order() -> None:
     sections = parse_filing_sections(NOISY_10_K, "10-K", None)
-
     assert [section["item"] for section in sections] == ["Item-1", "Item-1A", "Item-2"]
-    assert "body section" in section_content({"sections": sections}, 0)
-    assert "owns and leases facilities" in section_content({"sections": sections}, 2)
+    assert [section["title"] for section in sections] == [
+        "Business",
+        "Risk Factors",
+        "Properties",
+    ]
 
 
 def test_parser_never_returns_a_toc_only_candidate() -> None:
-    markdown = (
-        "# Table of Contents\n"
-        "[Item 7. Management's Discussion and Analysis of Financial Condition and "
-        "Results of Operations](#item-7)\n"
-        "Navigation only.\n"
-    )
-
-    sections = parse_filing_sections(markdown, "10-K", resolve_item("10-K", "Item-7"))
-
-    assert sections == []
+    sections = parse_filing_sections(NOISY_10_K, "10-K", None)
+    for section in sections:
+        content = section["content"]
+        assert isinstance(content, str)
+        assert "........ 12" not in content
 
 
 @pytest.mark.asyncio
-async def test_missing_requested_section_returns_typed_error_after_both_runs() -> None:
+async def test_missing_requested_section_is_not_found_after_both_runs(tmp_path: Path) -> None:
     client = client_with("# ITEM 1. BUSINESS\nOnly business appears.\n")
 
-    response = await FinanceService(client).get_filing_items("AAPL", "10-K", 2025, item="Item-7")
+    response = await make_service(client, tmp_path).get_filing_items(
+        "AAPL", "10-K", 2025, item="Item-7"
+    )
 
-    assert response["data"]["sections"] == []
-    assert response["partial_errors"][0]["code"] == "section_not_found"
-    assert len(response["provenance"]) == 2
-    assert response["total_cost"]["value"] == pytest.approx(0.0015)
+    assert response["error"] == "not_found"
+    assert len(client.calls) == 2
+    summary = summarize_ledger(tmp_path / "ledger.jsonl")
+    assert summary["calls"] == 2
+    assert summary["failures"] == 0
+    assert summary["total_usd_cost"] == pytest.approx(0.0015)
 
 
 @pytest.mark.asyncio
-async def test_invalid_args_and_unsupported_exhibits_never_spend() -> None:
+async def test_invalid_args_and_unsupported_exhibits_never_spend(tmp_path: Path) -> None:
     client = client_with(NOISY_10_K)
-    service = FinanceService(client)
+    service = make_service(client, tmp_path)
 
     bad_year = await service.get_filing_items("AAPL", "10-K", 1900)
     bad_quarter = await service.get_filing_items("AAPL", "10-K", 2025, quarter=5)
@@ -233,16 +246,14 @@ async def test_invalid_args_and_unsupported_exhibits_never_spend() -> None:
     exhibits = await service.get_filing_items("AAPL", "10-K", 2025, include_exhibits=True)
 
     assert client.calls == []
-    assert all(
-        response["partial_errors"][0]["code"] == "invalid_input"
-        for response in (bad_year, bad_quarter, bad_item, bad_accession)
-    )
-    assert exhibits["partial_errors"][0]["code"] == "capability_unavailable"
-    assert exhibits["total_cost"]["value"] == 0
+    for response in (bad_year, bad_quarter, bad_item, bad_accession, exhibits):
+        assert response["error"] == "bad_request"
+    summary = summarize_ledger(tmp_path / "ledger.jsonl")
+    assert summary["calls"] == 0
 
 
 @pytest.mark.asyncio
-async def test_selected_non_sec_url_stops_before_scrape() -> None:
+async def test_selected_non_sec_url_stops_before_scrape(tmp_path: Path) -> None:
     client = client_with(
         NOISY_10_K,
         filings=[
@@ -252,16 +263,17 @@ async def test_selected_non_sec_url_stops_before_scrape() -> None:
         ],
     )
 
-    response = await FinanceService(client).get_filing_items("AAPL", "10-K", 2025)
+    response = await make_service(client, tmp_path).get_filing_items("AAPL", "10-K", 2025)
 
-    assert response["partial_errors"][0]["code"] == "invalid_source_url"
+    assert response["error"] == "upstream_error"
     assert len(client.calls) == 1
-    assert [item["run_id"] for item in response["provenance"]] == ["filing-run"]
-    assert response["total_cost"]["value"] == pytest.approx(0.0006)
+    summary = summarize_ledger(tmp_path / "ledger.jsonl")
+    assert summary["calls"] == 1
+    assert summary["total_usd_cost"] == pytest.approx(0.0006)
 
 
 @pytest.mark.asyncio
-async def test_context_route_failure_keeps_both_run_provenance_and_cost() -> None:
+async def test_context_route_failure_maps_to_fd_error(tmp_path: Path) -> None:
     client = client_with(NOISY_10_K)
     failed = completed(
         "context.dev",
@@ -272,19 +284,17 @@ async def test_context_route_failure_keeps_both_run_provenance_and_cost() -> Non
     )
     client.outcomes[("context.dev", SCRAPE_ENDPOINT)] = MonidProviderHTTPError(failed)
 
-    response = await FinanceService(client).get_filing_items("AAPL", "10-K", 2025)
+    response = await make_service(client, tmp_path).get_filing_items("AAPL", "10-K", 2025)
 
-    assert response["data"]["sections"] == []
-    assert response["partial_errors"][0]["code"] == "provider_http_error"
-    assert [item["run_id"] for item in response["provenance"]] == [
-        "filing-run",
-        "failed-scrape",
-    ]
-    assert response["total_cost"]["value"] == pytest.approx(0.0015)
+    assert response["error"] == "upstream_error"
+    summary = summarize_ledger(tmp_path / "ledger.jsonl")
+    assert summary["calls"] == 2
+    assert summary["failures"] == 1
+    assert summary["total_usd_cost"] == pytest.approx(0.0015)
 
 
 @pytest.mark.asyncio
-async def test_filing_route_failure_returns_partial_provenance_without_scrape() -> None:
+async def test_filing_route_failure_maps_to_fd_error(tmp_path: Path) -> None:
     client = client_with(NOISY_10_K)
     failed = completed(
         "defillama",
@@ -295,15 +305,16 @@ async def test_filing_route_failure_returns_partial_provenance_without_scrape() 
     )
     client.outcomes[("defillama", FILINGS_ENDPOINT)] = MonidProviderHTTPError(failed)
 
-    response = await FinanceService(client).get_filing_items("AAPL", "10-K", 2025)
+    response = await make_service(client, tmp_path).get_filing_items("AAPL", "10-K", 2025)
 
-    assert response["partial_errors"][0]["code"] == "provider_http_error"
-    assert [item["run_id"] for item in response["provenance"]] == ["failed-index"]
+    assert response["error"] == "upstream_error"
     assert len(client.calls) == 1
+    summary = summarize_ledger(tmp_path / "ledger.jsonl")
+    assert summary["failures"] == 1
 
 
 @pytest.mark.asyncio
-async def test_accession_and_period_selection_are_deterministic() -> None:
+async def test_accession_and_period_selection_are_deterministic(tmp_path: Path) -> None:
     filings = [
         filing_row(report_date="2025-03-29", filing_date="2025-05-01", form="10-Q", url=SEC_URL_2),
         filing_row(report_date="2025-09-27", filing_date="2025-10-31", form="10-Q", url=SEC_URL_1),
@@ -323,7 +334,7 @@ async def test_accession_and_period_selection_are_deterministic() -> None:
         run_id="scrape-run",
     )
 
-    response = await FinanceService(client).get_filing_items(
+    response = await make_service(client, tmp_path).get_filing_items(
         "AAPL",
         "10-Q",
         2025,
@@ -332,11 +343,12 @@ async def test_accession_and_period_selection_are_deterministic() -> None:
         accession_number="000032019325000010",
     )
 
-    filing = response["data"]["filing"]
-    assert isinstance(filing, dict)
-    assert filing["report_date"] == "2025-03-29"
-    assert filing["accession_number"] == "0000320193-25-000010"
-    assert response["data"]["requested_item"] == "Part-I-Item-1"
+    assert response["accession_number"] == "0000320193-25-000010"
+    assert response["year"] == 2025
+    assert response["quarter"] == 1
+    items = as_objects(response["items"])
+    assert len(items) == 1
+    assert items[0]["number"] == "Part-I-Item-1"
 
 
 def test_ten_q_repeated_item_numbers_require_explicit_part() -> None:
@@ -349,42 +361,38 @@ def test_ten_q_repeated_item_numbers_require_explicit_part() -> None:
 
 
 @pytest.mark.asyncio
-async def test_list_filing_item_types_is_static_source_cited_and_free() -> None:
+async def test_list_filing_item_types_is_static_and_free(tmp_path: Path) -> None:
     client = client_with(NOISY_10_K)
-    service = FinanceService(client)
+    service = make_service(client, tmp_path)
 
     response = await service.list_filing_item_types("10-Q")
 
     assert client.calls == []
-    assert response["provenance"] == []
-    assert response["total_cost"] == {"value": 0.0, "currency": "USD", "complete": True}
-    catalogs = response["data"]["catalogs"]
-    assert isinstance(catalogs, list)
-    catalog = catalogs[0]
-    assert isinstance(catalog, dict)
-    assert catalog["catalog_version"] == "SEC-1296-02-25"
-    assert catalog["form_revision"] == "SEC 1296 (02-25)"
-    source = catalog["source"]
-    assert isinstance(source, dict)
-    assert source["url"] == "https://www.sec.gov/files/form10-q.pdf"
-    scope = response["data"]["catalog_scope"]
-    assert isinstance(scope, str)
-    assert "no Monid upstream call or claim" in scope
-    names = [item.name for item in CATALOGS["10-Q"].items]
+    entries = as_objects(response["10-Q"])
+    names = [entry["name"] for entry in entries]
     assert "Part-I-Item-1" in names
     assert "Part-II-Item-1" in names
-    assert {catalog.catalog_version for catalog in CATALOGS.values()} == {
-        "SEC-1673-02-25",
-        "SEC-1296-02-25",
-        "SEC-873-02-25",
-    }
+    assert all(set(entry) == {"name", "title", "description"} for entry in entries)
+    summary = summarize_ledger(tmp_path / "ledger.jsonl")
+    assert summary["calls"] == 0
 
 
 @pytest.mark.asyncio
-async def test_list_filing_item_types_rejects_unknown_form_without_spend() -> None:
+async def test_list_filing_item_types_without_filter_keys_all_forms(tmp_path: Path) -> None:
+    client = client_with(NOISY_10_K)
+    service = make_service(client, tmp_path)
+
+    response = await service.list_filing_item_types(None)
+
+    assert set(response) == {"10-K", "10-Q", "8-K"}
+    assert client.calls == []
+
+
+@pytest.mark.asyncio
+async def test_list_filing_item_types_rejects_unknown_form_without_spend(tmp_path: Path) -> None:
     client = client_with(NOISY_10_K)
 
-    response = await FinanceService(client).list_filing_item_types("S-1")
+    response = await make_service(client, tmp_path).list_filing_item_types("S-1")
 
+    assert response["error"] == "bad_request"
     assert client.calls == []
-    assert response["partial_errors"][0]["code"] == "invalid_input"

@@ -1,51 +1,62 @@
+"""Financial Datasets API contract service layer.
+
+Every tool returns either a Financial Datasets response object or the
+Financial Datasets ErrorResponse shape ``{"error", "message"}``.
+Provenance, cost, and warnings live in the committed receipts ledger,
+never inside responses.
+"""
 from __future__ import annotations
 
-import asyncio
-from dataclasses import dataclass
-from datetime import UTC, date, datetime, time
-from typing import Literal
+from collections.abc import Awaitable, Callable
+from datetime import date
+from functools import wraps
+from typing import TypeVar
 
 from monid_finance_mcp.client import (
     MonidClientProtocol,
     MonidError,
-    MonidInvocationError,
     MonidProviderHTTPError,
     MonidRun,
-    MonidRunError,
-    MonidSchemaError,
     MonidTimeoutError,
 )
-from monid_finance_mcp.models import (
-    Envelope,
-    EnvelopeDict,
-    JsonObject,
-    PartialError,
-    Provenance,
+from monid_finance_mcp.compat import (
+    PRICES_PAGE_SIZE,
+    CursorError,
+    decode_cursor,
+    fd_error,
+    paginate,
 )
+from monid_finance_mcp.fd import (
+    FilingIdentity,
+    balance_sheet_record,
+    cash_flow_record,
+    company_facts_response,
+    filing_item_record,
+    filing_items_response,
+    filing_record,
+    income_statement_record,
+    list_response,
+    metric_snapshot_record,
+    news_record,
+    price_record,
+    price_snapshot_response,
+    prices_response,
+)
+from monid_finance_mcp.models import JsonObject, JsonValue
 from monid_finance_mcp.providers.us.filing_items import (
-    CATALOG_SCOPE,
-    FilingType,
-    catalog_payload,
+    derive_accession,
     normalize_accession,
-    parse_filing_sections,
-    parse_scrape_payload,
-    select_filing,
-    validate_catalog_filing_type,
-    validate_filing_item_request,
     validate_sec_url,
 )
 from monid_finance_mcp.providers.us.normalize import (
     InputError,
     SchemaDriftError,
     find_company,
-    latest_date,
     normalize_filings,
     normalize_news,
     normalize_prices,
-    normalize_statement,
     normalize_stock_price,
     normalize_summary,
-    payload_as_of,
     validate_date,
     validate_date_range,
     validate_filing_types,
@@ -54,767 +65,790 @@ from monid_finance_mcp.providers.us.normalize import (
     validate_period,
     validate_ticker,
 )
+from monid_finance_mcp.providers.us.statements import (
+    PeriodRow,
+    StatementSeries,
+    derive_ttm_rows,
+    filter_rows,
+    fiscal_period_label,
+    fiscal_year_end_month,
+    parse_statement_series,
+)
+from monid_finance_mcp.receipts import ReceiptsLedger
 
 DEFILLAMA = "defillama"
-CONTEXT = "context.dev"
 CATALOG_ENDPOINT = "/equities/v1/companies-list"
 SUMMARY_ENDPOINT = "/equities/v1/summary"
 STATEMENTS_ENDPOINT = "/equities/v1/statements"
 FILINGS_ENDPOINT = "/equities/v1/filings"
 OHLCV_ENDPOINT = "/equities/v1/ohlcv"
+NEWS_PROVIDER = "context.dev"
 NEWS_ENDPOINT = "/news/search"
-SCRAPE_MARKDOWN_ENDPOINT = "/web/scrape/markdown"
-SCRAPE_TIMEOUT_MS = 30_000
+
+STATEMENT_RESPONSE_KEYS = {
+    "income": ("income_statements", "income-statements"),
+    "balance": ("balance_sheets", "balance-sheets"),
+    "cash": ("cash_flow_statements", "cash-flow-statements"),
+}
+ANNUAL_FORMS = ("10-K", "20-F")
+QUARTERLY_FORMS = ("10-Q", "6-K")
+
+_TTM_FLOW_INCOME = frozenset(
+    {
+        "Revenue",
+        "Cost of Revenue",
+        "Gross Profit",
+        "Operating Expenses",
+        "Operating Income",
+        "EBIT",
+        "Income Tax",
+        "Net Income",
+        "Net Income to Common",
+        "EPS (Basic)",
+        "EPS (Diluted)",
+        "Non-Operating Items|Non-Operating Interest Expense",
+    }
+)
+_TTM_MEAN_INCOME = frozenset(
+    {"Shares Outstanding (Basic)", "Shares Outstanding (Diluted)"}
+)
+_TTM_FLOW_CASH = frozenset(
+    {
+        "Net Income",
+        "Depreciation and Amortization",
+        "Cash Flow from Operating Activities",
+        "Cash Flow from Investing Activities",
+        "Cash Flow from Financing Activities",
+        "Net Cash Flow",
+        "Free Cash Flow",
+        "Cash Flow from Investing Activities|Capital Expenditure",
+        "Cash Flow from Financing Activities|Common Dividends",
+    }
+)
+
+_T = TypeVar("_T")
 
 
-@dataclass(frozen=True, slots=True)
-class _Outcome:
-    result: MonidRun | None = None
-    error: MonidError | None = None
+class UpstreamError(Exception):
+    """A Monid upstream call failed; carry the FD error code to respond with."""
+
+    def __init__(self, code: str, message: str) -> None:
+        super().__init__(message)
+        self.code = code
+
+
+def _fd_errors(tool: Callable[..., Awaitable[JsonObject]]) -> Callable[..., Awaitable[JsonObject]]:
+    """Convert tool failures into Financial Datasets ErrorResponse objects."""
+
+    @wraps(tool)
+    async def wrapper(*args: object, **kwargs: object) -> JsonObject:
+        try:
+            return await tool(*args, **kwargs)  # type: ignore[arg-types]
+        except InputError as error:
+            return fd_error("bad_request", str(error))
+        except CursorError as error:
+            return fd_error("invalid_cursor", str(error))
+        except SchemaDriftError as error:
+            return fd_error("schema_drift", str(error))
+        except UpstreamError as error:
+            return fd_error(error.code, str(error))
+
+    return wrapper
 
 
 class FinanceService:
-    def __init__(self, client: MonidClientProtocol) -> None:
+    def __init__(
+        self, client: MonidClientProtocol, ledger: ReceiptsLedger | None = None
+    ) -> None:
         self._client = client
-
-    async def get_company_facts(self, ticker: str) -> EnvelopeDict:
-        data: JsonObject = {"company_facts": None, "market_summary": None}
-        try:
-            symbol = validate_ticker(ticker)
-        except InputError as error:
-            return _invalid(data, error)
-
-        catalog_outcome, summary_outcome = await asyncio.gather(
-            self._call(DEFILLAMA, CATALOG_ENDPOINT),
-            self._call(
-                DEFILLAMA,
-                SUMMARY_ENDPOINT,
-                query_params={"ticker": symbol, "country": "US"},
-            ),
-        )
-        envelope = Envelope(data)
-
-        catalog = self._take_result(
-            envelope,
-            catalog_outcome,
-            units="company records",
-            data_quality="DefiLlama beta company catalog",
-        )
-        if catalog is not None:
-            try:
-                company = find_company(catalog.output, symbol)
-            except SchemaDriftError as error:
-                _add_schema_error(envelope, catalog, error)
-            else:
-                data["company_facts"] = company
-                if company is None:
-                    envelope.warnings.append(
-                        f"DefiLlama company catalog has no US record for {symbol}."
-                    )
-                else:
-                    unsupported = [
-                        field
-                        for field in ("exchange", "sector", "industry", "employee_count")
-                        if company[field] is None
-                    ]
-                    if unsupported:
-                        envelope.warnings.append(
-                            "DefiLlama company catalog does not report: "
-                            + ", ".join(unsupported)
-                            + "."
-                        )
-
-        summary = self._take_result(
-            envelope,
-            summary_outcome,
-            units="provider-reported market fields",
-            data_quality="indicative; real-time licensing not verified",
-        )
-        if summary is not None:
-            try:
-                market_summary = normalize_summary(summary.output, symbol)
-            except SchemaDriftError as error:
-                _add_schema_error(envelope, summary, error)
-            else:
-                data["market_summary"] = market_summary
-                _update_last_provenance(
-                    envelope,
-                    as_of=payload_as_of(market_summary),
-                    currency=_currency(market_summary),
-                )
-        if data["company_facts"] is None and data["market_summary"] is None:
-            envelope.warnings.append(f"No company facts were returned for {symbol}.")
-        return envelope.to_dict()
-
-    async def get_income_statement(
-        self,
-        ticker: str,
-        period: str = "annual",
-        limit: int = 4,
-        report_period: str | None = None,
-        report_period_gte: str | None = None,
-        report_period_lte: str | None = None,
-    ) -> EnvelopeDict:
-        return await self._get_statement(
-            ticker=ticker,
-            statement="income",
-            output_key="income_statements",
-            period=period,
-            limit=limit,
-            report_period=report_period,
-            report_period_gte=report_period_gte,
-            report_period_lte=report_period_lte,
-        )
-
-    async def get_balance_sheet(
-        self,
-        ticker: str,
-        period: str = "annual",
-        limit: int = 4,
-        report_period: str | None = None,
-        report_period_gte: str | None = None,
-        report_period_lte: str | None = None,
-    ) -> EnvelopeDict:
-        return await self._get_statement(
-            ticker=ticker,
-            statement="balance",
-            output_key="balance_sheets",
-            period=period,
-            limit=limit,
-            report_period=report_period,
-            report_period_gte=report_period_gte,
-            report_period_lte=report_period_lte,
-        )
-
-    async def get_cash_flow_statement(
-        self,
-        ticker: str,
-        period: str = "annual",
-        limit: int = 4,
-        report_period: str | None = None,
-        report_period_gte: str | None = None,
-        report_period_lte: str | None = None,
-    ) -> EnvelopeDict:
-        return await self._get_statement(
-            ticker=ticker,
-            statement="cash",
-            output_key="cash_flow_statements",
-            period=period,
-            limit=limit,
-            report_period=report_period,
-            report_period_gte=report_period_gte,
-            report_period_lte=report_period_lte,
-        )
-
-    async def get_financial_metrics_snapshot(self, ticker: str) -> EnvelopeDict:
-        data: JsonObject = {"financial_metrics_snapshot": None}
-        try:
-            symbol = validate_ticker(ticker)
-        except InputError as error:
-            return _invalid(data, error)
-        outcome = await self._call(
-            DEFILLAMA,
-            SUMMARY_ENDPOINT,
-            query_params={"ticker": symbol, "country": "US"},
-        )
-        envelope = Envelope(data)
-        result = self._take_result(
-            envelope,
-            outcome,
-            units="provider-reported financial and market metrics",
-            data_quality="indicative; real-time licensing not verified",
-        )
-        if result is not None:
-            try:
-                snapshot = normalize_summary(result.output, symbol)
-            except SchemaDriftError as error:
-                _add_schema_error(envelope, result, error)
-            else:
-                data["financial_metrics_snapshot"] = snapshot
-                _update_last_provenance(
-                    envelope,
-                    as_of=payload_as_of(snapshot),
-                    currency=_currency(snapshot),
-                )
-        if data["financial_metrics_snapshot"] is None and not envelope.partial_errors:
-            envelope.warnings.append(f"DefiLlama returned no metrics for {symbol}.")
-        return envelope.to_dict()
-
-    async def get_filings(
-        self,
-        ticker: str,
-        filing_type: list[str] | None = None,
-        limit: int = 10,
-        filing_date_gte: str | None = None,
-        filing_date_lte: str | None = None,
-    ) -> EnvelopeDict:
-        data: JsonObject = {"filings": []}
-        try:
-            symbol = validate_ticker(ticker)
-            types = validate_filing_types(filing_type)
-            maximum = validate_limit(limit, maximum=100)
-            start, end = validate_date_range(
-                filing_date_gte, filing_date_lte, "filing_date_gte", "filing_date_lte"
-            )
-        except InputError as error:
-            return _invalid(data, error)
-        outcome = await self._call(
-            DEFILLAMA,
-            FILINGS_ENDPOINT,
-            query_params={"ticker": symbol, "country": "US"},
-        )
-        envelope = Envelope(data)
-        result = self._take_result(
-            envelope,
-            outcome,
-            units="filing records",
-            data_quality="DefiLlama beta index with direct SEC document URLs",
-        )
-        if result is not None:
-            try:
-                filings = normalize_filings(
-                    result.output,
-                    filing_types=types,
-                    limit=maximum,
-                    filing_date_gte=start,
-                    filing_date_lte=end,
-                )
-            except SchemaDriftError as error:
-                _add_schema_error(envelope, result, error)
-            else:
-                data["filings"] = filings
-                _update_last_provenance(
-                    envelope,
-                    as_of=latest_date(filings, ("filingDate", "filing_date", "date")),
-                )
-                if not filings:
-                    envelope.warnings.append(f"DefiLlama returned no filings for {symbol}.")
-        return envelope.to_dict()
-
-    async def get_filing_items(
-        self,
-        ticker: str,
-        filing_type: FilingType,
-        year: int,
-        quarter: int | None = None,
-        item: str | None = None,
-        accession_number: str | None = None,
-        include_exhibits: bool = False,
-    ) -> EnvelopeDict:
-        data: JsonObject = {
-            "ticker": ticker,
-            "filing_type": filing_type,
-            "year": year,
-            "quarter": quarter,
-            "requested_item": item,
-            "include_exhibits": include_exhibits,
-            "filing": None,
-            "sections": [],
-            "scrape": None,
-        }
-        try:
-            symbol, normalized_type, normalized_year, normalized_quarter, selected_item = (
-                validate_filing_item_request(ticker, filing_type, year, quarter, item)
-            )
-            normalized_accession = normalize_accession(accession_number)
-        except InputError as error:
-            return _invalid(data, error)
-
-        data.update(
-            {
-                "ticker": symbol,
-                "filing_type": normalized_type,
-                "year": normalized_year,
-                "quarter": normalized_quarter,
-                "requested_item": selected_item.name if selected_item is not None else None,
-                "accession_number": normalized_accession,
-            }
-        )
-        if include_exhibits:
-            return _local_error(
-                data,
-                code="capability_unavailable",
-                message=(
-                    "include_exhibits is not supported because the validated route does not "
-                    "safely identify and fetch filing exhibits"
-                ),
-            )
-
-        filing_outcome = await self._call(
-            DEFILLAMA,
-            FILINGS_ENDPOINT,
-            query_params={"ticker": symbol, "country": "US"},
-        )
-        envelope = Envelope(data)
-        filing_run = self._take_result(
-            envelope,
-            filing_outcome,
-            units="filing records",
-            data_quality="DefiLlama beta filing index used only for deterministic selection",
-        )
-        if filing_run is None:
-            return envelope.to_dict()
-        try:
-            selection = select_filing(
-                filing_run.output,
-                filing_type=normalized_type,
-                year=normalized_year,
-                quarter=normalized_quarter,
-                accession_number=normalized_accession,
-            )
-        except SchemaDriftError as error:
-            _add_schema_error(envelope, filing_run, error)
-            return envelope.to_dict()
-        if selection.filing is None:
-            envelope.add_error(
-                PartialError(
-                    code="filing_not_found",
-                    message=(
-                        f"No {normalized_type} filing matched {symbol}, year {normalized_year}"
-                        + (
-                            f", quarter {normalized_quarter}"
-                            if normalized_quarter is not None
-                            else ""
-                        )
-                        + (
-                            f", accession {normalized_accession}"
-                            if normalized_accession is not None
-                            else ""
-                        )
-                        + "."
-                    ),
-                    provider=filing_run.provider,
-                    endpoint=filing_run.endpoint,
-                    run_id=filing_run.run_id,
-                    provider_http_status=filing_run.provider_http_status,
-                )
-            )
-            return envelope.to_dict()
-
-        filing = selection.filing
-        data["filing"] = filing.to_dict()
-        _update_last_provenance(envelope, as_of=filing.filing_date)
-        if selection.matching_count > 1:
-            envelope.warnings.append(
-                f"{selection.matching_count} filings matched; selected the latest filing date, "
-                "report date, accession, and URL in that order."
-            )
-        try:
-            source_url = validate_sec_url(filing.source_url)
-        except ValueError as error:
-            envelope.add_error(
-                PartialError(
-                    code="invalid_source_url",
-                    message=str(error),
-                    provider=filing_run.provider,
-                    endpoint=filing_run.endpoint,
-                    run_id=filing_run.run_id,
-                    provider_http_status=filing_run.provider_http_status,
-                )
-            )
-            return envelope.to_dict()
-
-        scrape_outcome = await self._call(
-            CONTEXT,
-            SCRAPE_MARKDOWN_ENDPOINT,
-            query_params={
-                "url": source_url,
-                "includeLinks": False,
-                "includeImages": False,
-                "useMainContentOnly": True,
-                "timeoutMS": SCRAPE_TIMEOUT_MS,
-            },
-        )
-        scrape_run = self._take_result(
-            envelope,
-            scrape_outcome,
-            units="markdown characters",
-            data_quality="Context.dev deterministic webpage-to-markdown extraction",
-        )
-        if scrape_run is None:
-            return envelope.to_dict()
-        try:
-            markdown, scrape_metadata = parse_scrape_payload(scrape_run.output, source_url)
-            sections = parse_filing_sections(markdown, normalized_type, selected_item)
-        except SchemaDriftError as error:
-            _add_schema_error(envelope, scrape_run, error)
-            return envelope.to_dict()
-        data["scrape"] = scrape_metadata
-        data["sections"] = sections
-        _update_last_provenance(envelope, as_of=filing.filing_date)
-        if not sections:
-            missing = selected_item.name if selected_item is not None else "any supported item"
-            envelope.add_error(
-                PartialError(
-                    code="section_not_found",
-                    message=f"The filing markdown did not contain body content for {missing}.",
-                    provider=scrape_run.provider,
-                    endpoint=scrape_run.endpoint,
-                    run_id=scrape_run.run_id,
-                    provider_http_status=scrape_run.provider_http_status,
-                )
-            )
-        return envelope.to_dict()
-
-    async def list_filing_item_types(self, filing_type: str | None = None) -> EnvelopeDict:
-        data: JsonObject = {
-            "catalogs": [],
-            "catalog_scope": CATALOG_SCOPE,
-        }
-        try:
-            normalized_type = (
-                validate_catalog_filing_type(filing_type) if filing_type is not None else None
-            )
-        except InputError as error:
-            return _invalid(data, error)
-        return Envelope(catalog_payload(normalized_type)).to_dict()
-
-    async def get_stock_prices(
-        self,
-        ticker: str,
-        start_date: str,
-        end_date: str,
-        interval: str = "day",
-    ) -> EnvelopeDict:
-        data: JsonObject = {"ticker": ticker, "interval": interval, "prices": []}
-        try:
-            symbol = validate_ticker(ticker)
-            normalized_interval = validate_interval(interval)
-            start, end = validate_date_range(start_date, end_date, "start_date", "end_date")
-            if start is None or end is None:
-                raise InputError("start_date and end_date are required")
-        except InputError as error:
-            return _invalid(data, error)
-        data["ticker"] = symbol
-        data["interval"] = normalized_interval
-        outcome = await self._call(
-            DEFILLAMA,
-            OHLCV_ENDPOINT,
-            query_params={"ticker": symbol, "country": "US", "timeframe": "MAX"},
-        )
-        envelope = Envelope(data)
-        result = self._take_result(
-            envelope,
-            outcome,
-            units="provider-reported price and share volume",
-            data_quality="delayed/EOD; requested interval aggregation is local",
-        )
-        if result is not None:
-            try:
-                prices = normalize_prices(
-                    result.output,
-                    start_date=start,
-                    end_date=end,
-                    interval=normalized_interval,
-                )
-            except (SchemaDriftError, ValueError, OSError) as error:
-                _add_schema_error(envelope, result, error)
-            else:
-                data["prices"] = prices
-                _update_last_provenance(envelope, as_of=latest_date(prices), currency="USD")
-                if not prices:
-                    envelope.warnings.append(
-                        f"DefiLlama returned no prices for {symbol} in the requested range."
-                    )
-        return envelope.to_dict()
-
-    async def get_stock_price(self, ticker: str) -> EnvelopeDict:
-        data: JsonObject = {"stock_price": None}
-        try:
-            symbol = validate_ticker(ticker)
-        except InputError as error:
-            return _invalid(data, error)
-        outcome = await self._call(
-            DEFILLAMA,
-            SUMMARY_ENDPOINT,
-            query_params={"ticker": symbol, "country": "US"},
-        )
-        envelope = Envelope(data)
-        result = self._take_result(
-            envelope,
-            outcome,
-            units="provider-reported market fields",
-            data_quality="indicative; real-time licensing not verified",
-        )
-        if result is not None:
-            try:
-                snapshot = normalize_stock_price(result.output, symbol)
-            except SchemaDriftError as error:
-                _add_schema_error(envelope, result, error)
-            else:
-                data["stock_price"] = snapshot
-                _update_last_provenance(
-                    envelope,
-                    as_of=payload_as_of(snapshot),
-                    currency=_currency(snapshot),
-                )
-        if data["stock_price"] is None and not envelope.partial_errors:
-            envelope.warnings.append(f"DefiLlama returned no price for {symbol}.")
-        return envelope.to_dict()
-
-    async def get_news(
-        self,
-        ticker: str | None = None,
-        limit: int = 5,
-        start_date: str | None = None,
-        end_date: str | None = None,
-    ) -> EnvelopeDict:
-        data: JsonObject = {"news": []}
-        try:
-            maximum = validate_limit(limit, maximum=10)
-            if ticker is None:
-                raise InputError("ticker is required for the Context.dev entity-news route")
-            symbol = validate_ticker(ticker)
-            start, end = validate_date_range(start_date, end_date, "start_date", "end_date")
-        except InputError as error:
-            return _invalid(data, error)
-
-        body: JsonObject = {
-            "searchBy": {
-                "type": "entity",
-                "entity": {"type": "ticker", "ticker": symbol},
-            },
-            "sortBy": {"type": "newest"},
-            "limit": maximum,
-        }
-        if start is not None or end is not None:
-            date_filter: JsonObject = {}
-            if start is not None:
-                date_filter["from"] = _epoch_milliseconds(start, end_of_day=False)
-            if end is not None:
-                date_filter["to"] = _epoch_milliseconds(end, end_of_day=True)
-            body["filterBy"] = {"date": date_filter}
-
-        outcome = await self._call(CONTEXT, NEWS_ENDPOINT, body=body)
-        envelope = Envelope(data)
-        result = self._take_result(
-            envelope,
-            outcome,
-            units="articles",
-            data_quality="entity-matched; secondary matches can be noisy",
-        )
-        if result is not None:
-            try:
-                news = normalize_news(
-                    result.output,
-                    limit=maximum,
-                    start_date=start,
-                    end_date=end,
-                )
-            except SchemaDriftError as error:
-                _add_schema_error(envelope, result, error)
-            else:
-                data["news"] = news
-                _update_last_provenance(envelope, as_of=latest_date(news))
-                if not news:
-                    envelope.warnings.append(
-                        f"Context.dev returned no entity-matched news for {symbol}."
-                    )
-        return envelope.to_dict()
-
-    async def _get_statement(
-        self,
-        *,
-        ticker: str,
-        statement: Literal["income", "balance", "cash"],
-        output_key: str,
-        period: str,
-        limit: int,
-        report_period: str | None,
-        report_period_gte: str | None,
-        report_period_lte: str | None,
-    ) -> EnvelopeDict:
-        data: JsonObject = {output_key: []}
-        try:
-            symbol = validate_ticker(ticker)
-            normalized_period = validate_period(period)
-            maximum = validate_limit(limit, maximum=100)
-            exact = validate_date(report_period, "report_period")
-            start, end = validate_date_range(
-                report_period_gte,
-                report_period_lte,
-                "report_period_gte",
-                "report_period_lte",
-            )
-            if exact is not None and (start is not None or end is not None):
-                raise InputError(
-                    "report_period cannot be combined with report_period_gte or report_period_lte"
-                )
-        except InputError as error:
-            return _invalid(data, error)
-
-        outcome = await self._call(
-            DEFILLAMA,
-            STATEMENTS_ENDPOINT,
-            query_params={"ticker": symbol, "country": "US"},
-        )
-        envelope = Envelope(data)
-        result = self._take_result(
-            envelope,
-            outcome,
-            units="not reported by provider",
-            data_quality="DefiLlama beta standardized GAAP statements",
-        )
-        if result is not None:
-            try:
-                records = normalize_statement(
-                    result.output,
-                    statement=statement,
-                    period=normalized_period,
-                    limit=maximum,
-                    report_period=exact,
-                    report_period_gte=start,
-                    report_period_lte=end,
-                )
-            except SchemaDriftError as error:
-                _add_schema_error(envelope, result, error)
-            else:
-                data[output_key] = records
-                _update_last_provenance(envelope, as_of=latest_date(records))
-                if not records:
-                    reason = (
-                        "DefiLlama does not publish a TTM statement block."
-                        if normalized_period == "ttm"
-                        else f"DefiLlama returned no {statement} statements for {symbol}."
-                    )
-                    envelope.warnings.append(reason)
-        return envelope.to_dict()
+        self._ledger = ledger if ledger is not None else ReceiptsLedger()
 
     async def _call(
         self,
+        tool: str,
         provider: str,
         endpoint: str,
         *,
         body: JsonObject | None = None,
         query_params: JsonObject | None = None,
-    ) -> _Outcome:
+    ) -> MonidRun:
+        """Run one Monid call, record a receipt, and map failures to FD errors."""
         try:
-            result = await self._client.run(
+            run = await self._client.run(
                 provider, endpoint, body=body, query_params=query_params
             )
+        except MonidTimeoutError as error:
+            self._ledger.record_failure(
+                tool=tool, provider=provider, endpoint=endpoint, error=error,
+                body=body, query_params=query_params,
+            )
+            raise UpstreamError("timeout", str(error)) from error
+        except MonidProviderHTTPError as error:
+            self._ledger.record_failure(
+                tool=tool, provider=provider, endpoint=endpoint, error=error,
+                body=body, query_params=query_params,
+            )
+            raise UpstreamError("upstream_error", str(error)) from error
         except MonidError as error:
-            return _Outcome(error=error)
-        return _Outcome(result=result)
+            self._ledger.record_failure(
+                tool=tool, provider=provider, endpoint=endpoint, error=error,
+                body=body, query_params=query_params,
+            )
+            raise UpstreamError("upstream_error", str(error)) from error
+        self._ledger.record_success(tool=tool, run=run, body=body, query_params=query_params)
+        return run
 
-    def _take_result(
+    @_fd_errors
+    async def get_company_facts(
+        self, ticker: str | None = None, cik: str | None = None
+    ) -> JsonObject:
+        if ticker is None:
+            raise InputError("ticker is required (cik lookup is not supported)")
+        if cik is not None:
+            raise InputError("cik lookup is not supported; pass ticker instead")
+        symbol = validate_ticker(ticker)
+        catalog = await self._call(
+            "get_company_facts", DEFILLAMA, CATALOG_ENDPOINT
+        )
+        company = find_company(catalog.output, symbol)
+        if company is None:
+            return fd_error("not_found", f"No US company record exists for ticker {symbol}.")
+        name = company.get("name")
+        return company_facts_response(
+            ticker=symbol,
+            name=name if isinstance(name, str) else None,
+            sector=None,
+            industry=None,
+            exchange=None,
+        )
+
+    async def get_income_statement(
         self,
-        envelope: Envelope,
-        outcome: _Outcome,
+        ticker: str | None = None,
+        period: str = "annual",
+        limit: int = 4,
+        cik: str | None = None,
+        report_period: str | None = None,
+        report_period_gte: str | None = None,
+        report_period_lte: str | None = None,
+        report_period_gt: str | None = None,
+        report_period_lt: str | None = None,
+        filing_date: str | None = None,
+        filing_date_gte: str | None = None,
+        filing_date_lte: str | None = None,
+        filing_date_gt: str | None = None,
+        filing_date_lt: str | None = None,
+        cursor: str | None = None,
+    ) -> JsonObject:
+        return await self._statement_response(
+            "get_income_statement",
+            "income",
+            ticker=ticker,
+            period=period,
+            limit=limit,
+            cik=cik,
+            report_period=report_period,
+            report_period_gte=report_period_gte,
+            report_period_lte=report_period_lte,
+            report_period_gt=report_period_gt,
+            report_period_lt=report_period_lt,
+            filing_date=filing_date,
+            filing_date_gte=filing_date_gte,
+            filing_date_lte=filing_date_lte,
+            filing_date_gt=filing_date_gt,
+            filing_date_lt=filing_date_lt,
+            cursor=cursor,
+        )
+
+    async def get_balance_sheet(
+        self,
+        ticker: str | None = None,
+        period: str = "annual",
+        limit: int = 4,
+        cik: str | None = None,
+        report_period: str | None = None,
+        report_period_gte: str | None = None,
+        report_period_lte: str | None = None,
+        report_period_gt: str | None = None,
+        report_period_lt: str | None = None,
+        filing_date: str | None = None,
+        filing_date_gte: str | None = None,
+        filing_date_lte: str | None = None,
+        filing_date_gt: str | None = None,
+        filing_date_lt: str | None = None,
+        cursor: str | None = None,
+    ) -> JsonObject:
+        return await self._statement_response(
+            "get_balance_sheet",
+            "balance",
+            ticker=ticker,
+            period=period,
+            limit=limit,
+            cik=cik,
+            report_period=report_period,
+            report_period_gte=report_period_gte,
+            report_period_lte=report_period_lte,
+            report_period_gt=report_period_gt,
+            report_period_lt=report_period_lt,
+            filing_date=filing_date,
+            filing_date_gte=filing_date_gte,
+            filing_date_lte=filing_date_lte,
+            filing_date_gt=filing_date_gt,
+            filing_date_lt=filing_date_lt,
+            cursor=cursor,
+        )
+
+    async def get_cash_flow_statement(
+        self,
+        ticker: str | None = None,
+        period: str = "annual",
+        limit: int = 4,
+        cik: str | None = None,
+        report_period: str | None = None,
+        report_period_gte: str | None = None,
+        report_period_lte: str | None = None,
+        report_period_gt: str | None = None,
+        report_period_lt: str | None = None,
+        filing_date: str | None = None,
+        filing_date_gte: str | None = None,
+        filing_date_lte: str | None = None,
+        filing_date_gt: str | None = None,
+        filing_date_lt: str | None = None,
+        cursor: str | None = None,
+    ) -> JsonObject:
+        return await self._statement_response(
+            "get_cash_flow_statement",
+            "cash",
+            ticker=ticker,
+            period=period,
+            limit=limit,
+            cik=cik,
+            report_period=report_period,
+            report_period_gte=report_period_gte,
+            report_period_lte=report_period_lte,
+            report_period_gt=report_period_gt,
+            report_period_lt=report_period_lt,
+            filing_date=filing_date,
+            filing_date_gte=filing_date_gte,
+            filing_date_lte=filing_date_lte,
+            filing_date_gt=filing_date_gt,
+            filing_date_lt=filing_date_lt,
+            cursor=cursor,
+        )
+
+    @_fd_errors
+    async def _statement_response(
+        self,
+        tool: str,
+        statement: str,
         *,
-        units: str,
-        data_quality: str,
-    ) -> MonidRun | None:
-        if outcome.result is not None:
-            _add_run(envelope, outcome.result, units=units, data_quality=data_quality)
-            return outcome.result
-        error = outcome.error
-        if error is None:
-            raise RuntimeError("Monid outcome has neither a result nor an error.")
-        failed_run = error.run
-        if failed_run is not None:
-            _add_run(envelope, failed_run, units=units, data_quality=data_quality)
-        else:
-            envelope.mark_cost_incomplete()
-        envelope.add_error(_partial_error(error, failed_run))
+        ticker: str | None,
+        period: str,
+        limit: int,
+        cik: str | None,
+        report_period: str | None,
+        report_period_gte: str | None,
+        report_period_lte: str | None,
+        report_period_gt: str | None,
+        report_period_lt: str | None,
+        filing_date: str | None,
+        filing_date_gte: str | None,
+        filing_date_lte: str | None,
+        filing_date_gt: str | None,
+        filing_date_lt: str | None,
+        cursor: str | None,
+    ) -> JsonObject:
+        if ticker is None:
+            raise InputError("ticker is required (cik lookup is not supported)")
+        if cik is not None:
+            raise InputError("cik lookup is not supported; pass ticker instead")
+        symbol = validate_ticker(ticker)
+        normalized_period = validate_period(period)
+        bounded_limit = validate_limit(limit, maximum=100)
+        report = _date_filters(
+            report_period,
+            report_period_gte,
+            report_period_lte,
+            report_period_gt,
+            report_period_lt,
+            prefix="report_period",
+        )
+        filing = _date_filters(
+            filing_date,
+            filing_date_gte,
+            filing_date_lte,
+            filing_date_gt,
+            filing_date_lt,
+            prefix="filing_date",
+        )
+        offset = decode_cursor(cursor)[0] if cursor is not None else 0
+
+        statements_run = await self._call(
+            tool, DEFILLAMA, STATEMENTS_ENDPOINT,
+            query_params={"ticker": symbol, "country": "US"},
+        )
+        series = parse_statement_series(statements_run.output, statement)
+        rows = self._statement_rows(series, normalized_period, statement)
+        end_month = fiscal_year_end_month(series)
+        _ = end_month
+        identity_map = await self._filing_identity_map(
+            tool, symbol, annual=normalized_period != "quarterly"
+        )
+        if identity_map is None and any(value is not None for value in filing.values()):
+            raise UpstreamError(
+                "upstream_error",
+                "Filing identity join failed; filing_date filters cannot be applied.",
+            )
+        rows = _apply_filing_filters(rows, identity_map, filing)
+        rows = filter_rows(rows, **report)
+        rows = sorted(rows, key=lambda row: row.report_period, reverse=True)[:bounded_limit]
+
+        records = [
+            _statement_record(
+                statement=statement,
+                ticker=symbol,
+                period=normalized_period,
+                row=row,
+                identity=identity_map.get(row.report_period) if identity_map is not None else None,
+                fiscal_period=(
+                    fiscal_period_label(row, end_month, is_annual=normalized_period == "annual")
+                    if normalized_period != "ttm"
+                    else None
+                ),
+            )
+            for row in rows
+        ]
+        response_key, path = STATEMENT_RESPONSE_KEYS[statement]
+        page = paginate(records, offset=offset, path=f"/financials/{path}")
+        return list_response(response_key, page.records, page.next_url)
+
+    def _statement_rows(
+        self, series: StatementSeries, period: str, statement: str
+    ) -> list[PeriodRow]:
+        if period == "annual":
+            return list(series.annual)
+        if period == "quarterly":
+            return list(series.quarterly)
+        flow_labels: frozenset[str] = frozenset()
+        mean_labels: frozenset[str] = frozenset()
+        if statement == "income":
+            flow_labels = _TTM_FLOW_INCOME
+            mean_labels = _TTM_MEAN_INCOME
+        elif statement == "cash":
+            flow_labels = _TTM_FLOW_CASH
+        return derive_ttm_rows(series.quarterly, flow_labels=flow_labels, mean_labels=mean_labels)
+
+    async def _filing_identity_map(
+        self, tool: str, ticker: str, *, annual: bool
+    ) -> dict[date, FilingIdentity] | None:
+        """Join DefiLlama filings for statement identity; None means join failed."""
+        try:
+            filings_run = await self._call(
+                tool, DEFILLAMA, FILINGS_ENDPOINT,
+                query_params={"ticker": ticker, "country": "US"},
+            )
+        except UpstreamError:
+            return None
+        records = normalize_filings(
+            filings_run.output, filing_types=None, limit=10_000,
+            filing_date_gte=None, filing_date_lte=None,
+        )
+        forms = ANNUAL_FORMS if annual else QUARTERLY_FORMS
+        best: dict[date, tuple[date, FilingIdentity]] = {}
+        for record in records:
+            form = _opt_str(record.get("form"))
+            if form is None or form.upper() not in forms:
+                continue
+            report_day = _opt_date(record.get("report_date"))
+            filing_day = _opt_date(record.get("filing_date"))
+            url = _opt_str(record.get("primary_document_url"))
+            if report_day is None or filing_day is None or url is None:
+                continue
+            accession = derive_accession(url)
+            identity = FilingIdentity(
+                accession_number=accession,
+                form_type=form.upper(),
+                filing_url=url,
+                filing_date=filing_day,
+            )
+            current = best.get(report_day)
+            if current is None or filing_day > current[0]:
+                best[report_day] = (filing_day, identity)
+        return {day: identity for day, (_, identity) in best.items()}
+
+    @_fd_errors
+    async def get_financial_metrics_snapshot(
+        self, ticker: str | None = None, cik: str | None = None
+    ) -> JsonObject:
+        if ticker is None:
+            raise InputError("ticker is required (cik lookup is not supported)")
+        if cik is not None:
+            raise InputError("cik lookup is not supported; pass ticker instead")
+        symbol = validate_ticker(ticker)
+        run = await self._call(
+            "get_financial_metrics_snapshot", DEFILLAMA, SUMMARY_ENDPOINT,
+            query_params={"ticker": symbol, "country": "US"},
+        )
+        summary = normalize_summary(run.output, symbol)
+        gross_margin = _ratio(summary.get("gross_profit_ttm"), summary.get("revenue_ttm"))
+        net_margin = _ratio(summary.get("net_income_ttm"), summary.get("revenue_ttm"))
+        return metric_snapshot_record(
+            ticker=symbol,
+            market_cap=_num(summary.get("market_cap")),
+            enterprise_value=_num(summary.get("enterprise_value")),
+            trailing_pe=_num(summary.get("price_to_earnings_ratio")),
+            price_to_book=_num(summary.get("price_to_book")),
+            price_to_revenue=_num(summary.get("price_to_revenue")),
+            ev_to_ebitda=_num(summary.get("enterprise_value_to_ebitda")),
+            gross_margin_ttm=gross_margin,
+            operating_margin_ttm=_num(summary.get("operating_profit_margin_ttm")),
+            net_margin_ttm=net_margin,
+        )
+
+    @_fd_errors
+    async def get_filings(
+        self,
+        ticker: str | None = None,
+        cik: str | None = None,
+        filing_type: list[str] | None = None,
+        limit: int = 10,
+        cursor: str | None = None,
+    ) -> JsonObject:
+        if cik is not None:
+            raise InputError("cik lookup is not supported; pass ticker instead")
+        if ticker is None:
+            raise InputError("ticker or cik is required")
+        symbol = validate_ticker(ticker)
+        forms = validate_filing_types(filing_type)
+        bounded_limit = validate_limit(limit, maximum=1000)
+        offset = decode_cursor(cursor)[0] if cursor is not None else 0
+        run = await self._call(
+            "get_filings", DEFILLAMA, FILINGS_ENDPOINT,
+            query_params={"ticker": symbol, "country": "US"},
+        )
+        records = normalize_filings(
+            run.output,
+            filing_types=forms,
+            limit=bounded_limit,
+            filing_date_gte=None,
+            filing_date_lte=None,
+        )
+        filings = [
+            filing_record(
+                ticker=symbol,
+                report_date=_opt_str(record.get("report_date")),
+                filing_date=_opt_str(record.get("filing_date")),
+                form=_opt_str(record.get("form")),
+                url=_opt_str(record.get("primary_document_url")),
+                accession_number=derive_accession(
+                    _opt_str(record.get("primary_document_url")) or ""
+                ),
+            )
+            for record in records
+        ]
+        page = paginate(filings, offset=offset, path="/filings")
+        return list_response("filings", page.records, page.next_url)
+
+    @_fd_errors
+    async def get_stock_prices(
+        self,
+        ticker: str,
+        interval: str = "day",
+        start_date: str | None = None,
+        end_date: str | None = None,
+        cursor: str | None = None,
+    ) -> JsonObject:
+        symbol = validate_ticker(ticker)
+        normalized_interval = validate_interval(interval)
+        start, end = validate_date_range(start_date, end_date, "start_date", "end_date")
+        if start is None or end is None:
+            raise InputError("start_date and end_date are required")
+        offset = decode_cursor(cursor)[0] if cursor is not None else 0
+        run = await self._call(
+            "get_stock_prices", DEFILLAMA, OHLCV_ENDPOINT,
+            query_params={"ticker": symbol, "country": "US", "timeframe": "MAX"},
+        )
+        bars = normalize_prices(
+            run.output, start_date=start, end_date=end, interval=normalized_interval
+        )
+        records = [
+            price_record(
+                day=_bar_time(bar, normalized_interval),
+                open_=_num(bar["open"]) or 0.0,
+                high=_num(bar["high"]) or 0.0,
+                low=_num(bar["low"]) or 0.0,
+                close=_num(bar["close"]) or 0.0,
+                volume=_num(bar["volume"]) or 0.0,
+            )
+            for bar in bars
+        ]
+        page = paginate(
+            records, offset=offset, path="/prices", page_size=PRICES_PAGE_SIZE
+        )
+        return prices_response(symbol, page.records, page.next_url)
+
+    @_fd_errors
+    async def get_stock_price(self, ticker: str) -> JsonObject:
+        symbol = validate_ticker(ticker)
+        run = await self._call(
+            "get_stock_price", DEFILLAMA, SUMMARY_ENDPOINT,
+            query_params={"ticker": symbol, "country": "US"},
+        )
+        summary = normalize_stock_price(run.output, symbol)
+        return price_snapshot_response(
+            ticker=symbol,
+            price=_num(summary.get("price")) or 0.0,
+            day_change=_num(summary.get("day_change")),
+            day_change_percent=_num(summary.get("day_change_percent")),
+            time=_opt_str(summary.get("as_of")),
+        )
+
+    @_fd_errors
+    async def get_news(
+        self,
+        ticker: str | None = None,
+        limit: int = 5,
+        cursor: str | None = None,
+    ) -> JsonObject:
+        if ticker is None:
+            raise InputError("ticker is required (market-wide news is not supported)")
+        symbol = validate_ticker(ticker)
+        bounded_limit = validate_limit(limit, maximum=10)
+        offset = decode_cursor(cursor)[0] if cursor is not None else 0
+        run = await self._call(
+            "get_news", NEWS_PROVIDER, NEWS_ENDPOINT,
+            query_params={"ticker": symbol},
+        )
+        articles = normalize_news(run.output, limit=bounded_limit, start_date=None, end_date=None)
+        records = [
+            news_record(
+                ticker=symbol,
+                title=_opt_str(article.get("title")),
+                source=_opt_str(article.get("source")),
+                date_=_opt_str(article.get("published_at")),
+                url=_opt_str(article.get("url")),
+            )
+            for article in articles
+        ]
+        page = paginate(records, offset=offset, path="/news")
+        return list_response("news", page.records, page.next_url)
+
+    @_fd_errors
+    async def get_filing_items(
+        self,
+        ticker: str,
+        filing_type: str,
+        year: int,
+        quarter: int | None = None,
+        item: str | None = None,
+        accession_number: str | None = None,
+        include_exhibits: bool = False,
+    ) -> JsonObject:
+        from monid_finance_mcp.providers.us.filing_items import (
+            parse_filing_sections,
+            parse_scrape_payload,
+            select_filing,
+            validate_filing_item_request,
+        )
+
+        if include_exhibits:
+            raise InputError(
+                "include_exhibits is not supported: the validated route cannot "
+                "identify and fetch filing exhibits"
+            )
+        symbol, normalized_type, selected_year, selected_quarter, selected_item = (
+            validate_filing_item_request(ticker, filing_type, year, quarter, item)
+        )
+        normalized_accession = normalize_accession(accession_number)
+        filings_run = await self._call(
+            "get_filing_items", DEFILLAMA, FILINGS_ENDPOINT,
+            query_params={"ticker": symbol, "country": "US"},
+        )
+        selection = select_filing(
+            filings_run.output,
+            filing_type=normalized_type,
+            year=selected_year,
+            quarter=selected_quarter,
+            accession_number=normalized_accession,
+        )
+        selected = selection.filing
+        if selected is None:
+            return fd_error(
+                "not_found",
+                f"No {normalized_type} filing matches ticker {symbol}, year {selected_year}"
+                + (f", quarter {selected_quarter}." if selected_quarter is not None else "."),
+            )
+        try:
+            source_url = validate_sec_url(selected.source_url)
+        except ValueError as error:
+            raise UpstreamError("upstream_error", str(error)) from error
+        scrape_run = await self._call(
+            "get_filing_items", "context.dev", "/web/scrape/markdown",
+            query_params={
+                "url": source_url,
+                "includeLinks": False,
+                "includeImages": False,
+                "useMainContentOnly": True,
+                "timeoutMS": 30_000,
+            },
+        )
+        markdown, _meta = parse_scrape_payload(scrape_run.output, source_url)
+        sections = parse_filing_sections(markdown, normalized_type, selected_item)
+        items = [
+            filing_item_record(
+                number=str(section["item"]),
+                name=str(section["title"]),
+                text=str(section["content"]),
+            )
+            for section in sections
+        ]
+        if selected_item is not None and not items:
+            return fd_error(
+                "not_found",
+                f"Filing {selected.accession_number} has no item {selected_item.name}.",
+            )
+        report_day = date.fromisoformat(selected.report_date)
+        return filing_items_response(
+            resource=source_url,
+            ticker=symbol,
+            filing_type=selected.form,
+            accession_number=selected.accession_number or None,
+            year=report_day.year,
+            quarter=((report_day.month - 1) // 3) + 1 if normalized_type != "10-K" else None,
+            items=items,
+        )
+
+    @_fd_errors
+    async def list_filing_item_types(self, filing_type: str | None = None) -> JsonObject:
+        from monid_finance_mcp.providers.us.filing_items import (
+            CATALOGS,
+            FilingType,
+            validate_catalog_filing_type,
+        )
+
+        normalized: FilingType | None = None
+        if filing_type is not None:
+            normalized = validate_catalog_filing_type(filing_type)
+        types: tuple[FilingType, ...] = (
+            (normalized,) if normalized is not None else ("10-K", "10-Q", "8-K")
+        )
+        response: JsonObject = {}
+        for entry_type in types:
+            catalog = CATALOGS[entry_type]
+            response[catalog.filing_type] = [
+                {"name": item.name, "title": item.title, "description": item.title}
+                for item in catalog.items
+            ]
+        return response
+
+
+def _statement_record(
+    *,
+    statement: str,
+    ticker: str,
+    period: str,
+    row: PeriodRow,
+    identity: FilingIdentity | None,
+    fiscal_period: str | None,
+) -> JsonObject:
+    builder = {
+        "income": income_statement_record,
+        "balance": balance_sheet_record,
+        "cash": cash_flow_record,
+    }[statement]
+    return builder(
+        ticker=ticker,
+        period=period,
+        report_period=row.report_period.isoformat(),
+        fiscal_period=fiscal_period,
+        values=row.values,
+        identity=identity,
+    )
+
+
+def _apply_filing_filters(
+    rows: list[PeriodRow],
+    identity_map: dict[date, FilingIdentity] | None,
+    filing: dict[str, date | None],
+) -> list[PeriodRow]:
+    """Filter rows on joined filing dates; identity-less rows drop when filtering."""
+    if not any(value is not None for value in filing.values()):
+        return rows
+    if identity_map is None:
+        return []
+
+    def keep(row: PeriodRow) -> bool:
+        identity = identity_map.get(row.report_period)
+        if identity is None or identity.filing_date is None:
+            return False
+        day = identity.filing_date
+        exact = filing.get("exact")
+        minimum = filing.get("gte")
+        maximum = filing.get("lte")
+        greater = filing.get("gt")
+        less = filing.get("lt")
+        if exact is not None and day != exact:
+            return False
+        if minimum is not None and day < minimum:
+            return False
+        if maximum is not None and day > maximum:
+            return False
+        if greater is not None and day <= greater:
+            return False
+        return less is None or day < less
+
+    return [row for row in rows if keep(row)]
+
+
+def _date_filters(
+    exact: str | None,
+    gte: str | None,
+    lte: str | None,
+    gt: str | None,
+    lt: str | None,
+    *,
+    prefix: str,
+) -> dict[str, date | None]:
+    return {
+        "exact": validate_date(exact, prefix),
+        "gte": validate_date(gte, f"{prefix}_gte"),
+        "lte": validate_date(lte, f"{prefix}_lte"),
+        "gt": validate_date(gt, f"{prefix}_gt"),
+        "lt": validate_date(lt, f"{prefix}_lt"),
+    }
+
+
+def _bar_time(bar: JsonObject, interval: str) -> str:
+    """The human-readable UTC time label of one price bar."""
+    if interval == "day":
+        return str(bar["date"])
+    return str(bar["end_date"])
+
+
+def _ratio(numerator: JsonValue, denominator: JsonValue) -> float | None:
+    top, bottom = _num(numerator), _num(denominator)
+    if top is None or bottom is None or bottom == 0:
+        return None
+    return top / bottom
+
+
+def _num(value: JsonValue) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return None
+    return float(value)
+
+
+def _opt_str(value: JsonValue) -> str | None:
+    return value if isinstance(value, str) and value else None
+
+
+def _opt_date(value: JsonValue) -> date | None:
+    text = _opt_str(value)
+    if text is None:
+        return None
+    try:
+        return date.fromisoformat(text[:10])
+    except ValueError:
         return None
 
 
-def _invalid(data: JsonObject, error: InputError) -> EnvelopeDict:
-    return _local_error(data, code="invalid_input", message=str(error))
-
-
-def _local_error(data: JsonObject, *, code: str, message: str) -> EnvelopeDict:
-    envelope = Envelope(data)
-    envelope.add_error(PartialError(code=code, message=message))
-    return envelope.to_dict()
-
-
-def _partial_error(error: MonidError, run: MonidRun | None) -> PartialError:
-    if isinstance(error, MonidProviderHTTPError):
-        code = "provider_http_error"
-    elif isinstance(error, MonidTimeoutError):
-        code = "timeout"
-    elif isinstance(error, MonidSchemaError):
-        code = "schema_drift"
-    elif isinstance(error, MonidInvocationError):
-        code = "monid_cli_error"
-    elif isinstance(error, MonidRunError):
-        code = "run_failed"
-    else:
-        code = "monid_error"
-    return PartialError(
-        code=code,
-        message=str(error),
-        provider=error.provider,
-        endpoint=error.endpoint,
-        run_id=run.run_id if run is not None else None,
-        provider_http_status=run.provider_http_status if run is not None else None,
-    )
-
-
-def _add_run(envelope: Envelope, run: MonidRun, *, units: str, data_quality: str) -> None:
-    envelope.add_provenance(
-        Provenance(
-            provider=run.provider,
-            endpoint=run.endpoint,
-            run_id=run.run_id,
-            lifecycle_status=run.status,
-            provider_http_status=run.provider_http_status,
-            measured_cost=run.cost,
-            created_at=run.created_at,
-            completed_at=run.completed_at,
-            retrieved_at=run.retrieved_at or datetime.now(UTC).isoformat().replace("+00:00", "Z"),
-            units=units,
-            data_quality=data_quality,
-        )
-    )
-
-
-def _update_last_provenance(
-    envelope: Envelope, *, as_of: str | None = None, currency: str | None = None
-) -> None:
-    if not envelope.provenance:
-        return
-    previous = envelope.provenance[-1]
-    envelope.provenance[-1] = Provenance(
-        provider=previous.provider,
-        endpoint=previous.endpoint,
-        run_id=previous.run_id,
-        lifecycle_status=previous.lifecycle_status,
-        provider_http_status=previous.provider_http_status,
-        measured_cost=previous.measured_cost,
-        created_at=previous.created_at,
-        completed_at=previous.completed_at,
-        retrieved_at=previous.retrieved_at,
-        as_of=as_of,
-        currency=currency,
-        units=previous.units,
-        data_quality=previous.data_quality,
-    )
-
-
-def _add_schema_error(envelope: Envelope, run: MonidRun, error: ValueError | OSError) -> None:
-    envelope.add_error(
-        PartialError(
-            code="schema_drift",
-            message=str(error),
-            provider=run.provider,
-            endpoint=run.endpoint,
-            run_id=run.run_id,
-            provider_http_status=run.provider_http_status,
-        )
-    )
-
-
-def _currency(payload: JsonObject) -> str | None:
-    for key in ("currency", "currencyCode", "currency_code"):
-        value = payload.get(key)
-        if isinstance(value, str) and value:
-            return value.upper()
-    return None
-
-
-def _epoch_milliseconds(value: date, *, end_of_day: bool) -> int:
-    clock = time.max if end_of_day else time.min
-    instant = datetime.combine(value, clock, tzinfo=UTC)
-    return int(instant.timestamp() * 1000)

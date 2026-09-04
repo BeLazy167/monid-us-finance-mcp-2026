@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import base64
+import json
 from dataclasses import dataclass, field
 from decimal import Decimal
-from typing import override
+from pathlib import Path
+from typing import cast, override
 
 import pytest
 
@@ -10,11 +13,15 @@ from monid_finance_mcp.client import (
     MonidClientProtocol,
     MonidProviderHTTPError,
     MonidRun,
-    MonidSchemaError,
     MonidTimeoutError,
 )
-from monid_finance_mcp.models import EnvelopeDict, JsonObject, JsonValue, Money
+from monid_finance_mcp.models import JsonObject, JsonValue, Money
+from monid_finance_mcp.receipts import ReceiptsLedger, summarize_ledger
 from monid_finance_mcp.service import FinanceService
+
+FD_CONTRACT = json.loads(
+    (Path(__file__).resolve().parents[1] / "docs" / "fd-contract-reference.json").read_text()
+)
 
 
 def completed(endpoint: str, output: JsonValue, *, run_id: str | None = None) -> MonidRun:
@@ -56,30 +63,25 @@ class FakeClient(MonidClientProtocol):
         return outcome
 
 
-def data_object(response: EnvelopeDict, key: str) -> JsonObject:
-    value = response["data"][key]
-    assert isinstance(value, dict)
-    return value
+def ledger(tmp_path: Path) -> ReceiptsLedger:
+    return ReceiptsLedger(tmp_path / "ledger.jsonl")
 
 
-def data_records(response: EnvelopeDict, key: str) -> list[JsonObject]:
-    value = response["data"][key]
-    assert isinstance(value, list)
-    records: list[JsonObject] = []
-    for item in value:
-        assert isinstance(item, dict)
-        records.append(item)
-    return records
+def service(client: FakeClient, tmp_path: Path) -> FinanceService:
+    return FinanceService(client, ledger(tmp_path))
 
 
-def line_item(record: JsonObject, name: str) -> JsonValue:
-    values = record["line_items"]
-    assert isinstance(values, list)
-    for value in values:
-        assert isinstance(value, dict)
-        if value.get("name") == name:
-            return value.get("value")
-    raise AssertionError(f"Missing line item {name}")
+def cursor_offset(url_or_cursor: str) -> int:
+    token = url_or_cursor
+    if "cursor=" in token:
+        token = token.split("cursor=", 1)[1]
+    padded = token + "=" * (-len(token) % 4)
+    loaded: object = json.loads(base64.urlsafe_b64decode(padded))
+    assert isinstance(loaded, dict)
+    payload = cast(dict[object, object], loaded)
+    offset = payload.get("o")
+    assert isinstance(offset, int) and not isinstance(offset, bool)
+    return offset
 
 
 CATALOG: JsonObject = {
@@ -88,53 +90,140 @@ CATALOG: JsonObject = {
             "ticker": "AAPL",
             "companyName": "Apple Inc.",
             "country": "US",
-            "exchange": "NASDAQ",
         }
     ]
 }
 SUMMARY: JsonObject = {
     "currentPrice": 230.1,
     "marketCap": 3_400_000_000_000,
-    "peRatio": 34.2,
-    "currency": "USD",
+    "trailingPE": 34.2,
+    "priceToBook": 55.0,
+    "priceToRevenue": 8.9,
+    "enterpriseValueToEbitda": 27.5,
+    "priceChange1d": 1.2,
+    "priceChangePercentage1d": 0.5,
+    "revenueTTM": 400.0,
+    "grossProfitTTM": 180.0,
+    "earningsTTM": 100.0,
+    "operatingProfitMarginTTM": 0.3,
     "updatedAt": "2026-09-03T20:00:00Z",
 }
+
+ANNUAL_DATES = ["2024-12-31", "2025-12-31"]
+QUARTERLY_DATES = ["2025-06-30", "2025-09-30", "2025-12-31", "2026-03-31"]
 STATEMENTS: JsonObject = {
-    "data": {
-        "incomeStatement": {
-            "annual": [
-                {"reportDate": "2023-12-31", "revenue": 80},
-                {"reportDate": "2025-12-31", "revenue": 100},
-                {"reportDate": "2024-12-31", "revenue": 90},
+    "incomeStatement": {
+        "labels": ["Revenue", "Cost of Revenue", "Gross Profit", "Operating Income",
+                   "Income Tax", "Net Income", "EPS (Basic)", "EPS (Diluted)",
+                   "Shares Outstanding (Basic)", "EBIT"],
+        "annual": {
+            "periodEnding": ANNUAL_DATES,
+            "values": [
+                [100, 120],   # Revenue
+                [60, 70],     # Cost of Revenue
+                [40, 50],     # Gross Profit
+                [30, 35],     # Operating Income
+                [6, 7],       # Income Tax
+                [24, 28],     # Net Income
+                [2.0, 2.1],   # EPS (Basic)
+                [1.9, 2.0],   # EPS (Diluted)
+                [12.0, 13.0], # Shares Outstanding (Basic)
+                [31, 36],     # EBIT
             ],
-            "quarterly": [
-                {"reportDate": "2026-03-31", "revenue": 25},
-                {"reportDate": "2025-12-31", "revenue": 24},
-                {"reportDate": "2025-09-30", "revenue": 23},
+            "children": {
+                "Non-Operating Items": {"values": [[3, 4]]},
+            },
+        },
+        "quarterly": {
+            "periodEnding": QUARTERLY_DATES,
+            "values": [
+                [20, 22, 24, 25],  # Revenue
+                [12, 13, 14, 15],  # Cost of Revenue
+                [8, 9, 10, 10],    # Gross Profit
+                [6, 7, 8, 8],      # Operating Income
+                [1, 1, 2, 2],      # Income Tax
+                [5, 6, 6, 6],      # Net Income
+                [0.5, 0.6, 0.5, 0.5],  # EPS (Basic)
+                [0.5, 0.5, 0.5, 0.5],  # EPS (Diluted)
+                [10.0, 10.0, 11.0, 12.0],  # Shares Outstanding (Basic)
+                [6, 7, 8, 8],      # EBIT
+            ],
+            "children": {
+                "Non-Operating Items": {"values": [[1, 1, 2, 2]]},
+            },
+        },
+        "children": {
+            "annual": {"Non-Operating Items": ["Non-Operating Interest Expense"]},
+            "quarterly": {"Non-Operating Items": ["Non-Operating Interest Expense"]},
+        },
+    },
+    "balanceSheet": {
+        "labels": ["Total Assets", "Total Current Assets", "Total Liabilities",
+                   "Total Shareholders Equity"],
+        "annual": {
+            "periodEnding": ANNUAL_DATES,
+            "values": [
+                [400, 420],  # Total Assets
+                [200, 210],  # Total Current Assets
+                [250, 260],  # Total Liabilities
+                [150, 160],  # Total Shareholders Equity
             ],
         },
-        "balanceSheet": {
-            "annual": [{"reportDate": "2025-12-31", "totalAssets": 400}],
-            "quarterly": [{"reportDate": "2026-03-31", "totalAssets": 410}],
+        "quarterly": {
+            "periodEnding": QUARTERLY_DATES,
+            "values": [
+                [405, 410, 415, 420],
+                [202, 206, 208, 210],
+                [252, 255, 258, 260],
+                [153, 155, 157, 160],
+            ],
         },
-        "cashFlow": {
-            "annual": [{"reportDate": "2025-12-31", "freeCashFlow": 70}],
-            "quarterly": [{"reportDate": "2026-03-31", "freeCashFlow": 17}],
+        "children": {},
+    },
+    "cashflow": {
+        "labels": ["Cash Flow from Operating Activities", "Free Cash Flow", "Net Cash Flow",
+                   "End Cash Position", "Net Income"],
+        "annual": {
+            "periodEnding": ANNUAL_DATES,
+            "values": [
+                [60, 70],  # CFO
+                [50, 60],  # FCF
+                [10, 11],  # Net Cash Flow
+                [30, 33],  # End Cash Position
+                [24, 28],  # Net Income
+            ],
         },
-    }
+        "quarterly": {
+            "periodEnding": QUARTERLY_DATES,
+            "values": [
+                [14, 16, 18, 19],
+                [12, 13, 15, 16],
+                [2, 3, 3, 4],
+                [31, 32, 33, 33],
+                [5, 6, 6, 6],
+            ],
+        },
+        "children": {},
+    },
 }
 FILINGS: JsonValue = [
     {
         "filingDate": "2026-02-01",
         "reportDate": "2025-12-31",
         "form": "10-K",
-        "primaryDocumentUrl": "https://www.sec.gov/Archives/a.htm",
+        "primaryDocumentUrl": "https://www.sec.gov/Archives/edgar/data/320193/000032019325000079/aapl-20241231.htm",
+    },
+    {
+        "filingDate": "2026-01-15",
+        "reportDate": "2025-12-31",
+        "form": "8-K",
+        "primaryDocumentUrl": "https://www.sec.gov/Archives/edgar/data/320193/000032019326000001/a.htm",
     },
     {
         "filingDate": "2025-11-01",
         "reportDate": "2025-09-30",
         "form": "10-Q",
-        "primaryDocumentUrl": "https://www.sec.gov/Archives/b.htm",
+        "primaryDocumentUrl": "https://www.sec.gov/Archives/edgar/data/320193/000032019325000010/aapl-20250930.htm",
     },
 ]
 OHLCV: JsonValue = [
@@ -144,9 +233,10 @@ OHLCV: JsonValue = [
 ]
 NEWS: JsonObject = {
     "data": [
-        {"id": "old", "title": "Old", "published_at": "2026-01-01T12:00:00Z"},
-        {"id": "new", "title": "New", "published_at": "2026-02-01T12:00:00Z"},
-        {"id": "middle", "title": "Middle", "published_at": "2026-01-15T12:00:00Z"},
+        {"id": "old", "title": "Old", "published_at": "2026-01-01T12:00:00Z",
+         "url": "https://example.com/old", "source": "example.com"},
+        {"id": "new", "title": "New", "published_at": "2026-02-01T12:00:00Z",
+         "url": "https://example.com/new", "source": "example.com"},
     ],
     "has_more": False,
     "next_cursor": None,
@@ -170,322 +260,363 @@ def full_client() -> FakeClient:
     )
 
 
+def fd_keys(record_name: str) -> set[str]:
+    schema = FD_CONTRACT[record_name]
+    return set(schema.keys())
+
+
+def as_records(value: object) -> list[JsonObject]:
+    assert isinstance(value, list)
+    items = cast(list[object], value)
+    records: list[JsonObject] = []
+    for item in items:
+        assert isinstance(item, dict)
+        records.append(cast(JsonObject, item))
+    return records
+
+
+def as_object(value: object) -> JsonObject:
+    assert isinstance(value, dict)
+    return cast(JsonObject, value)
+
+
+def in_schema_order(record: JsonObject, record_name: str) -> bool:
+    schema_order = list(FD_CONTRACT[record_name].keys())
+    positions = [schema_order.index(key) for key in record if key in schema_order]
+    return positions == sorted(positions) and all(key in schema_order for key in record)
+
+
 @pytest.mark.asyncio
-async def test_good_data_for_all_published_tools() -> None:
-    service = FinanceService(full_client())
+async def test_company_facts_matches_fd_shape(tmp_path: Path) -> None:
+    finance = service(full_client(), tmp_path)
+    response = await finance.get_company_facts(ticker="aapl")
+    assert response == {"company_facts": {"ticker": "AAPL", "name": "Apple Inc."}}
+    facts = as_object(response["company_facts"])
+    assert set(facts) <= fd_keys("CompanyFacts")
 
-    facts = await service.get_company_facts("aapl")
-    income = await service.get_income_statement("AAPL", period="annual", limit=2)
-    balance = await service.get_balance_sheet("AAPL", period="quarterly", limit=1)
-    cash = await service.get_cash_flow_statement("AAPL", period="annual", limit=1)
-    metrics = await service.get_financial_metrics_snapshot("AAPL")
-    filings = await service.get_filings("AAPL", filing_type=["10-K"], limit=1)
-    prices = await service.get_stock_prices(
-        "AAPL", start_date="2025-12-30", end_date="2025-12-31", interval="day"
+
+@pytest.mark.asyncio
+async def test_company_facts_unknown_ticker_is_not_found(tmp_path: Path) -> None:
+    finance = service(full_client(), tmp_path)
+    response = await finance.get_company_facts(ticker="zzzz")
+    assert response == {
+        "error": "not_found",
+        "message": "No US company record exists for ticker ZZZZ.",
+    }
+
+
+@pytest.mark.asyncio
+async def test_company_facts_rejects_cik_and_bad_ticker(tmp_path: Path) -> None:
+    finance = service(full_client(), tmp_path)
+    assert (await finance.get_company_facts(cik="0000320193"))["error"] == "bad_request"
+    assert (await finance.get_company_facts(ticker="bad ticker!!"))["error"] == "bad_request"
+    assert (await finance.get_company_facts())["error"] == "bad_request"
+
+
+@pytest.mark.asyncio
+async def test_income_statement_annual_matches_fd_contract(tmp_path: Path) -> None:
+    finance = service(full_client(), tmp_path)
+    response = await finance.get_income_statement(ticker="AAPL", period="annual", limit=4)
+    records = as_records(response["income_statements"])
+    assert isinstance(records, list) and len(records) == 2
+    newest = records[0]
+    assert newest["report_period"] == "2025-12-31"
+    assert newest["fiscal_period"] == "FY2025"
+    assert newest["period"] == "annual"
+    assert newest["ticker"] == "AAPL"
+    assert newest["revenue"] == 120
+    assert newest["cost_of_revenue"] == 70
+    assert newest["gross_profit"] == 50
+    assert newest["operating_income"] == 35
+    assert newest["income_tax_expense"] == 7
+    assert newest["net_income"] == 28
+    assert newest["interest_expense"] == 4
+    assert newest["ebit"] == 36
+    assert newest["earnings_per_share"] == 2.1
+    assert newest["earnings_per_share_diluted"] == 2.0
+    assert newest["weighted_average_shares"] == 13.0
+    assert set(newest) <= fd_keys("IncomeStatement")
+    assert in_schema_order(newest, "IncomeStatement")
+    assert "next_page_url" not in response
+
+
+@pytest.mark.asyncio
+async def test_income_statement_joins_filing_identity(tmp_path: Path) -> None:
+    finance = service(full_client(), tmp_path)
+    response = await finance.get_income_statement(ticker="AAPL", period="annual")
+    newest = as_records(response["income_statements"])[0]
+    assert newest["accession_number"] == "0000320193-25-000079"
+    assert newest["form_type"] == "10-K"
+    assert newest["filing_date"] == "2026-02-01"
+    filing_url = newest["filing_url"]
+    assert isinstance(filing_url, str)
+    assert filing_url.startswith("https://www.sec.gov/Archives/")
+
+
+@pytest.mark.asyncio
+async def test_income_statement_filing_date_filter(tmp_path: Path) -> None:
+    finance = service(full_client(), tmp_path)
+    response = await finance.get_income_statement(
+        ticker="AAPL", period="annual", filing_date_gte="2026-01-01"
     )
-    price = await service.get_stock_price("AAPL")
-    news = await service.get_news("AAPL", limit=2)
+    records = as_records(response["income_statements"])
+    assert isinstance(records, list)
+    assert [record["report_period"] for record in records] == ["2025-12-31"]
 
-    assert data_object(facts, "company_facts")["name"] == "Apple Inc."
-    assert data_object(facts, "market_summary")["price"] == 230.1
-    assert facts["total_cost"]["value"] == pytest.approx(0.0012)
-    assert facts["total_cost"]["complete"]
-    income_rows = data_records(income, "income_statements")
-    assert [row["report_period"] for row in income_rows] == ["2025-12-31", "2024-12-31"]
-    assert line_item(income_rows[0], "revenue") == 100
-    assert line_item(data_records(balance, "balance_sheets")[0], "total_assets") == 410
-    assert line_item(data_records(cash, "cash_flow_statements")[0], "free_cash_flow") == 70
-    assert data_object(metrics, "financial_metrics_snapshot")["market_cap"] == 3_400_000_000_000
-    assert [item["form"] for item in data_records(filings, "filings")] == ["10-K"]
-    assert [row["date"] for row in data_records(prices, "prices")] == [
+
+@pytest.mark.asyncio
+async def test_income_statement_quarterly_fiscal_labels(tmp_path: Path) -> None:
+    finance = service(full_client(), tmp_path)
+    response = await finance.get_income_statement(ticker="AAPL", period="quarterly")
+    records = as_records(response["income_statements"])
+    assert isinstance(records, list) and len(records) == 4
+    newest = records[0]
+    assert newest["report_period"] == "2026-03-31"
+    assert newest["fiscal_period"] == "Q1 FY2026"
+    assert records[1]["fiscal_period"] == "Q4 FY2025"
+
+
+@pytest.mark.asyncio
+async def test_income_statement_ttm_derives_from_quarters(tmp_path: Path) -> None:
+    finance = service(full_client(), tmp_path)
+    response = await finance.get_income_statement(ticker="AAPL", period="ttm")
+    records = as_records(response["income_statements"])
+    assert isinstance(records, list) and len(records) == 1
+    ttm = records[0]
+    assert ttm["report_period"] == "2026-03-31"
+    assert ttm["period"] == "ttm"
+    assert ttm["revenue"] == 91  # 20 + 22 + 24 + 25
+    assert ttm["net_income"] == 23  # 5 + 6 + 6 + 6
+    assert ttm["interest_expense"] == 6
+    assert ttm["earnings_per_share"] == pytest.approx(2.1)  # 0.5 + 0.6 + 0.5 + 0.5
+    assert ttm["weighted_average_shares"] == pytest.approx(10.75)  # mean of share counts
+    assert "fiscal_period" not in ttm
+
+
+@pytest.mark.asyncio
+async def test_income_statement_report_period_filters(tmp_path: Path) -> None:
+    finance = service(full_client(), tmp_path)
+    response = await finance.get_income_statement(
+        ticker="AAPL", period="annual", report_period_gte="2025-01-01"
+    )
+    records = as_records(response["income_statements"])
+    assert isinstance(records, list)
+    assert [record["report_period"] for record in records] == ["2025-12-31"]
+    exact = await finance.get_income_statement(
+        ticker="AAPL", period="annual", report_period="2024-12-31"
+    )
+    records = as_records(exact["income_statements"])
+    assert [as_object(record).get("revenue") for record in records] == [100]
+
+
+@pytest.mark.asyncio
+async def test_income_statement_cursor_pagination(tmp_path: Path) -> None:
+    finance = service(full_client(), tmp_path)
+    first = await finance.get_income_statement(ticker="AAPL", period="quarterly", limit=4)
+    token = first.get("next_page_url")
+    assert token is None  # 4 records fit on one page of 10
+
+
+@pytest.mark.asyncio
+async def test_filings_pagination_walk(tmp_path: Path) -> None:
+    many: list[JsonObject] = []
+    for index in range(14):
+        many.append(
+            {
+                "filingDate": f"2026-01-{index + 1:02d}",
+                "reportDate": "2025-12-31",
+                "form": "8-K",
+                "primaryDocumentUrl": "https://www.sec.gov/Archives/edgar/x.htm",
+            }
+        )
+    client = FakeClient(
+        {("defillama", "/equities/v1/filings"): completed("/equities/v1/filings", many)}
+    )
+    finance = service(client, tmp_path)
+    first = await finance.get_filings(ticker="AAPL", limit=14)
+    records = first["filings"]
+    assert isinstance(records, list) and len(records) == 10
+    next_url = first.get("next_page_url")
+    assert isinstance(next_url, str)
+    token = next_url.split("cursor=", 1)[1]
+    second = await finance.get_filings(ticker="AAPL", limit=14, cursor=token)
+    records = second["filings"]
+    assert isinstance(records, list) and len(records) == 4
+    assert "next_page_url" not in second
+
+
+@pytest.mark.asyncio
+async def test_filings_filter_and_shape(tmp_path: Path) -> None:
+    finance = service(full_client(), tmp_path)
+    response = await finance.get_filings(ticker="AAPL", filing_type=["10-K"])
+    records = as_records(response["filings"])
+    assert isinstance(records, list) and len(records) == 1
+    record = records[0]
+    assert record["filing_type"] == "10-K"
+    assert record["report_date"] == "2025-12-31"
+    assert record["filing_date"] == "2026-02-01"
+    assert record["ticker"] == "AAPL"
+    assert record["accession_number"] == "0000320193-25-000079"
+    assert set(record) <= fd_keys("Filing")
+    assert in_schema_order(record, "Filing")
+    invalid = await finance.get_filings(ticker="AAPL", filing_type=["40-F"])
+    assert invalid["error"] == "bad_request"
+
+
+@pytest.mark.asyncio
+async def test_balance_sheet_and_cash_flow_shapes(tmp_path: Path) -> None:
+    finance = service(full_client(), tmp_path)
+    balance = await finance.get_balance_sheet(ticker="AAPL", period="annual")
+    records = as_records(balance["balance_sheets"])
+    assert len(records) == 2
+    newest = records[0]
+    assert newest["total_assets"] == 420
+    assert newest["current_assets"] == 210
+    assert newest["shareholders_equity"] == 160
+    assert set(newest) <= fd_keys("BalanceSheet")
+    assert in_schema_order(newest, "BalanceSheet")
+    cash = await finance.get_cash_flow_statement(ticker="AAPL", period="annual")
+    records = as_records(cash["cash_flow_statements"])
+    assert len(records) == 2
+    newest = records[0]
+    assert newest["net_cash_flow_from_operations"] == 70
+    assert newest["free_cash_flow"] == 60
+    assert newest["ending_cash_balance"] == 33
+    assert set(newest) <= fd_keys("CashFlowStatement")
+    assert in_schema_order(newest, "CashFlowStatement")
+
+
+@pytest.mark.asyncio
+async def test_financial_metrics_snapshot_shape(tmp_path: Path) -> None:
+    finance = service(full_client(), tmp_path)
+    response = await finance.get_financial_metrics_snapshot(ticker="AAPL")
+    snapshot = as_object(response["snapshot"])
+    assert isinstance(snapshot, dict)
+    assert snapshot["ticker"] == "AAPL"
+    assert snapshot["market_cap"] == 3_400_000_000_000
+    assert snapshot["price_to_earnings_ratio"] == 34.2
+    assert snapshot["gross_margin"] == pytest.approx(0.45)  # 180/400
+    assert snapshot["net_margin"] == pytest.approx(0.25)  # 100/400
+    assert set(snapshot) <= fd_keys("FinancialMetricSnapshot")
+
+
+@pytest.mark.asyncio
+async def test_stock_prices_day_and_month_aggregation(tmp_path: Path) -> None:
+    finance = service(full_client(), tmp_path)
+    daily = await finance.get_stock_prices(
+        ticker="AAPL", interval="day", start_date="2025-12-30", end_date="2026-01-01"
+    )
+    assert daily["ticker"] == "AAPL"
+    records = as_records(daily["prices"])
+    assert isinstance(records, list) and len(records) == 3
+    assert [record["time"] for record in records] == [
         "2025-12-30",
         "2025-12-31",
+        "2026-01-01",
     ]
-    assert data_object(price, "stock_price")["price"] == 230.1
-    assert [item["id"] for item in data_records(news, "news")] == ["new", "middle"]
-    responses = [facts, income, balance, cash, metrics, filings, prices, price, news]
-    assert all(response["partial_errors"] == [] for response in responses)
-    assert all("as_of" in item and "retrieved_at" in item for item in facts["provenance"])
-
-
-@pytest.mark.asyncio
-async def test_invalid_ticker_fails_before_paid_call() -> None:
-    client = full_client()
-    response = await FinanceService(client).get_stock_price("AAPL; rm -rf /")
-
-    assert client.calls == []
-    assert response["partial_errors"][0]["code"] == "invalid_input"
-    assert response["total_cost"]["value"] == 0
-
-
-@pytest.mark.asyncio
-async def test_empty_data_is_not_silent() -> None:
-    client = full_client()
-    client.outcomes[("defillama", "/equities/v1/filings")] = completed("/equities/v1/filings", [])
-
-    response = await FinanceService(client).get_filings("AAPL")
-
-    assert response["data"]["filings"] == []
-    assert response["warnings"] == ["DefiLlama returned no filings for AAPL."]
-
-
-@pytest.mark.asyncio
-async def test_provider_429_keeps_failed_run_provenance_and_cost() -> None:
-    client = full_client()
-    failed = completed("/equities/v1/summary", {"error": "rate limited"})
-    failed = MonidRun(
-        provider=failed.provider,
-        endpoint=failed.endpoint,
-        run_id=failed.run_id,
-        status=failed.status,
-        output=failed.output,
-        provider_http_status=429,
-        cost=failed.cost,
-        created_at=failed.created_at,
-        completed_at=failed.completed_at,
+    assert records[2]["open"] == 30 and records[2]["close"] == 33
+    assert set(records[0]) <= fd_keys("Price")
+    monthly = await finance.get_stock_prices(
+        ticker="AAPL", interval="month", start_date="2025-12-30", end_date="2026-01-01"
     )
-    client.outcomes[("defillama", "/equities/v1/summary")] = MonidProviderHTTPError(failed)
-
-    response = await FinanceService(client).get_stock_price("AAPL")
-
-    assert response["data"]["stock_price"] is None
-    assert response["partial_errors"][0]["code"] == "provider_http_error"
-    assert response["provenance"][0]["provider_http_status"] == 429
-    assert response["total_cost"]["value"] == pytest.approx(0.0006)
+    records = as_records(monthly["prices"])
+    assert len(records) == 2
+    december = records[0]
+    assert december["time"] == "2025-12-31"
+    assert december["open"] == 10 and december["close"] == 23
+    assert december["volume"] == 300  # 100 + 200
 
 
 @pytest.mark.asyncio
-async def test_timeout_is_a_typed_partial_error() -> None:
-    client = full_client()
-    client.outcomes[("defillama", "/equities/v1/ohlcv")] = MonidTimeoutError(
-        "defillama", "/equities/v1/ohlcv", "run exceeded 3 seconds"
-    )
-
-    response = await FinanceService(client).get_stock_prices(
-        "AAPL", start_date="2025-12-30", end_date="2025-12-31"
-    )
-
-    assert response["data"]["prices"] == []
-    assert response["partial_errors"][0]["code"] == "timeout"
-    assert not response["total_cost"]["complete"]
+async def test_stock_price_snapshot(tmp_path: Path) -> None:
+    finance = service(full_client(), tmp_path)
+    response = await finance.get_stock_price("AAPL")
+    snapshot = as_object(response["snapshot"])
+    assert isinstance(snapshot, dict)
+    assert snapshot["price"] == 230.1
+    assert snapshot["ticker"] == "AAPL"
+    assert snapshot["day_change"] == 1.2
+    assert snapshot["day_change_percent"] == 0.5
+    assert snapshot["time"] == "2026-09-03T20:00:00Z"
+    assert set(snapshot) <= fd_keys("PriceSnapshot")
 
 
 @pytest.mark.asyncio
-async def test_provider_schema_drift_is_visible() -> None:
-    client = full_client()
-    client.outcomes[("defillama", "/equities/v1/statements")] = completed(
-        "/equities/v1/statements", {"unexpected": []}
-    )
-
-    response = await FinanceService(client).get_income_statement("AAPL")
-
-    assert response["data"]["income_statements"] == []
-    assert response["partial_errors"][0]["code"] == "schema_drift"
-    assert response["total_cost"]["value"] == pytest.approx(0.0006)
-
-
-@pytest.mark.asyncio
-async def test_period_limit_and_report_date_filters_are_deterministic() -> None:
-    service = FinanceService(full_client())
-
-    response = await service.get_income_statement(
-        "AAPL",
-        period="quarterly",
-        limit=2,
-        report_period_gte="2025-10-01",
-        report_period_lte="2026-12-31",
-    )
-
-    assert [row["report_period"] for row in data_records(response, "income_statements")] == [
-        "2026-03-31",
-        "2025-12-31",
-    ]
-
-
-@pytest.mark.asyncio
-async def test_bad_period_limit_and_dates_fail_before_paid_call() -> None:
-    client = full_client()
-    service = FinanceService(client)
-
-    invalid_period = await service.get_income_statement("AAPL", period="monthly")
-    invalid_limit = await service.get_filings("AAPL", limit=0)
-    invalid_dates = await service.get_stock_prices(
-        "AAPL", start_date="2026-01-02", end_date="2026-01-01"
-    )
-
-    assert client.calls == []
-    assert invalid_period["partial_errors"][0]["code"] == "invalid_input"
-    assert invalid_limit["partial_errors"][0]["code"] == "invalid_input"
-    assert invalid_dates["partial_errors"][0]["code"] == "invalid_input"
-
-
-@pytest.mark.asyncio
-async def test_company_facts_returns_partial_data_when_summary_fails() -> None:
-    client = full_client()
-    client.outcomes[("defillama", "/equities/v1/summary")] = MonidSchemaError(
-        "defillama", "/equities/v1/summary", "missing price payload"
-    )
-
-    response = await FinanceService(client).get_company_facts("AAPL")
-
-    assert data_object(response, "company_facts")["name"] == "Apple Inc."
-    assert response["data"]["market_summary"] is None
-    assert response["partial_errors"][0]["code"] == "schema_drift"
-    assert response["total_cost"]["value"] == pytest.approx(0.0006)
-
-
-@pytest.mark.asyncio
-async def test_live_defillama_statement_matrix_is_pivoted_without_losing_values() -> None:
-    client = full_client()
-    matrix: JsonObject = {
-        "incomeStatement": {
-            "labels": ["Revenue", "Net Income"],
-            "children": [[], []],
-            "annual": {
-                "periodEnding": ["2025-09-27", "2024-09-28"],
-                "values": [[100, 90], [25, 20]],
-            },
-            "quarterly": {
-                "periodEnding": ["2025-09-27"],
-                "values": [[30], [8]],
-            },
-        },
-        "balanceSheet": {
-            "labels": [],
-            "children": [],
-            "annual": {"periodEnding": [], "values": []},
-        },
-        "cashflow": {"labels": [], "children": [], "annual": {"periodEnding": [], "values": []}},
+async def test_news_shape(tmp_path: Path) -> None:
+    finance = service(full_client(), tmp_path)
+    response = await finance.get_news(ticker="AAPL", limit=5)
+    records = as_records(response["news"])
+    assert isinstance(records, list) and len(records) == 2
+    newest = records[0]
+    assert newest == {
+        "ticker": "AAPL",
+        "title": "New",
+        "source": "example.com",
+        "date": "2026-02-01T12:00:00Z",
+        "url": "https://example.com/new",
     }
-    client.outcomes[("defillama", "/equities/v1/statements")] = completed(
-        "/equities/v1/statements", matrix
-    )
-
-    response = await FinanceService(client).get_income_statement("AAPL", limit=1)
-
-    rows = data_records(response, "income_statements")
-    assert rows[0]["report_period"] == "2025-09-27"
-    assert line_item(rows[0], "revenue") == 100
-    assert line_item(rows[0], "net_income") == 25
-    assert rows[0]["provider_fields"] == {"Revenue": 100, "Net Income": 25}
+    assert set(newest) <= fd_keys("News")
+    missing = await finance.get_news()
+    assert missing["error"] == "bad_request"
 
 
 @pytest.mark.asyncio
-async def test_not_found_summary_is_schema_drift_not_successful_price() -> None:
-    client = full_client()
-    client.outcomes[("defillama", "/equities/v1/summary")] = completed(
-        "/equities/v1/summary", {"message": "not found"}
+async def test_upstream_failures_map_to_fd_errors_and_ledger(tmp_path: Path) -> None:
+    run = completed("/equities/v1/summary", SUMMARY)
+    client = FakeClient(
+        {
+            ("defillama", "/equities/v1/summary"): MonidProviderHTTPError(
+                replace_run_with_status(run, 429)
+            ),
+        }
     )
-
-    response = await FinanceService(client).get_stock_price("AAPL")
-
-    assert response["data"]["stock_price"] is None
-    assert response["partial_errors"][0]["code"] == "schema_drift"
+    finance = service(client, tmp_path)
+    response = await finance.get_stock_price("AAPL")
+    assert response["error"] == "upstream_error"
+    assert "429" in str(response["message"])
+    summary = summarize_ledger(tmp_path / "ledger.jsonl")
+    assert summary["calls"] == 1
+    assert summary["failures"] == 1
 
 
 @pytest.mark.asyncio
-async def test_schema_error_after_paid_run_keeps_provenance_and_unknown_cost() -> None:
-    client = full_client()
-    run = completed("/equities/v1/summary", {"currentPrice": 230.1})
-    missing_cost = MonidRun(
-        provider=run.provider,
-        endpoint=run.endpoint,
-        run_id=run.run_id,
-        status=run.status,
-        output=run.output,
-        provider_http_status=run.provider_http_status,
-        cost=None,
-        created_at=run.created_at,
-        completed_at=run.completed_at,
-        retrieved_at="2026-09-04T00:00:03Z",
+async def test_timeout_maps_to_fd_error(tmp_path: Path) -> None:
+    run = completed("/equities/v1/summary", SUMMARY)
+    client = FakeClient(
+        {
+            ("defillama", "/equities/v1/summary"): MonidTimeoutError(
+                "defillama", "/equities/v1/summary", "timed out"
+            ),
+        }
     )
-    client.outcomes[("defillama", "/equities/v1/summary")] = MonidSchemaError(
-        "defillama",
-        "/equities/v1/summary",
-        "Monid run omitted measured billing cost.",
-        run=missing_cost,
-    )
-
-    response = await FinanceService(client).get_stock_price("AAPL")
-
-    assert response["provenance"][0]["run_id"] == run.run_id
-    assert response["provenance"][0]["measured_cost"] is None
-    assert response["total_cost"] == {"value": 0.0, "currency": "USD", "complete": False}
-    assert response["partial_errors"][0]["code"] == "schema_drift"
+    del run
+    finance = service(client, tmp_path)
+    response = await finance.get_stock_price("AAPL")
+    assert response["error"] == "timeout"
 
 
 @pytest.mark.asyncio
-async def test_mixed_cost_currencies_are_not_added_as_usd() -> None:
-    client = full_client()
-    catalog = completed("/equities/v1/companies-list", CATALOG)
-    client.outcomes[("defillama", "/equities/v1/companies-list")] = MonidRun(
-        provider=catalog.provider,
-        endpoint=catalog.endpoint,
-        run_id=catalog.run_id,
-        status=catalog.status,
-        output=catalog.output,
-        provider_http_status=catalog.provider_http_status,
-        cost=Money(Decimal("0.0006"), "EUR"),
-        created_at=catalog.created_at,
-        completed_at=catalog.completed_at,
-    )
-
-    response = await FinanceService(client).get_company_facts("AAPL")
-
-    assert response["total_cost"] == {"value": 0.0006, "currency": "EUR", "complete": False}
-    assert any(error["code"] == "cost_currency_mismatch" for error in response["partial_errors"])
+async def test_receipts_recorded_per_call(tmp_path: Path) -> None:
+    finance = service(full_client(), tmp_path)
+    await finance.get_stock_price("AAPL")
+    summary = summarize_ledger(tmp_path / "ledger.jsonl")
+    assert summary["calls"] == 1
+    assert summary["failures"] == 0
+    tools = summary["tools"]
+    assert isinstance(tools, dict)
+    entry = tools["get_stock_price"]
+    assert isinstance(entry, dict)
+    assert entry["calls"] == 1
 
 
 @pytest.mark.asyncio
-async def test_timestamp_only_summary_is_not_metrics_data() -> None:
-    client = full_client()
-    client.outcomes[("defillama", "/equities/v1/summary")] = completed(
-        "/equities/v1/summary", {"updatedAt": "2026-09-04T00:00:00Z"}
-    )
-
-    response = await FinanceService(client).get_financial_metrics_snapshot("AAPL")
-
-    assert response["data"]["financial_metrics_snapshot"] is None
-    assert response["partial_errors"][0]["code"] == "schema_drift"
+async def test_invalid_cursor_rejected(tmp_path: Path) -> None:
+    finance = service(full_client(), tmp_path)
+    response = await finance.get_filings(ticker="AAPL", cursor="not-a-cursor")
+    assert response["error"] == "invalid_cursor"
 
 
-@pytest.mark.asyncio
-async def test_non_numeric_ohlcv_values_are_schema_drift() -> None:
-    client = full_client()
-    client.outcomes[("defillama", "/equities/v1/ohlcv")] = completed(
-        "/equities/v1/ohlcv", [[1767139200, "bad", 24, 19, 23, 200]]
-    )
+def replace_run_with_status(run: MonidRun, status: int) -> MonidRun:
+    from dataclasses import replace
 
-    response = await FinanceService(client).get_stock_prices(
-        "AAPL", start_date="2025-12-30", end_date="2025-12-31"
-    )
-
-    assert response["data"]["prices"] == []
-    assert response["partial_errors"][0]["code"] == "schema_drift"
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("non_finite", [float("nan"), float("inf"), float("-inf")])
-async def test_non_finite_summary_values_are_schema_drift(non_finite: float) -> None:
-    client = full_client()
-    client.outcomes[("defillama", "/equities/v1/summary")] = completed(
-        "/equities/v1/summary", {"currentPrice": non_finite}
-    )
-
-    response = await FinanceService(client).get_stock_price("AAPL")
-
-    assert response["data"]["stock_price"] is None
-    assert response["partial_errors"][0]["code"] == "schema_drift"
-
-
-@pytest.mark.asyncio
-async def test_non_finite_secondary_summary_field_is_schema_drift() -> None:
-    client = full_client()
-    client.outcomes[("defillama", "/equities/v1/summary")] = completed(
-        "/equities/v1/summary", {"currentPrice": 230.1, "marketCap": float("inf")}
-    )
-
-    response = await FinanceService(client).get_financial_metrics_snapshot("AAPL")
-
-    assert response["data"]["financial_metrics_snapshot"] is None
-    assert response["partial_errors"][0]["code"] == "schema_drift"
+    return replace(run, provider_http_status=status, status="PROVIDER_ERROR")

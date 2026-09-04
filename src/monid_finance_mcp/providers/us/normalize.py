@@ -126,6 +126,8 @@ def normalize_summary(value: JsonValue, ticker: str) -> JsonObject:
         "fifty_two_week_high": _first_value(payload, ("fiftyTwoWeekHigh",)),
         "fifty_two_week_low": _first_value(payload, ("fiftyTwoWeekLow",)),
         "dividend_yield": _first_value(payload, ("dividend_yield", "dividendYield")),
+        "day_change": _first_value(payload, ("priceChange1d",)),
+        "day_change_percent": _first_value(payload, ("priceChangePercentage1d",)),
         "price_to_earnings_ratio": _first_value(payload, ("trailingPE", "peRatio")),
         "price_to_revenue": _first_value(payload, ("priceToRevenue",)),
         "price_to_book": _first_value(payload, ("priceToBook",)),
