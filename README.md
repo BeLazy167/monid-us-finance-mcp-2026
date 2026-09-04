@@ -14,12 +14,12 @@ curl -H "X-API-KEY: monid_live_..." \
 
 An agent-native, US-first financial data MCP server built for the September 2026 Monid Hackathon.
 
-It replaces the paid research layer of **Financial Datasets API** (financialdatasets.ai — $200/month Build Plan or $20/1k credits) with live, pay-per-call routing across SEC EDGAR, DefiLlama US equities, and Context.dev via Monid.
+It replaces the paid research layer of **Financial Datasets API** (financialdatasets.ai — Build at $200/month with 100,000 requests included and $10 per additional 1,000) with live, pay-per-call routing across SEC EDGAR, DefiLlama US equities, and Context.dev via Monid.
 
 ## Key Properties
 
 - **100% Contract Parity**: Implements the identical 27 MCP tool names, input parameters, and response schemas as Financial Datasets API. Responses contain only official schema keys in OpenAPI property order.
-- **Auditable Measured Receipts**: Provenance, costs, and run IDs are committed to `receipts/ledger.jsonl`. A 22-call comprehensive live test cost **$0.0135 USD** (96.9% cheaper than incumbent credit packs).
+- **Auditable Measured Receipts**: Provenance, costs, and run IDs are committed to `receipts/ledger.jsonl`. 51 priced live calls total **$0.0515 USD**, a mean of **$0.00101 per call**. Every figure below is read off that ledger, not estimated.
 - **Zero Mock Data**: Never fabricates numbers. If a field or tool cannot be honestly sourced, it is omitted or returns a zero-cost typed error.
 - **Deterministic SEC Parsing**: `get_filing_items` extracts canonical 10-K/10-Q/8-K sections using rule-based parsing with zero LLM hallucination risk.
 
@@ -48,15 +48,38 @@ curl -H "X-API-KEY: monid_live_..." \
 Every Monid call is appended to a receipts ledger when `RECEIPTS_PATH` is set; the
 ledger is best-effort observability and never a response dependency.
 
-## The Kill: Before vs. After
+## Cost: measured, with the caveat stated
 
-| Metric | Financial Datasets API | Monid US Finance MCP |
+Financial Datasets prices by request count, not by dataset. Both paid plans work out
+to the same effective rate on included volume; the tiers buy volume and rights
+(redistribution, webhooks, uptime SLAs), not a cheaper unit.
+
+| | Financial Datasets | Monid US Finance MCP |
 |---|---|---|
-| **Pricing Model** | $200/mo ($2,000/yr) or $20 per 1k calls | $0.0006 - $0.0009 per live call |
-| **Commitment** | Monthly / Annual contract | Pay-per-query, zero subscription |
-| **Cost for 22 Live Calls** | $0.4400 (Starter) / $0.0440 (Build) | **$0.0135 (Actual measured)** |
-| **Savings** | Base | **96.9% cheaper** |
-| **Failed Runs Handling** | Often billed / opaque | Auditable receipt in `receipts/ledger.jsonl` |
+| **Entry cost** | $200/month, before the first request | $0.0006, no subscription |
+| **Build** | $200/mo, 100,000 requests included, $10 per additional 1,000 | — |
+| **Scale** | $2,000/mo, 1,000,000 requests included, $5 per additional 1,000 | — |
+| **Effective rate, included volume** | $0.00200 / request (both plans) | — |
+| **Overage rate** | $0.01000 (Build) / $0.00500 (Scale) | — |
+| **Measured rate** | — | **$0.00101 mean, $0.00060 median** |
+| **Commitment** | Monthly subscription | Pay-per-query, none |
+| **Failed runs** | Billing not itemized per call | Failure receipt written to `receipts/ledger.jsonl` |
+
+Measured distribution across 51 priced calls: **82% at $0.0006**, 14% at $0.0009,
+4% at $0.0100. The two $0.0100 calls were `nasdaq/get_stock_screener` and
+`secform4/search`.
+
+**Where we win.** The floor. Financial Datasets costs $200/month before the first
+request; the full 51-call ledger here cost $0.0515. At our measured mean we are about
+half the $0.002 included rate, and roughly 90% below the $0.010 Build overage rate.
+
+**Where we do not.** Our cost is per-route and variable, not flat. A workload made
+entirely of our $0.0100 routes costs 5x the included rate: 100,000 such calls would run
+about $1,000 here against $200 on Build. High-volume, extraction-heavy usage is cheaper
+on a Financial Datasets subscription, and this table is not an argument otherwise.
+
+We also do not offer what the paid tiers include: data redistribution rights, webhooks,
+uptime SLAs, zero data retention, bulk delivery, or 30+ years of normalized history.
 
 ## Coverage
 

@@ -11,7 +11,11 @@ It is an independent, Monid-backed implementation, not affiliated with or endors
 
 Most SEC research and market-data APIs charge a fixed monthly plan whether you make ten calls or ten thousand. That works for a trading desk. It doesn't work for an agent that checks one company's balance sheet twice a week.
 
-Each call here routes through SEC EDGAR, DefiLlama US equities, and Context.dev via Monid. Measured cost per call has run \$0.0006 to \$0.01 on the live deployment, against a \$200/month or \$2,000/month commitment on the plan this replaces. You bring your own Monid API key, and every call bills your wallet directly. We take no cut and never see or store the key.
+Each call here routes through SEC EDGAR, DefiLlama US equities, and Context.dev via Monid. Across the 51 priced calls in the committed receipts ledger, cost ran \$0.0006 to \$0.0100 with a mean of \$0.00101 and a median of \$0.0006; 82% of calls sat at the \$0.0006 floor. You bring your own Monid API key, and every call bills your wallet directly. We take no cut and never see or store the key.
+
+The plan this replaces bills by request count: \$200/month for Build with 100,000 requests included (\$10 per additional 1,000), or \$2,000/month for Scale with 1,000,000 included (\$5 per additional 1,000). Both work out to \$0.002 per included request, so the difference that matters here is the floor, not the unit rate: that \$200 is due before the first request, while the whole ledger above cost \$0.0515.
+
+Be aware of the other edge of per-call pricing. Our rate varies by route rather than being flat, and the most expensive routes here cost \$0.0100 — five times the included rate. A high-volume workload made mostly of those routes is cheaper on a subscription, and we would rather say so than let you find out on an invoice.
 
 The scope isn't complete. Some Financial Datasets routes aren't implemented yet, and they answer with a typed, zero-cost `not_implemented` error rather than a guess. A few implemented routes cover less ground than the original, with capped result sizes and omitted fields in places. Read [Compatibility](/overview/coverage) before you build on this.
 
