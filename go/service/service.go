@@ -515,11 +515,12 @@ func buildStatementRecords(statement string, parsed statementArgs, value any, id
 	records := make([]any, 0, len(rows))
 	for _, row := range rows {
 		key := row.ReportPeriod.Format(dateLayout)
-		var identity *FilingIdentity
-		if identityMap != nil {
-			if id, ok := identityMap[key]; ok {
-				identity = &id
-			}
+		identity := lookupFilingIdentity(identityMap, row.ReportPeriod)
+		// Prefer the filing's own period end over the statements feed's
+		// month-end rounding: for Apple FY2025 that is 2025-09-27 rather
+		// than 2025-09-30, which is what the 10-K actually reports.
+		if identity != nil && identity.ReportDate != nil {
+			key = identity.ReportDate.Format(dateLayout)
 		}
 		var fiscalPeriod *string
 		if parsed.period != "ttm" {
@@ -587,8 +588,11 @@ func applyFilingFilters(rows []providers.PeriodRow, identityMap map[string]Filin
 	}
 	out := make([]providers.PeriodRow, 0, len(rows))
 	for _, row := range rows {
-		identity, ok := identityMap[row.ReportPeriod.Format(dateLayout)]
-		if !ok || identity.FilingDate == nil {
+		// Same tolerant join the record builder uses: an exact-date
+		// lookup here would drop every annual row, since the statements
+		// feed and the filings feed disagree on the period end.
+		identity := lookupFilingIdentity(identityMap, row.ReportPeriod)
+		if identity == nil || identity.FilingDate == nil {
 			continue
 		}
 		if filing.matches(*identity.FilingDate) {
@@ -640,6 +644,9 @@ func buildFilingIdentityMap(filingsRun *monid.Run, filingsErr error, ticker stri
 		if timeErr == nil {
 			identity.FilingDate = &filingTime
 		}
+		if reportTime, rerr := time.Parse(dateLayout, reportDay); rerr == nil {
+			identity.ReportDate = &reportTime
+		}
 		best[reportDay] = candidate{filingDate: filingDay, identity: identity}
 	}
 	out := make(map[string]FilingIdentity, len(best))
@@ -647,6 +654,52 @@ func buildFilingIdentityMap(filingsRun *monid.Run, filingsErr error, ticker stri
 		out[day] = c.identity
 	}
 	return out, nil
+}
+
+// filingJoinToleranceDays bounds how far a statement period may sit from a
+// filing's reported period end and still be considered the same period.
+//
+// The two feeds disagree by construction: the statements feed rounds to
+// month end while filings carry the real fiscal close, which for a 52/53
+// week fiscal year can land up to six days either side. Quarters are ~90
+// days apart, so a window this size cannot reach an adjacent period.
+const filingJoinToleranceDays = 10
+
+// lookupFilingIdentity finds the filing covering a statement period.
+//
+// It tries an exact date match first, then falls back to the nearest
+// filing within filingJoinToleranceDays. The exact match alone silently
+// failed for every annual statement - the statements feed said
+// 2025-09-30 while the filing said 2025-09-27 - which dropped
+// accession_number, form_type, filing_url and filing_date from every
+// annual record. Nothing errored; the fields were simply absent.
+func lookupFilingIdentity(identityMap map[string]FilingIdentity, period time.Time) *FilingIdentity {
+	if identityMap == nil {
+		return nil
+	}
+	if id, ok := identityMap[period.Format(dateLayout)]; ok {
+		return &id
+	}
+	var best *FilingIdentity
+	bestDelta := time.Duration(filingJoinToleranceDays+1) * 24 * time.Hour
+	for key := range identityMap {
+		day, err := time.Parse(dateLayout, key)
+		if err != nil {
+			continue
+		}
+		delta := day.Sub(period)
+		if delta < 0 {
+			delta = -delta
+		}
+		if delta < bestDelta {
+			id := identityMap[key]
+			bestDelta, best = delta, &id
+		}
+	}
+	if bestDelta > time.Duration(filingJoinToleranceDays)*24*time.Hour {
+		return nil
+	}
+	return best
 }
 
 func setIdentity(accession, formType, filingURL, filingDate **string, identity *FilingIdentity) {

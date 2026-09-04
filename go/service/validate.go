@@ -219,6 +219,12 @@ type FilingIdentity struct {
 	FormType        *string
 	FilingURL       *string
 	FilingDate      *time.Time
+	// ReportDate is the fiscal period end the FILING reports, which is
+	// the authoritative one. The statements feed rounds its own period to
+	// month end (Apple's FY2025 closed 2025-09-27; that feed says
+	// 2025-09-30), so this is carried separately and preferred when the
+	// two disagree.
+	ReportDate *time.Time
 }
 
 // --- Generic provider-payload unwrapping (find_company) ---

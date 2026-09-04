@@ -11,6 +11,7 @@ import (
 	"github.com/belazy/monid-finance/fd"
 	"github.com/belazy/monid-finance/monid"
 	"github.com/belazy/monid-finance/providers"
+	"time"
 )
 
 // --- shared fixtures, adapted 1:1 from tests/test_service.py so behavior
@@ -952,5 +953,48 @@ func TestGetFilingItems_HappyPath(t *testing.T) {
 	items, ok := body["items"].([]any)
 	if !ok || len(items) == 0 {
 		t.Fatalf("expected non-empty items, got %#v", body)
+	}
+}
+
+// --- filing identity join tolerance ---
+
+// TestLookupFilingIdentity_ToleratesFeedDateDisagreement pins the join that
+// silently failed for every annual statement. The statements feed rounds a
+// period to month end while the filings feed carries the real fiscal close
+// (Apple FY2025: 2025-09-30 vs 2025-09-27), so an exact-date lookup matched
+// nothing and dropped accession_number, form_type, filing_url and
+// filing_date from every annual record without erroring.
+func TestLookupFilingIdentity_ToleratesFeedDateDisagreement(t *testing.T) {
+	accession := "0000320193-25-000079"
+	form := "10-K"
+	reportDay := time.Date(2025, 9, 27, 0, 0, 0, 0, time.UTC)
+	identityMap := map[string]FilingIdentity{
+		"2025-09-27": {AccessionNumber: &accession, FormType: &form, ReportDate: &reportDay},
+	}
+
+	// The statements feed's month-end date must still find the filing.
+	got := lookupFilingIdentity(identityMap, time.Date(2025, 9, 30, 0, 0, 0, 0, time.UTC))
+	if got == nil {
+		t.Fatal("month-end period must match the filing three days earlier")
+	}
+	if got.AccessionNumber == nil || *got.AccessionNumber != accession {
+		t.Fatalf("wrong filing matched: %#v", got)
+	}
+	if got.ReportDate == nil || got.ReportDate.Format(dateLayout) != "2025-09-27" {
+		t.Fatalf("the filing's own period end must be carried through, got %#v", got.ReportDate)
+	}
+
+	// An exact match still works and is preferred.
+	if exact := lookupFilingIdentity(identityMap, reportDay); exact == nil {
+		t.Fatal("an exact date must still match")
+	}
+
+	// A date beyond the tolerance must NOT match: silently attaching the
+	// wrong quarter's filing would be worse than attaching none.
+	if far := lookupFilingIdentity(identityMap, time.Date(2025, 6, 30, 0, 0, 0, 0, time.UTC)); far != nil {
+		t.Fatalf("a period a quarter away must not match, got %#v", far)
+	}
+	if none := lookupFilingIdentity(nil, reportDay); none != nil {
+		t.Fatal("a nil identity map must yield no identity")
 	}
 }
