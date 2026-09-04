@@ -1,0 +1,14 @@
+.venv
+__pycache__
+**/__pycache__
+*.pyc
+.git
+receipts/
+tests/
+.pytest_cache
+.ruff_cache
+node_modules
+.env
+.env.*
+!.env.example
+.DS_Store
