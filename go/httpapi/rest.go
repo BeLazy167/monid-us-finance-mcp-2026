@@ -520,15 +520,18 @@ func (rt *restAPI) segmentedFinancialsRoute(variant segmentVariant) routeHandler
 }
 
 // reshapeSegmentRecords reshapes every record in a get_segmented_financials
-// list result for one of the three per-statement segments routes.
+// list result for one of the three per-statement segments routes. value's
+// concrete slice element type is reflected rather than assumed (mirroring
+// paginateValue below), since the real service returns []any but tests may
+// configure a concretely typed slice.
 func reshapeSegmentRecords(value any, variant segmentVariant) any {
-	items, ok := value.([]any)
-	if !ok {
+	v := reflect.ValueOf(value)
+	if !v.IsValid() || v.Kind() != reflect.Slice {
 		return value
 	}
-	out := make([]any, len(items))
-	for i, item := range items {
-		out[i] = reshapeSegmentRecord(item, variant)
+	out := make([]any, v.Len())
+	for i := 0; i < v.Len(); i++ {
+		out[i] = reshapeSegmentRecord(v.Index(i).Interface(), variant)
 	}
 	return out
 }

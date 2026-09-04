@@ -1,0 +1,63 @@
+---
+title: "How to Get Stock Prices"
+description: "Pull a historical price range, then check the live price on top of it."
+---
+
+This walkthrough pulls a few days of daily bars for a ticker, then checks the live snapshot for what the stock is doing right now. Two calls.
+
+## 1. Historical bars
+
+`ticker`, `start_date`, and `end_date` are all required, this route does not default either date the way the Financial Datasets schema describes.
+
+```bash curl
+curl -s 'https://monid-finance-api.fly.dev/prices?ticker=AAPL&start_date=2026-08-27&end_date=2026-08-28' \
+  -H 'X-API-KEY: <your-api-key>'
+```
+
+```json Response
+{
+  "prices": [
+    { "open": 310.55, "close": 314.58, "high": 315.4, "low": 309.4, "volume": 32419200, "time": "2026-08-27" },
+    { "open": 316.85, "close": 319.7, "high": 322.37, "low": 315.45, "volume": 38609800, "time": "2026-08-28" }
+  ],
+  "ticker": "AAPL"
+}
+```
+
+Bars come back ascending, oldest first. `time` is the bar's end date in UTC. Measured cost: \$0.0006.
+
+## 2. Live price
+
+```bash curl
+curl -s 'https://monid-finance-api.fly.dev/prices/snapshot?ticker=AAPL' \
+  -H 'X-API-KEY: <your-api-key>'
+```
+
+```json Response
+{
+  "snapshot": {
+    "price": 318.27,
+    "ticker": "AAPL",
+    "day_change": -9.94,
+    "day_change_percent": -3.029,
+    "time": "2026-09-04T15:01:00Z"
+  }
+}
+```
+
+Measured cost: \$0.0006.
+
+## Weekly, monthly, and yearly bars
+
+`interval` accepts `day`, `week`, `month`, or `year`. This server sources daily bars and aggregates the wider intervals locally, so a weekly call over the same date range costs the same as a daily one, the aggregation happens after the fetch, not as a separate provider call.
+
+```bash curl
+curl -s 'https://monid-finance-api.fly.dev/prices?ticker=AAPL&start_date=2026-07-01&end_date=2026-08-28&interval=week' \
+  -H 'X-API-KEY: <your-api-key>'
+```
+
+`interval_multiplier` must stay at its default of `1`. A value like `5` for "every 5 days" is not implemented and answers `400`.
+
+## Total
+
+Two calls, \$0.0012 combined at these measured costs. See [Historical](/datasets/prices/historical) and [Snapshot](/datasets/prices/snapshot) for the full parameter list.

@@ -1,0 +1,59 @@
+---
+title: "Filing Items"
+description: "One extracted section of a specific SEC filing, as text."
+openapi: "api-reference/openapi.json GET /filings/items"
+---
+
+This route resolves one specific filing, scrapes it, and extracts a named section, "Item 1A Risk Factors" for example, as text. Filing-section extraction uses rule-based parsing against known SEC section boundaries. There is no LLM guessing where a section starts and ends, which is why the extracted text matches the filing verbatim rather than a summary of it.
+
+## What this answers
+
+- What a specific filing actually says in one section, without downloading and parsing the filing yourself.
+
+## Coverage
+
+| | |
+|---|---|
+| Provider chain | The `/filings` index, plus Monid Context.dev `/web/scrape/markdown` to fetch and parse the filing |
+| Measured cost | \$0.0015 per call (index lookup plus scrape) |
+| Cache TTL | 600 seconds, see [Caching](/guides/caching) |
+
+## Query rules
+
+`ticker`, `filing_type`, and `year` are all required. This is stricter than the Financial Datasets schema, which lets `year` be omitted so the server resolves the latest matching filing on its own, a capability that exists only over MCP for this server, not on this REST route. `include_exhibits=true` always answers `400 bad_request`, exhibit content is not implemented. `item` takes one item code per request here, not the array the Financial Datasets schema declares.
+
+When no filing matches the request, this route answers `HTTP 200` with an `ErrorResponse` body rather than a `404`, at no additional cost.
+
+## Worked example
+
+This repo has no committed live capture for `/filings/items`. The example below is illustrative only, field names follow `go/fd/types.go`, and the accession number and excerpt text are synthetic placeholders, not a real filing.
+
+```bash curl
+curl -s 'https://monid-finance-api.fly.dev/filings/items?ticker=AAPL&filing_type=10-K&year=2026&item=Item%201' \
+  -H 'X-API-KEY: <your-api-key>'
+```
+
+```json Item extracted, illustrative
+{
+  "resource": "https://www.sec.gov/Archives/edgar/data/0000320193/000032019326000001/example-10k.htm",
+  "ticker": "AAPL",
+  "filing_type": "10-K",
+  "accession_number": "0000320193-26-000001",
+  "year": 2026,
+  "quarter": null,
+  "items": [
+    {
+      "number": "Item 1",
+      "name": "Business",
+      "text": "Illustrative placeholder excerpt only \u2014 no live capture for this endpoint exists in this repo. [truncated]"
+    }
+  ]
+}
+```
+
+```json No matching filing
+{
+  "error": "not_found",
+  "message": "No 10-K filing matches ticker AAPL, year 1999."
+}
+```

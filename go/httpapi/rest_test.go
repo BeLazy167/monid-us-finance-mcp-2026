@@ -613,7 +613,7 @@ func TestSegmentedFinancials_LimitValidatedBeforeCall(t *testing.T) {
 
 func TestSegmentedFinancials_QuarterlyRejectedByTool(t *testing.T) {
 	caller := newFakeCaller()
-	caller.errs["get_segmented_financials"] = &fdInputError{msg: "period must be annual: the validated route extracts the annual 10-K"}
+	caller.errs["get_segmented_financials"] = &providers.InputError{Msg: "period must be annual: the validated route extracts the annual 10-K"}
 	rt := newTestRouter(caller, nil)
 	rec := doGet(t, rt, "/financials/segments?ticker=AAPL&period=quarterly", map[string]string{apiKeyHeader: testAPIKey})
 	if rec.Code != http.StatusBadRequest {
@@ -675,7 +675,7 @@ func TestKPIRoutes_WrappedShapeAndDefaults(t *testing.T) {
 
 func TestKPIRoutes_TickerRequiredMapsToBadRequest(t *testing.T) {
 	caller := newFakeCaller()
-	caller.errs["get_kpi_metrics"] = &fdInputError{msg: "ticker is required"}
+	caller.errs["get_kpi_metrics"] = &providers.InputError{Msg: "ticker is required"}
 	rt := newTestRouter(caller, nil)
 	rec := doGet(t, rt, "/kpi/metrics", map[string]string{apiKeyHeader: testAPIKey})
 	if rec.Code != http.StatusBadRequest {
@@ -805,7 +805,7 @@ func TestIndexFunds_UnwrappedShapeAndDefaults(t *testing.T) {
 
 func TestIndexFunds_TickerRequiredMapsToBadRequest(t *testing.T) {
 	caller := newFakeCaller()
-	caller.errs["get_index_fund"] = &fdInputError{msg: "ticker is required"}
+	caller.errs["get_index_fund"] = &providers.InputError{Msg: "ticker is required"}
 	rt := newTestRouter(caller, nil)
 	rec := doGet(t, rt, "/index-funds", map[string]string{apiKeyHeader: testAPIKey})
 	if rec.Code != http.StatusBadRequest {
@@ -891,11 +891,3 @@ func TestInstitutionalHoldings_LimitValidatedBeforeCall(t *testing.T) {
 		t.Fatalf("bad limit must not reach the caller, got %d calls", len(caller.calls))
 	}
 }
-
-// ---- shared test-only error type ----
-
-// fdInputError is a minimal stand-in for *providers.InputError so these
-// tests can assert bad_request mapping without importing go/providers.
-type fdInputError struct{ msg string }
-
-func (e *fdInputError) Error() string { return e.msg }

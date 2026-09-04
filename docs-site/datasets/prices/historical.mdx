@@ -1,0 +1,57 @@
+---
+title: "Historical"
+description: "Daily OHLCV bars for a ticker over a date range, ascending by time."
+openapi: "api-reference/openapi.json GET /prices"
+---
+
+This route returns OHLCV bars for a ticker over a date range, sourced from Monid's DefiLlama `/equities/v1/ohlcv` endpoint. The provider gives daily bars. Week, month, and year bars are aggregated locally from those daily bars, and `time` on every bar is the bar's end date in UTC.
+
+## What this answers
+
+- What a stock's open, high, low, close, and volume were on a given day, or across a range of days.
+
+## Coverage
+
+| | |
+|---|---|
+| Provider chain | DefiLlama `/equities/v1/ohlcv` |
+| Bar order | Ascending time, oldest bar first |
+| Measured cost | \$0.0006 per call |
+| Cache TTL | 60 seconds, see [Caching](/guides/caching) |
+
+## Query rules
+
+`ticker`, `start_date`, and `end_date` are all required. This is stricter than the Financial Datasets schema, which lets both dates default (one year before `end_date`, and today, respectively) when omitted. This server does not compute those defaults, so both are required here.
+
+`interval` accepts `day`, `week`, `month`, or `year`. Second- and minute-level intervals from the Financial Datasets schema are not implemented and answer `400`. `interval_multiplier` must be `1`, multi-bar intervals like "every 5 days" are not implemented.
+
+## Worked example
+
+```bash curl
+curl -s 'https://monid-finance-api.fly.dev/prices?ticker=AAPL&start_date=2026-08-27&end_date=2026-08-28' \
+  -H 'X-API-KEY: <your-api-key>'
+```
+
+```json Response
+{
+  "prices": [
+    {
+      "open": 310.55,
+      "close": 314.58,
+      "high": 315.4,
+      "low": 309.4,
+      "volume": 32419200,
+      "time": "2026-08-27"
+    },
+    {
+      "open": 316.85,
+      "close": 319.7,
+      "high": 322.37,
+      "low": 315.45,
+      "volume": 38609800,
+      "time": "2026-08-28"
+    }
+  ],
+  "ticker": "AAPL"
+}
+```

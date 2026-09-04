@@ -1,0 +1,57 @@
+---
+title: "Filings"
+description: "The SEC filing index for a ticker: accession number, form type, dates, and a link to EDGAR."
+openapi: "api-reference/openapi.json GET /filings"
+---
+
+This route lists a company's SEC filings, sourced from Monid's DefiLlama `/equities/v1/filings` endpoint: accession number, filing type, report date, filing date, and a link to the filing on SEC EDGAR. See [Filing Items](/datasets/filings/filing-items) to go further and extract a named section from one specific filing.
+
+## What this answers
+
+- Which 10-Ks, 10-Qs, and 8-Ks a company has filed recently, and where to read them on EDGAR.
+
+## Coverage
+
+| | |
+|---|---|
+| Provider chain | DefiLlama `/equities/v1/filings` |
+| Measured cost | \$0.0006 per call |
+| Cache TTL | 600 seconds, see [Caching](/guides/caching) |
+
+## Query rules
+
+`ticker` is required. `cik` is accepted for parameter parity but always answers `400 bad_request`, only ticker lookup is routed. `filing_type` can repeat in the query string (`?filing_type=10-K&filing_type=10-Q`) and is checked against a fixed list: `10-K`, `10-Q`, `8-K`, `20-F`, `6-K`. That is a stricter list than Financial Datasets' free-text example, so a value like `"DEF 14A"` is rejected here.
+
+`limit` defaults to `10` on this REST route, well below the underlying MCP tool's own default of `100`. Pass `limit` explicitly if the default matters.
+
+`cik` is declared on the `Filing` schema but our own live captures never populate it. It is schema-legal and left out of the response rather than guessed.
+
+## Worked example
+
+```bash curl
+curl -s 'https://monid-finance-api.fly.dev/filings?ticker=AAPL&limit=2' \
+  -H 'X-API-KEY: <your-api-key>'
+```
+
+```json Response
+{
+  "filings": [
+    {
+      "accession_number": "0000320193-26-000018",
+      "filing_type": "8-K",
+      "report_date": "2026-07-30",
+      "filing_date": "2026-07-30",
+      "ticker": "AAPL",
+      "url": "https://www.sec.gov/Archives/edgar/data/0000320193/000032019326000018/aapl-20260730.htm"
+    },
+    {
+      "accession_number": "0000320193-26-000020",
+      "filing_type": "10-Q",
+      "report_date": "2026-06-27",
+      "filing_date": "2026-07-31",
+      "ticker": "AAPL",
+      "url": "https://www.sec.gov/Archives/edgar/data/0000320193/000032019326000020/aapl-20260627.htm"
+    }
+  ]
+}
+```

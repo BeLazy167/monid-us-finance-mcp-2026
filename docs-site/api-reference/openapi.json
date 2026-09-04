@@ -4,7 +4,7 @@
     "title": "Monid Finance API",
     "version": "1.0.0",
     "summary": "A Financial Datasets-compatible finance REST API backed by Monid providers.",
-    "description": "US equities fundamentals, prices, filings, news, insider trades, and a stock screener, generated faithfully from this repository's Go source (go/httpapi/rest.go, go/service, go/fd). This server is drop-in compatible with the Financial Datasets REST and MCP interface: the same route shapes, the same query parameters, and response objects whose field names and field order match that contract. It is an independent, Monid-backed implementation; it is not affiliated with or endorsed by Financial Datasets, and no Financial Datasets data or outputs are used. **Bring your own Monid API key.** Every request carries the caller's own key in the `X-API-KEY` header. Usage bills that caller's own Monid wallet; this server never stores or logs the key. Get a key at https://monid.ai. **Not every documented route is implemented.** Fifteen routes call live Monid providers; twenty more are registered for Financial Datasets route parity and always answer a zero-cost `{\"error\": \"not_implemented\",...}` (tag: Not implemented). See docs/compatibility.md for the phased plan and docs/openapi-notes.md for how this document was derived. **Errors and soft failures.** Every failure \u2014 real HTTP error and zero-cost soft failure alike \u2014 uses the two-key body `{\"error\": <code>, \"message\": <detail>}`. Some routes answer `not_found` with HTTP 200 rather than a 4xx status (see each operation's description). **Pagination.** List routes return a wrapped envelope (e.g. `{\"income_statements\": [...], \"next_page_url\": \"...\"}`) with opaque, server-minted base64url `cursor` tokens. Pages hold 10 records (100 for /prices). `next_page_url` is an absolute URL on this deployment's own host, present only when more records remain.",
+    "description": "US equities fundamentals, prices, filings, news, insider trades, and a stock screener, generated faithfully from this repository's Go source (go/httpapi/rest.go, go/service, go/fd). This server is drop-in compatible with the Financial Datasets REST and MCP interface: the same route shapes, the same query parameters, and response objects whose field names and field order match the Financial Datasets contract (docs/fd-contract-reference.json). It is an independent, Monid-backed implementation; it is not affiliated with or endorsed by Financial Datasets, and no Financial Datasets data or outputs are used.\n\n**Bring your own Monid API key.** Every request carries the caller's own key in the `X-API-KEY` header. Usage bills that caller's own Monid wallet; this server never stores or logs the key. Get a key at https://monid.ai.\n\n**Not every documented route is implemented.** Fifteen routes call live Monid providers; twenty more are registered for Financial Datasets route parity and always answer a zero-cost `{\"error\": \"not_implemented\", ...}` (tag: Not implemented). See docs/compatibility.md for the phased plan and docs/openapi-notes.md for how this document was derived.\n\n**Errors and soft failures.** Every failure — real HTTP error and zero-cost soft failure alike — uses the two-key body `{\"error\": <code>, \"message\": <detail>}`. Some routes answer `not_found` with HTTP 200 rather than a 4xx status (see each operation's description).\n\n**Pagination.** List routes return a wrapped envelope (e.g. `{\"income_statements\": [...], \"next_page_url\": \"...\"}`) with opaque, server-minted base64url `cursor` tokens. Pages hold 10 records (100 for /prices). `next_page_url` is an absolute URL on this deployment's own host, present only when more records remain.",
     "contact": {
       "url": "https://monid-us-finance-mcp-2026.vercel.app"
     },
@@ -60,6 +60,22 @@
     {
       "name": "Company",
       "description": "Company facts."
+    },
+    {
+      "name": "KPIs",
+      "description": "KPI-taxonomy metrics, forward guidance, and non-GAAP metrics extracted from SEC filings."
+    },
+    {
+      "name": "Macroeconomics",
+      "description": "Central bank policy interest rates."
+    },
+    {
+      "name": "Index funds",
+      "description": "ETF / index-fund holdings."
+    },
+    {
+      "name": "Institutional holdings",
+      "description": "SEC Form 13F institutional-holdings rows."
     },
     {
       "name": "Not implemented",
@@ -184,7 +200,7 @@
         ],
         "responses": {
           "200": {
-            "description": "A page of income statements, newest report_period first. Real AAPL FY2025/FY2024 10-K values (docs/fd-live-samples/income_statements.json).",
+            "description": "A page of income statements, newest report_period first. Real AAPL FY2025/FY2024 annual values captured from our own live API (docs/our-live-samples/income_statements.json).",
             "content": {
               "application/json": {
                 "schema": {
@@ -196,63 +212,43 @@
                       "income_statements": [
                         {
                           "ticker": "AAPL",
-                          "report_period": "2025-09-27",
+                          "report_period": "2025-09-30",
                           "fiscal_period": "FY2025",
                           "period": "annual",
-                          "currency": "USD",
-                          "accession_number": "0000320193-25-000079",
-                          "form_type": "10-K",
-                          "filing_url": "https://www.sec.gov/Archives/edgar/data/320193/000032019325000079/0000320193-25-000079-index.htm",
-                          "filing_date": "2025-10-31",
-                          "filing_datetime": "2025-10-31T10:01:26-04:00",
-                          "revenue": 416161000000.0,
-                          "cost_of_revenue": 220960000000.0,
-                          "gross_profit": 195201000000.0,
-                          "operating_expense": 62151000000.0,
-                          "selling_general_and_administrative_expenses": 27601000000.0,
-                          "research_and_development": 34550000000.0,
-                          "operating_income": 133050000000.0,
-                          "ebit": 132729000000.0,
-                          "income_tax_expense": 20719000000.0,
-                          "net_income": 112010000000.0,
-                          "net_income_common_stock": 112010000000.0,
-                          "preferred_dividends_impact": 0.0,
-                          "consolidated_income": 112010000000.0,
+                          "revenue": 416161000000,
+                          "cost_of_revenue": 220960000000,
+                          "gross_profit": 195201000000,
+                          "operating_expense": 62151000000,
+                          "research_and_development": 34550000000,
+                          "operating_income": 133050000000,
+                          "ebit": 133050000000,
+                          "income_tax_expense": 20719000000,
+                          "net_income": 112010000000,
+                          "net_income_common_stock": 112010000000,
                           "earnings_per_share": 7.49,
                           "earnings_per_share_diluted": 7.46,
-                          "dividends_per_common_share": 1.02,
-                          "weighted_average_shares": 14948500000.0,
-                          "weighted_average_shares_diluted": 15004697000.0
+                          "weighted_average_shares": 14948500000,
+                          "weighted_average_shares_diluted": 14948500000
                         },
                         {
                           "ticker": "AAPL",
-                          "report_period": "2024-09-28",
+                          "report_period": "2024-09-30",
                           "fiscal_period": "FY2024",
                           "period": "annual",
-                          "currency": "USD",
-                          "accession_number": "0000320193-24-000123",
-                          "form_type": "10-K",
-                          "filing_url": "https://www.sec.gov/Archives/edgar/data/320193/000032019324000123/0000320193-24-000123-index.htm",
-                          "filing_date": "2024-11-01",
-                          "filing_datetime": "2024-11-01T10:01:36-04:00",
-                          "revenue": 391035000000.0,
-                          "cost_of_revenue": 210352000000.0,
-                          "gross_profit": 180683000000.0,
-                          "operating_expense": 57467000000.0,
-                          "selling_general_and_administrative_expenses": 26097000000.0,
-                          "research_and_development": 31370000000.0,
-                          "operating_income": 123216000000.0,
-                          "ebit": 123485000000.0,
-                          "income_tax_expense": 29749000000.0,
-                          "net_income": 93736000000.0,
-                          "net_income_common_stock": 93736000000.0,
-                          "preferred_dividends_impact": 0.0,
-                          "consolidated_income": 93736000000.0,
+                          "revenue": 391035000000,
+                          "cost_of_revenue": 210352000000,
+                          "gross_profit": 180683000000,
+                          "operating_expense": 57467000000,
+                          "research_and_development": 31370000000,
+                          "operating_income": 123216000000,
+                          "ebit": 123216000000,
+                          "income_tax_expense": 29749000000,
+                          "net_income": 93736000000,
+                          "net_income_common_stock": 93736000000,
                           "earnings_per_share": 6.11,
                           "earnings_per_share_diluted": 6.08,
-                          "dividends_per_common_share": 0.98,
-                          "weighted_average_shares": 15343783000.0,
-                          "weighted_average_shares_diluted": 15408095000.0
+                          "weighted_average_shares": 15343783000,
+                          "weighted_average_shares_diluted": 15343783000
                         }
                       ]
                     }
@@ -399,7 +395,7 @@
         ],
         "responses": {
           "200": {
-            "description": "A page of balance sheets, newest report_period first. Identity fields (ticker, report_period, accession_number, filing_url, filing_date) are the real AAPL FY2025 10-K values also used in the income-statements example; this deployment has no committed live sample with populated balance-sheet figures, so the numeric fields are omitted here rather than fabricated (see docs/openapi-notes.md).",
+            "description": "A page of balance sheets, newest report_period first. Real AAPL FY2025 annual values captured from our own live API (docs/our-live-samples/balance_sheets.json).",
             "content": {
               "application/json": {
                 "schema": {
@@ -411,15 +407,22 @@
                       "balance_sheets": [
                         {
                           "ticker": "AAPL",
-                          "report_period": "2025-09-27",
+                          "report_period": "2025-09-30",
                           "fiscal_period": "FY2025",
                           "period": "annual",
-                          "currency": "USD",
-                          "accession_number": "0000320193-25-000079",
-                          "form_type": "10-K",
-                          "filing_url": "https://www.sec.gov/Archives/edgar/data/320193/000032019325000079/0000320193-25-000079-index.htm",
-                          "filing_date": "2025-10-31",
-                          "filing_datetime": "2025-10-31T10:01:26-04:00"
+                          "total_assets": 359241000000,
+                          "current_assets": 147957000000,
+                          "cash_and_equivalents": 35934000000,
+                          "inventory": 5718000000,
+                          "trade_and_non_trade_receivables": 39777000000,
+                          "non_current_assets": 211284000000,
+                          "total_liabilities": 285508000000,
+                          "current_liabilities": 165631000000,
+                          "current_debt": 20329000000,
+                          "non_current_liabilities": 119877000000,
+                          "non_current_debt": 78328000000,
+                          "shareholders_equity": 73733000000,
+                          "retained_earnings": -14264000000
                         }
                       ]
                     }
@@ -566,7 +569,7 @@
         ],
         "responses": {
           "200": {
-            "description": "A page of cash flow statements, newest report_period first. Identity fields are the real AAPL FY2025 10-K values; numeric fields are omitted in this example rather than fabricated (see docs/openapi-notes.md).",
+            "description": "A page of cash flow statements, newest report_period first. Real AAPL FY2025 annual values captured from our own live API (docs/our-live-samples/cash_flow.json).",
             "content": {
               "application/json": {
                 "schema": {
@@ -578,15 +581,16 @@
                       "cash_flow_statements": [
                         {
                           "ticker": "AAPL",
-                          "report_period": "2025-09-27",
+                          "report_period": "2025-09-30",
                           "fiscal_period": "FY2025",
                           "period": "annual",
-                          "currency": "USD",
-                          "accession_number": "0000320193-25-000079",
-                          "form_type": "10-K",
-                          "filing_url": "https://www.sec.gov/Archives/edgar/data/320193/000032019325000079/0000320193-25-000079-index.htm",
-                          "filing_date": "2025-10-31",
-                          "filing_datetime": "2025-10-31T10:01:26-04:00"
+                          "net_cash_flow_from_operations": 111482000000,
+                          "net_cash_flow_from_investing": 27910000000,
+                          "dividends_and_other_cash_distributions": -15421000000,
+                          "net_cash_flow_from_financing": -120686000000,
+                          "change_in_cash_and_equivalents": 18706000000,
+                          "ending_cash_balance": 35934000000,
+                          "free_cash_flow": 98767000000
                         }
                       ]
                     }
@@ -723,7 +727,7 @@
         ],
         "responses": {
           "200": {
-            "description": "A page of financial-metrics rows, newest report_period first. Margins are computed from the real AAPL FY2025 income-statement figures (gross_profit/revenue etc.); valuation fields are always omitted (see description).",
+            "description": "A page of financial-metrics rows, newest report_period first. Identity fields (ticker, report_period, fiscal_period, period) and margins (gross_margin, operating_margin, net_margin) are real values captured from our own live API (docs/our-live-samples/income_statements.json for identity, docs/our-live-samples/metrics_snapshot.json for the margin ratios, which are identical for FY2025). Filing-identity fields (accession_number, form_type, filing_url, filing_date) and every valuation field are omitted: our own live capture did not have them populated for this row, so they are not asserted here (see docs/openapi-notes.md).",
             "content": {
               "application/json": {
                 "schema": {
@@ -735,16 +739,12 @@
                       "financial_metrics": [
                         {
                           "ticker": "AAPL",
-                          "report_period": "2025-09-27",
+                          "report_period": "2025-09-30",
                           "fiscal_period": "FY2025",
                           "period": "annual",
-                          "accession_number": "0000320193-25-000079",
-                          "form_type": "10-K",
-                          "filing_url": "https://www.sec.gov/Archives/edgar/data/320193/000032019325000079/0000320193-25-000079-index.htm",
-                          "filing_date": "2025-10-31",
-                          "gross_margin": 0.469052,
-                          "operating_margin": 0.319708,
-                          "net_margin": 0.269151
+                          "gross_margin": 0.4865291555900202,
+                          "operating_margin": 0.3317,
+                          "net_margin": 0.27618604910212224
                         }
                       ]
                     }
@@ -795,7 +795,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Real AAPL snapshot (docs/fd-live-samples/snap.json).",
+            "description": "Real AAPL snapshot captured from our own live API (docs/our-live-samples/metrics_snapshot.json).",
             "content": {
               "application/json": {
                 "schema": {
@@ -806,45 +806,15 @@
                     "value": {
                       "snapshot": {
                         "ticker": "AAPL",
-                        "currency": "USD",
-                        "market_cap": 4785139738400.0,
-                        "enterprise_value": 4840899738400.0,
-                        "price_to_earnings_ratio": 37.42067763034204,
-                        "price_to_book_ratio": 44.50464786458333,
-                        "price_to_sales_ratio": 10.250436971614509,
-                        "enterprise_value_to_ebitda_ratio": 28.643360226264157,
-                        "enterprise_value_to_revenue_ratio": 10.369882671590732,
-                        "free_cash_flow_yield": 0.028564056113793344,
-                        "peg_ratio": 1.172113305785851,
+                        "market_cap": 4674544794120,
+                        "enterprise_value": 4698970959518,
+                        "price_to_earnings_ratio": 36.26,
+                        "price_to_book_ratio": 43.48,
+                        "price_to_sales_ratio": 10.01,
+                        "enterprise_value_to_ebitda_ratio": 27.98,
                         "gross_margin": 0.4865291555900202,
-                        "operating_margin": 0.33397240495862457,
-                        "net_margin": 0.27618604910212224,
-                        "return_on_equity": 1.199125744047619,
-                        "return_on_assets": 0.3363982195133406,
-                        "return_on_invested_capital": 0.7543222684958354,
-                        "asset_turnover": 1.2376860547121489,
-                        "inventory_turnover": 52.337350748360336,
-                        "receivables_turnover": 15.122957059785866,
-                        "days_sales_outstanding": 24.135491396096594,
-                        "operating_cycle": 31.109478324761206,
-                        "working_capital_turnover": 8.727050092070703,
-                        "current_ratio": 1.0032948046555858,
-                        "quick_ratio": 0.9290143712414449,
-                        "cash_ratio": 0.2648165758139909,
-                        "operating_cash_flow_ratio": 0.9825750371670038,
-                        "debt_to_equity": 0.8863839285714286,
-                        "debt_to_assets": 0.2486628085976841,
-                        "revenue_growth": 0.14242398286937902,
-                        "earnings_growth": 0.29865028203062044,
-                        "book_value_growth": 0.6332978885006836,
-                        "earnings_per_share_growth": 0.3192581932618972,
-                        "free_cash_flow_growth": 0.42105755635032854,
-                        "operating_income_growth": 0.20358204346315667,
-                        "ebitda_growth": 0.11669364696554231,
-                        "payout_ratio": 0.12130613511207632,
-                        "earnings_per_share": 8.762000604022814,
-                        "book_value_per_share": 7.30699065341296,
-                        "free_cash_flow_per_share": 9.288889541298769
+                        "operating_margin": 0.3317,
+                        "net_margin": 0.27618604910212224
                       }
                     }
                   }
@@ -880,7 +850,7 @@
           "Earnings"
         ],
         "summary": "Get earnings records",
-        "description": "Returns a flat list of EarningsRecord entries composed from SEC filing events (8-K/10-Q/10-K/20-F).\n\n- Pass `ticker` for that company's most recent SEC filings. The same report_period can appear twice when an 8-K announcement and the matching 10-Q have both been filed (the 8-K sorts first).\n- Omit `ticker` for the real-time earnings feed: the most recently filed earnings across covered companies (sourced from the Nasdaq earnings calendar), deduped by ticker.\n\nKnown REST quirk: this route accepts a `limit` query parameter for Financial Datasets parameter parity, but the underlying get_earnings tool ignores it \u2014 the FD JSON Schema for this tool exposes no limit parameter at all, and the server always returns up to 5 records regardless of the value passed here.",
+        "description": "Returns a flat list of EarningsRecord entries composed from SEC filing events (8-K/10-Q/10-K/20-F).\n\n- Pass `ticker` for that company's most recent SEC filings. The same report_period can appear twice when an 8-K announcement and the matching 10-Q have both been filed (the 8-K sorts first).\n- Omit `ticker` for the real-time earnings feed: the most recently filed earnings across covered companies (sourced from the Nasdaq earnings calendar), deduped by ticker.\n\nKnown REST quirk: this route accepts a `limit` query parameter for Financial Datasets parameter parity, but the underlying get_earnings tool ignores it — the FD JSON Schema for this tool exposes no limit parameter at all, and the server always returns up to 5 records regardless of the value passed here.",
         "parameters": [
           {
             "name": "ticker",
@@ -913,7 +883,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Real AAPL 8-K earnings record (docs/fd-live-samples/earnings.json), ticker mode.",
+            "description": "Illustrative shape only: this repo has no captured live sample for /earnings. Every value below is a synthetic placeholder chosen to show field shape and types, not a real filing, figure, or headline. Field names follow go/fd/types.go (EarningsRecord) and the quarterly/annual block field names follow go/providers/earnings.go (EarningsTimeDimension).",
             "content": {
               "application/json": {
                 "schema": {
@@ -925,146 +895,40 @@
                       "earnings": [
                         {
                           "ticker": "AAPL",
-                          "report_period": "2026-06-27",
-                          "fiscal_period": "2026-Q3",
+                          "report_period": "2026-06-30",
+                          "fiscal_period": "2026-Q2",
                           "currency": "USD",
-                          "source_type": "8-K",
-                          "filing_date": "2026-07-30",
-                          "filing_datetime": "2026-07-30T16:30:28-04:00",
-                          "filing_window": "AFTER_HOURS",
+                          "source_type": "10-Q",
+                          "filing_date": "2026-07-15",
+                          "filing_window": "BEFORE_MARKET",
                           "signals": [
                             {
-                              "type": "EPS_BEAT",
-                              "metric": "earnings_per_share",
-                              "period": "2026-Q3",
-                              "headline": "EPS of $2.02 beat estimate of $1.75 by 15.4%",
-                              "details": {
-                                "actual": 2.02,
-                                "estimate": 1.75,
-                                "surprise_pct": 0.1543
-                              }
-                            },
-                            {
-                              "type": "REVENUE_BEAT",
+                              "type": "example_signal",
                               "metric": "revenue",
-                              "period": "2026-Q3",
-                              "headline": "Revenue of $109.4B beat estimate of $103.9B by 5.31%",
+                              "period": "2026-Q2",
+                              "headline": "Illustrative placeholder headline — signal vocabulary is provider-defined and not asserted here.",
                               "details": {
-                                "actual": 109417000000.0,
-                                "estimate": 103901929700.0,
-                                "surprise_pct": 0.0531
-                              }
-                            },
-                            {
-                              "type": "STRONG_CAPEX_INCREASE",
-                              "metric": "capital_expenditure",
-                              "period": "2026-Q3",
-                              "headline": "Capital expenditure grew 96.4% year-over-year to $6.8B",
-                              "details": {
-                                "current": 6799000000.0,
-                                "yoy_chg": 0.9639
-                              }
-                            },
-                            {
-                              "type": "MARGIN_EXPANSION",
-                              "metric": "gross_margin",
-                              "period": "2026-Q3",
-                              "headline": "Gross margin expanded 357bps year-over-year to 50.1%",
-                              "details": {
-                                "margin": "gross_margin",
-                                "bps": 356.6,
-                                "current": 0.500562069879452
-                              }
-                            },
-                            {
-                              "type": "REVENUE_INCREASE",
-                              "metric": "revenue",
-                              "period": "2026-Q3",
-                              "headline": "Revenue grew 16.4% year-over-year to $109.4B",
-                              "details": {
-                                "current": 109417000000.0,
-                                "yoy_chg": 0.1636
-                              }
-                            },
-                            {
-                              "type": "NET_INCOME_INCREASE",
-                              "metric": "net_income",
-                              "period": "2026-Q3",
-                              "headline": "Net income grew 27.1% year-over-year to $29.8B",
-                              "details": {
-                                "current": 29789000000.0,
-                                "yoy_chg": 0.2712
-                              }
-                            },
-                            {
-                              "type": "EPS_INCREASE",
-                              "metric": "earnings_per_share",
-                              "period": "2026-Q3",
-                              "headline": "EPS grew 28.7% year-over-year to $2.02",
-                              "details": {
-                                "current": 2.02,
-                                "yoy_chg": 0.2866
-                              }
-                            },
-                            {
-                              "type": "GUIDANCE_INITIATED",
-                              "metric": "dividends_per_common_share",
-                              "period": "Q4 2026",
-                              "headline": "Initiated Q4 2026 dividends per common share guidance of $0.27",
-                              "details": {
-                                "metric_name": "dividends_per_common_share",
-                                "period": "Q4 2026",
-                                "point_estimate": 0.27,
-                                "unit": "dollars per share"
+                                "actual": 100000000000.0,
+                                "estimate": 95000000000.0
                               }
                             }
                           ],
-                          "filing_url": "https://www.sec.gov/Archives/edgar/data/320193/000032019326000018/0000320193-26-000018-index.htm",
-                          "accession_number": "0000320193-26-000018",
+                          "filing_url": "https://www.sec.gov/Archives/edgar/data/0000320193/000032019326000000/example-10q.htm",
+                          "accession_number": "0000320193-26-000000",
                           "quarterly": {
-                            "revenue": 109417000000.0,
-                            "revenue_yoy_chg": 0.1636,
-                            "estimated_revenue": 103901929700,
-                            "revenue_surprise": "BEAT",
-                            "revenue_surprise_pct": 0.0531,
-                            "earnings_per_share": 2.02,
-                            "earnings_per_share_yoy_chg": 0.2866,
-                            "estimated_earnings_per_share": 1.75,
-                            "eps_surprise": "BEAT",
-                            "eps_surprise_pct": 0.1543,
-                            "gross_profit": 54770000000.0,
-                            "gross_profit_yoy_chg": 0.2528,
-                            "gross_margin": 0.500562069879452,
-                            "gross_margin_yoy_chg_bps": 356.6,
-                            "gross_margin_yoy_chg_pct": 0.0767,
-                            "operating_income": 35695000000.0,
-                            "operating_income_yoy_chg": 0.2657,
-                            "operating_margin": 0.3262290137729969,
-                            "operating_margin_yoy_chg_bps": 263.2,
-                            "operating_margin_yoy_chg_pct": 0.0878,
-                            "net_income": 29789000000.0,
-                            "net_income_yoy_chg": 0.2712,
-                            "net_margin": 0.2722520266503377,
-                            "net_margin_yoy_chg_bps": 230.5,
-                            "net_margin_yoy_chg_pct": 0.0925,
-                            "weighted_average_shares": 14656110000.0,
-                            "weighted_average_shares_diluted": 14714676000.0,
-                            "cash_and_equivalents": 39544000000.0,
-                            "change_in_cash_and_equivalents": 3610000000.0,
-                            "total_debt": 82347000000.0,
-                            "total_assets": 383266000000.0,
-                            "total_liabilities": 275746000000.0,
-                            "shareholders_equity": 107520000000.0,
-                            "net_cash_flow_from_operations": 116996000000.0,
-                            "net_cash_flow_from_operations_yoy_chg": 3.1984,
-                            "net_cash_flow_from_investing": -18811000000.0,
-                            "net_cash_flow_from_investing_yoy_chg": -4.7081,
-                            "net_cash_flow_from_financing": -94575000000.0,
-                            "net_cash_flow_from_financing_yoy_chg": -2.8084,
-                            "capital_expenditure": -6799000000.0,
-                            "capital_expenditure_yoy_chg": 0.9639,
-                            "free_cash_flow": 110197000000.0,
-                            "free_cash_flow_yoy_chg": 3.5153
+                            "revenue": 100000000000.0,
+                            "revenue_yoy_chg": 0.05,
+                            "earnings_per_share": 1.5,
+                            "earnings_per_share_yoy_chg": 0.03,
+                            "gross_profit": 45000000000.0,
+                            "gross_margin": 0.45,
+                            "operating_income": 25000000000.0,
+                            "operating_margin": 0.25,
+                            "net_income": 20000000000.0,
+                            "net_margin": 0.2,
+                            "weighted_average_shares": 15000000000.0,
+                            "weighted_average_shares_diluted": 15050000000.0,
+                            "free_cash_flow": 22000000000.0
                           }
                         }
                       ]
@@ -1102,7 +966,7 @@
           "Filings"
         ],
         "summary": "Get SEC filings",
-        "description": "Lists SEC filings for a ticker, sourced from Monid's DefiLlama `/equities/v1/filings` endpoint. `cik` is accepted for Financial Datasets parameter parity but always answers 400 bad_request (\"cik lookup is not supported; pass ticker instead\"); only ticker lookup is routed.\n\n`filing_type` may be repeated (`?filing_type=10-K&filing_type=10-Q`) and is validated against 10-K, 10-Q, 8-K, 20-F, 6-K \u2014 a stricter enum than Financial Datasets' free-text example (e.g. \"DEF 14A\" is not accepted here).",
+        "description": "Lists SEC filings for a ticker, sourced from Monid's DefiLlama `/equities/v1/filings` endpoint. `cik` is accepted for Financial Datasets parameter parity but always answers 400 bad_request (\"cik lookup is not supported; pass ticker instead\"); only ticker lookup is routed.\n\n`filing_type` may be repeated (`?filing_type=10-K&filing_type=10-Q`) and is validated against 10-K, 10-Q, 8-K, 20-F, 6-K — a stricter enum than Financial Datasets' free-text example (e.g. \"DEF 14A\" is not accepted here).",
         "parameters": [
           {
             "name": "ticker",
@@ -1167,7 +1031,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Real AAPL 10-K filings (docs/fd-live-samples/filings.json).",
+            "description": "Real AAPL filings captured from our own live API (docs/our-live-samples/filings.json).",
             "content": {
               "application/json": {
                 "schema": {
@@ -1178,31 +1042,20 @@
                     "value": {
                       "filings": [
                         {
-                          "cik": 320193,
-                          "accession_number": "0000320193-25-000079",
-                          "filing_type": "10-K",
-                          "report_date": "2025-09-27",
-                          "filing_date": "2025-10-31",
+                          "accession_number": "0000320193-26-000018",
+                          "filing_type": "8-K",
+                          "report_date": "2026-07-30",
+                          "filing_date": "2026-07-30",
                           "ticker": "AAPL",
-                          "url": "https://www.sec.gov/Archives/edgar/data/320193/000032019325000079/aapl-20250927.htm"
+                          "url": "https://www.sec.gov/Archives/edgar/data/0000320193/000032019326000018/aapl-20260730.htm"
                         },
                         {
-                          "cik": 320193,
-                          "accession_number": "0000320193-24-000123",
-                          "filing_type": "10-K",
-                          "report_date": "2024-09-28",
-                          "filing_date": "2024-11-01",
+                          "accession_number": "0000320193-26-000020",
+                          "filing_type": "10-Q",
+                          "report_date": "2026-06-27",
+                          "filing_date": "2026-07-31",
                           "ticker": "AAPL",
-                          "url": "https://www.sec.gov/Archives/edgar/data/320193/000032019324000123/aapl-20240928.htm"
-                        },
-                        {
-                          "cik": 320193,
-                          "accession_number": "0000320193-23-000106",
-                          "filing_type": "10-K",
-                          "report_date": "2023-09-30",
-                          "filing_date": "2023-11-03",
-                          "ticker": "AAPL",
-                          "url": "https://www.sec.gov/Archives/edgar/data/320193/000032019323000106/aapl-20230930.htm"
+                          "url": "https://www.sec.gov/Archives/edgar/data/0000320193/000032019326000020/aapl-20260627.htm"
                         }
                       ]
                     }
@@ -1239,7 +1092,7 @@
           "Prices"
         ],
         "summary": "Get historical OHLCV prices",
-        "description": "Fetches historical OHLCV price bars for a ticker over [start_date, end_date], sourced from Monid's DefiLlama `/equities/v1/ohlcv` endpoint (daily bars) and aggregated locally into week/month/year bars when requested. Prices are returned in ascending time order; `time` is each bar's end date in UTC.\n\nDeviation from the FD JSON Schema: `start_date` and `end_date` are both functionally required here (400 bad_request \"start_date and end_date are required\" if either is missing) \u2014 this server does not compute the FD schema's documented defaults (\"1 year before end_date\" / \"today\"). `interval` supports day/week/month/year only; the FD schema's second/minute intervals are not implemented and answer 400. `interval_multiplier` must be 1 (multi-bar intervals are not implemented).",
+        "description": "Fetches historical OHLCV price bars for a ticker over [start_date, end_date], sourced from Monid's DefiLlama `/equities/v1/ohlcv` endpoint (daily bars) and aggregated locally into week/month/year bars when requested. Prices are returned in ascending time order; `time` is each bar's end date in UTC.\n\nDeviation from the FD JSON Schema: `start_date` and `end_date` are both functionally required here (400 bad_request \"start_date and end_date are required\" if either is missing) — this server does not compute the FD schema's documented defaults (\"1 year before end_date\" / \"today\"). `interval` supports day/week/month/year only; the FD schema's second/minute intervals are not implemented and answer 400. `interval_multiplier` must be 1 (multi-bar intervals are not implemented).",
         "parameters": [
           {
             "name": "ticker",
@@ -1311,7 +1164,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Real AAPL daily bars (docs/fd-live-samples/prices.json).",
+            "description": "Real AAPL daily bars captured from our own live API (docs/our-live-samples/prices.json).",
             "content": {
               "application/json": {
                 "schema": {
@@ -1320,30 +1173,13 @@
                 "examples": {
                   "example": {
                     "value": {
-                      "ticker": "AAPL",
                       "prices": [
-                        {
-                          "open": 310.79,
-                          "close": 309.9,
-                          "high": 313.59,
-                          "low": 308.21,
-                          "volume": 25869807,
-                          "time": "2026-08-25"
-                        },
-                        {
-                          "open": 310.3,
-                          "close": 313.45,
-                          "high": 315.43,
-                          "low": 308.8,
-                          "volume": 34024486,
-                          "time": "2026-08-26"
-                        },
                         {
                           "open": 310.55,
                           "close": 314.58,
                           "high": 315.4,
                           "low": 309.4,
-                          "volume": 32419233,
+                          "volume": 32419200,
                           "time": "2026-08-27"
                         },
                         {
@@ -1351,10 +1187,11 @@
                           "close": 319.7,
                           "high": 322.37,
                           "low": 315.45,
-                          "volume": 38649398,
+                          "volume": 38609800,
                           "time": "2026-08-28"
                         }
-                      ]
+                      ],
+                      "ticker": "AAPL"
                     }
                   }
                 }
@@ -1403,7 +1240,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Derived from the real AAPL closing/opening prices for 2026-08-28 (docs/fd-live-samples/prices.json): day_change and day_change_percent are computed from that real bar, not fabricated.",
+            "description": "Real AAPL snapshot captured from our own live API (docs/our-live-samples/price_snapshot.json).",
             "content": {
               "application/json": {
                 "schema": {
@@ -1413,11 +1250,11 @@
                   "example": {
                     "value": {
                       "snapshot": {
-                        "price": 319.7,
+                        "price": 318.27,
                         "ticker": "AAPL",
-                        "day_change": 2.85,
-                        "day_change_percent": 0.008995,
-                        "time": "2026-08-28T20:00:00Z"
+                        "day_change": -9.94,
+                        "day_change_percent": -3.029,
+                        "time": "2026-09-04T15:01:00Z"
                       }
                     }
                   }
@@ -1655,7 +1492,7 @@
           "Screener"
         ],
         "summary": "Screen stocks by exchange and market cap",
-        "description": "Screens stocks via Monid's Nasdaq `/get_stock_screener` endpoint. Only two filter fields are executable today: exchange (NASDAQ/NYSE/AMEX) and market_cap (mega/large/mid/small/micro/nano), both with operator=eq \u2014 a small subset of the full Financial Datasets screener catalog. Use GET /financials/search/screener/filters to discover the exact executable set. `currency` is accepted for FD parameter parity but only \"USD\" is supported (any other value answers 400). Never paginated: there is no next_page_url; use `limit` to bound the result set.",
+        "description": "Screens stocks via Monid's Nasdaq `/get_stock_screener` endpoint. Only two filter fields are executable today: exchange (NASDAQ/NYSE/AMEX) and market_cap (mega/large/mid/small/micro/nano), both with operator=eq — a small subset of the full Financial Datasets screener catalog. Use GET /financials/search/screener/filters to discover the exact executable set. `currency` is accepted for FD parameter parity but only \"USD\" is supported (any other value answers 400). Never paginated: there is no next_page_url; use `limit` to bound the result set.",
         "requestBody": {
           "required": true,
           "content": {
@@ -1695,10 +1532,10 @@
                         {
                           "ticker": "AAPL",
                           "exchange": "NASDAQ",
-                          "market_cap": "4785139738400",
-                          "last_sale": "$319.70",
-                          "net_change": "5.30",
-                          "percent_change": "1.69%"
+                          "market_cap": "4700000000000",
+                          "last_sale": "$320.00",
+                          "net_change": "2.50",
+                          "percent_change": "0.79%"
                         },
                         {
                           "ticker": "MSFT",
@@ -1907,7 +1744,7 @@
           "Filings"
         ],
         "summary": "Get extracted SEC filing sections",
-        "description": "Retrieves specific sections (items) from one SEC filing: fetches the filing index, resolves the matching 10-K/10-Q/8-K, scrapes it (Monid Context.dev `/web/scrape/markdown`), and extracts the requested item section(s).\n\nDeviations from the FD JSON Schema: `year` is required here (400 bad_request \"year is required\" if missing) even though the FD schema, and the underlying get_filing_items tool itself, support omitting `year` to auto-resolve the latest matching filing \u2014 that capability exists only via MCP, not REST. `item` accepts a single item code per request here, not the array the FD schema declares. `include_exhibits` is accepted for FD parameter parity but true always answers 400 bad_request: exhibit extraction is not implemented. When no filing matches, this answers HTTP 200 with an ErrorResponse body rather than a 4xx status, at zero additional cost.",
+        "description": "Retrieves specific sections (items) from one SEC filing: fetches the filing index, resolves the matching 10-K/10-Q/8-K, scrapes it (Monid Context.dev `/web/scrape/markdown`), and extracts the requested item section(s).\n\nDeviations from the FD JSON Schema: `year` is required here (400 bad_request \"year is required\" if missing) even though the FD schema, and the underlying get_filing_items tool itself, support omitting `year` to auto-resolve the latest matching filing — that capability exists only via MCP, not REST. `item` accepts a single item code per request here, not the array the FD schema declares. `include_exhibits` is accepted for FD parameter parity but true always answers 400 bad_request: exhibit extraction is not implemented. When no filing matches, this answers HTTP 200 with an ErrorResponse body rather than a 4xx status, at zero additional cost.",
         "parameters": [
           {
             "name": "ticker",
@@ -2000,17 +1837,17 @@
                   "found": {
                     "summary": "Item extracted",
                     "value": {
-                      "resource": "https://www.sec.gov/Archives/edgar/data/320193/000032019325000079/aapl-20250927.htm",
+                      "resource": "https://www.sec.gov/Archives/edgar/data/0000320193/000032019326000001/example-10k.htm",
                       "ticker": "AAPL",
                       "filing_type": "10-K",
-                      "accession_number": "0000320193-25-000079",
-                      "year": 2025,
+                      "accession_number": "0000320193-26-000001",
+                      "year": 2026,
                       "quarter": null,
                       "items": [
                         {
                           "number": "Item 1",
                           "name": "Business",
-                          "text": "The Company designs, manufactures and markets smartphones, personal computers, tablets, wearables and accessories, and sells a variety of related services. [truncated - illustrative excerpt only]"
+                          "text": "Illustrative placeholder excerpt only — no live capture for this endpoint exists in this repo. [truncated]"
                         }
                       ]
                     }
@@ -2049,37 +1886,124 @@
     },
     "/kpi/metrics": {
       "get": {
-        "operationId": "get_kpi_metrics_not_implemented",
+        "operationId": "get_kpi_metrics",
         "tags": [
-          "Not implemented"
+          "KPIs"
         ],
-        "summary": "/kpi/metrics (not implemented)",
-        "description": "Registered as a Financial Datasets-compatible route for parity, but not implemented by this deployment yet. Always answers HTTP 200 with a not_implemented ErrorResponse body, at zero cost and with no Monid call made \u2014 this is authenticated (X-API-KEY required) but otherwise free. See docs/compatibility.md for the phased implementation plan.",
-        "parameters": [],
+        "summary": "Get KPI metrics",
+        "description": "Extracts operational KPI-taxonomy metrics (subscriber counts, ARPU, units sold, and similar) from a company's single most recent matching SEC filing: the latest 10-K for period=annual, or latest 10-Q for period=quarterly (the default). Data comes from document extraction (Context.dev /web/extract), not an internal metrics database - see go/service/kpi.go. segment, yoy_value, and yoy_change_pct are declared on KPIMetric for Financial Datasets schema parity but always omitted: this server's extraction never asks a filing for them. When no matching filing exists for the ticker, this server answers HTTP 200 with a not_found ErrorResponse body (mirroring the rest of this API's honest-failure convention) rather than a 404 or an empty list.",
+        "parameters": [
+          {
+            "name": "ticker",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Uppercase-normalized ticker symbol (1-20 letters/digits/dots/hyphens)."
+          },
+          {
+            "name": "period",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "quarterly",
+                "annual"
+              ],
+              "default": "quarterly"
+            },
+            "description": "Which filing to extract from: \"quarterly\" (the latest 10-Q, the default) or \"annual\" (the latest 10-K)."
+          },
+          {
+            "name": "metric_name",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Restrict the response to one metric name from the extracted set. Omit to return every metric this server extracts from the filing."
+          },
+          {
+            "name": "report_period_gte",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Only return rows if the selected filing's report_period is on or after this date (YYYY-MM-DD); otherwise this server returns an empty list rather than searching earlier filings."
+          },
+          {
+            "name": "report_period_lte",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Only return rows if the selected filing's report_period is on or before this date (YYYY-MM-DD); otherwise this server returns an empty list rather than searching earlier filings."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 4
+            },
+            "description": "Number of records to retrieve (default: 4, max: 50)."
+          }
+        ],
         "responses": {
           "200": {
-            "description": "Zero-cost not_implemented stub.",
+            "description": "Illustrative shape (no captured live sample committed for this route); values are structural placeholders, not a claim about real reported figures.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/NotImplementedResponse"
+                  "$ref": "#/components/schemas/KPIMetricsResponse"
                 },
                 "examples": {
                   "example": {
                     "value": {
-                      "error": "not_implemented",
-                      "message": "This Financial Datasets route is not implemented by the Monid-backed server yet; the call was free and no data was fabricated."
+                      "kpi_metrics": [
+                        {
+                          "ticker": "AAPL",
+                          "metric_name": "iphone_units_sold",
+                          "value": 46000000,
+                          "unit": "units",
+                          "period": "Q3 2025",
+                          "period_type": "quarterly",
+                          "source_text": "iPhone unit sales were 46 million in the third quarter.",
+                          "source_url": "https://www.sec.gov/Archives/edgar/data/320193/000032019325000012/aapl-20250628.htm"
+                        }
+                      ]
                     }
                   }
                 }
               }
             }
           },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "402": {
+            "$ref": "#/components/responses/PaymentRequired"
+          },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "504": {
+            "$ref": "#/components/responses/GatewayTimeout"
           }
         }
       }
@@ -2091,7 +2015,7 @@
           "Not implemented"
         ],
         "summary": "/kpi/metrics/tickers (not implemented)",
-        "description": "Registered as a Financial Datasets-compatible route for parity, but not implemented by this deployment yet. Always answers HTTP 200 with a not_implemented ErrorResponse body, at zero cost and with no Monid call made \u2014 this is authenticated (X-API-KEY required) but otherwise free. See docs/compatibility.md for the phased implementation plan.",
+        "description": "Registered as a Financial Datasets-compatible route for parity, but not implemented by this deployment yet. Always answers HTTP 200 with a not_implemented ErrorResponse body, at zero cost and with no Monid call made — this is authenticated (X-API-KEY required) but otherwise free. See docs/compatibility.md for the phased implementation plan.",
         "parameters": [],
         "responses": {
           "200": {
@@ -2128,7 +2052,7 @@
           "Not implemented"
         ],
         "summary": "/kpi/metrics/sectors (not implemented)",
-        "description": "Registered as a Financial Datasets-compatible route for parity, but not implemented by this deployment yet. Always answers HTTP 200 with a not_implemented ErrorResponse body, at zero cost and with no Monid call made \u2014 this is authenticated (X-API-KEY required) but otherwise free. See docs/compatibility.md for the phased implementation plan.",
+        "description": "Registered as a Financial Datasets-compatible route for parity, but not implemented by this deployment yet. Always answers HTTP 200 with a not_implemented ErrorResponse body, at zero cost and with no Monid call made — this is authenticated (X-API-KEY required) but otherwise free. See docs/compatibility.md for the phased implementation plan.",
         "parameters": [],
         "responses": {
           "200": {
@@ -2160,174 +2084,426 @@
     },
     "/kpi/guidance": {
       "get": {
-        "operationId": "get_kpi_guidance_not_implemented",
+        "operationId": "get_kpi_guidance",
         "tags": [
-          "Not implemented"
+          "KPIs"
         ],
-        "summary": "/kpi/guidance (not implemented)",
-        "description": "Registered as a Financial Datasets-compatible route for parity, but not implemented by this deployment yet. Always answers HTTP 200 with a not_implemented ErrorResponse body, at zero cost and with no Monid call made \u2014 this is authenticated (X-API-KEY required) but otherwise free. See docs/compatibility.md for the phased implementation plan.",
-        "parameters": [],
+        "summary": "Get forward guidance",
+        "description": "Extracts forward-looking KPI guidance issued by company management from a company's single most recent matching SEC filing: the latest 10-K for period=annual, or latest 10-Q for period=quarterly (the default). Data comes from document extraction (Context.dev /web/extract), not an internal guidance database - see go/service/kpi.go. segment, low, high, point_estimate, prior_value, and change_direction are declared on KPIGuidanceItem for Financial Datasets schema parity but always omitted: this server's extraction never asks a filing for them. When no matching filing exists for the ticker, this server answers HTTP 200 with a not_found ErrorResponse body (mirroring the rest of this API's honest-failure convention) rather than a 404 or an empty list.",
+        "parameters": [
+          {
+            "name": "ticker",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Uppercase-normalized ticker symbol (1-20 letters/digits/dots/hyphens)."
+          },
+          {
+            "name": "period",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "quarterly",
+                "annual"
+              ],
+              "default": "quarterly"
+            },
+            "description": "Which filing to extract from: \"quarterly\" (the latest 10-Q, the default) or \"annual\" (the latest 10-K)."
+          },
+          {
+            "name": "metric_name",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Restrict the response to one metric name from the extracted set. Omit to return every metric this server extracts from the filing."
+          },
+          {
+            "name": "report_period_gte",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Only return rows if the selected filing's report_period is on or after this date (YYYY-MM-DD); otherwise this server returns an empty list rather than searching earlier filings."
+          },
+          {
+            "name": "report_period_lte",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Only return rows if the selected filing's report_period is on or before this date (YYYY-MM-DD); otherwise this server returns an empty list rather than searching earlier filings."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 4
+            },
+            "description": "Number of records to retrieve (default: 4, max: 50)."
+          }
+        ],
         "responses": {
           "200": {
-            "description": "Zero-cost not_implemented stub.",
+            "description": "Illustrative shape (no captured live sample committed for this route); values are structural placeholders, not a claim about real reported figures.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/NotImplementedResponse"
+                  "$ref": "#/components/schemas/KPIGuidanceResponse"
                 },
                 "examples": {
                   "example": {
                     "value": {
-                      "error": "not_implemented",
-                      "message": "This Financial Datasets route is not implemented by the Monid-backed server yet; the call was free and no data was fabricated."
+                      "kpi_guidance": [
+                        {
+                          "ticker": "AAPL",
+                          "metric_name": "revenue_guidance",
+                          "value": 132000000000,
+                          "unit": "USD",
+                          "period": "Q1 2026",
+                          "period_type": "quarterly",
+                          "raw_text": "We expect revenue for the December quarter to be between $131 billion and $133 billion.",
+                          "source_text": "We expect revenue for the December quarter to be between $131 billion and $133 billion.",
+                          "source_url": "https://www.sec.gov/Archives/edgar/data/320193/000032019325000012/aapl-20250927.htm"
+                        }
+                      ]
                     }
                   }
                 }
               }
             }
           },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "402": {
+            "$ref": "#/components/responses/PaymentRequired"
+          },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "504": {
+            "$ref": "#/components/responses/GatewayTimeout"
           }
         }
       }
     },
     "/kpi/non-gaap": {
       "get": {
-        "operationId": "get_kpi_non_gaap_not_implemented",
+        "operationId": "get_kpi_non_gaap",
         "tags": [
-          "Not implemented"
+          "KPIs"
         ],
-        "summary": "/kpi/non-gaap (not implemented)",
-        "description": "Registered as a Financial Datasets-compatible route for parity, but not implemented by this deployment yet. Always answers HTTP 200 with a not_implemented ErrorResponse body, at zero cost and with no Monid call made \u2014 this is authenticated (X-API-KEY required) but otherwise free. See docs/compatibility.md for the phased implementation plan.",
-        "parameters": [],
+        "summary": "Get non-GAAP metrics",
+        "description": "Extracts non-GAAP metrics a company reports about itself (adjusted EBITDA, company-defined free cash flow, and similar) from a company's single most recent matching SEC filing: the latest 10-K for period=annual, or latest 10-Q for period=quarterly (the default). Data comes from document extraction (Context.dev /web/extract), not an internal metrics database - see go/service/kpi.go. gaap_equivalent and key_adjustments are declared on KPINonGAAPMetric for Financial Datasets schema parity but always omitted: this server's extraction never asks a filing for them. When no matching filing exists for the ticker, this server answers HTTP 200 with a not_found ErrorResponse body (mirroring the rest of this API's honest-failure convention) rather than a 404 or an empty list.",
+        "parameters": [
+          {
+            "name": "ticker",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Uppercase-normalized ticker symbol (1-20 letters/digits/dots/hyphens)."
+          },
+          {
+            "name": "period",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "quarterly",
+                "annual"
+              ],
+              "default": "quarterly"
+            },
+            "description": "Which filing to extract from: \"quarterly\" (the latest 10-Q, the default) or \"annual\" (the latest 10-K)."
+          },
+          {
+            "name": "metric_name",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Restrict the response to one metric name from the extracted set. Omit to return every metric this server extracts from the filing."
+          },
+          {
+            "name": "report_period_gte",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Only return rows if the selected filing's report_period is on or after this date (YYYY-MM-DD); otherwise this server returns an empty list rather than searching earlier filings."
+          },
+          {
+            "name": "report_period_lte",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Only return rows if the selected filing's report_period is on or before this date (YYYY-MM-DD); otherwise this server returns an empty list rather than searching earlier filings."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 4
+            },
+            "description": "Number of records to retrieve (default: 4, max: 50)."
+          }
+        ],
         "responses": {
           "200": {
-            "description": "Zero-cost not_implemented stub.",
+            "description": "Illustrative shape (no captured live sample committed for this route); values are structural placeholders, not a claim about real reported figures.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/NotImplementedResponse"
+                  "$ref": "#/components/schemas/KPINonGAAPResponse"
                 },
                 "examples": {
                   "example": {
                     "value": {
-                      "error": "not_implemented",
-                      "message": "This Financial Datasets route is not implemented by the Monid-backed server yet; the call was free and no data was fabricated."
+                      "kpi_non_gaap": [
+                        {
+                          "ticker": "AAPL",
+                          "metric_name": "adjusted_ebitda",
+                          "value": 41000000000,
+                          "unit": "USD",
+                          "period": "Q3 2025",
+                          "period_type": "quarterly",
+                          "source_text": "Adjusted EBITDA for the quarter was $41.0 billion.",
+                          "source_url": "https://www.sec.gov/Archives/edgar/data/320193/000032019325000012/aapl-20250628.htm"
+                        }
+                      ]
                     }
                   }
                 }
               }
             }
           },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "402": {
+            "$ref": "#/components/responses/PaymentRequired"
+          },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "504": {
+            "$ref": "#/components/responses/GatewayTimeout"
           }
         }
       }
     },
     "/macro/interest-rates": {
       "get": {
-        "operationId": "get_macro_interest_rates_not_implemented",
+        "operationId": "get_interest_rates",
         "tags": [
-          "Not implemented"
+          "Macroeconomics"
         ],
-        "summary": "/macro/interest-rates (not implemented)",
-        "description": "Registered as a Financial Datasets-compatible route for parity, but not implemented by this deployment yet. Always answers HTTP 200 with a not_implemented ErrorResponse body, at zero cost and with no Monid call made \u2014 this is authenticated (X-API-KEY required) but otherwise free. See docs/compatibility.md for the phased implementation plan.",
+        "summary": "Interest Rates (Historical)",
+        "description": "Returns each major central bank's current policy interest rate (Federal Reserve, European Central Bank, Bank of England, Bank of Japan), scraped live from each bank's own site and parsed on the fly by go/service/interestrates.go - not a historical time series database. This server has no historical rate storage, so both /macro/interest-rates (Financial Datasets' historical route) and /macro/interest-rates/snapshot (its real-time route) call the exact same tool and answer with today's scraped rate per bank; neither accepts a bank, start_date, or end_date parameter, since the underlying get_interest_rates tool takes no parameters at all (it always fetches every bank it can reach). A bank whose page cannot be scraped or parsed in a given call is left out of the response rather than failing the whole request.",
         "parameters": [],
         "responses": {
           "200": {
-            "description": "Zero-cost not_implemented stub.",
+            "description": "Illustrative shape (no captured live sample committed for this route); values are structural placeholders, not a claim about real reported figures. A bank is omitted entirely, not nulled out, when its page could not be scraped or parsed this call.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/NotImplementedResponse"
+                  "$ref": "#/components/schemas/InterestRatesResponse"
                 },
                 "examples": {
                   "example": {
                     "value": {
-                      "error": "not_implemented",
-                      "message": "This Financial Datasets route is not implemented by the Monid-backed server yet; the call was free and no data was fabricated."
+                      "interest_rates": [
+                        {
+                          "bank": "FED",
+                          "name": "Federal Reserve",
+                          "rate": 4.0,
+                          "date": "2025-09-17"
+                        },
+                        {
+                          "bank": "ECB",
+                          "name": "European Central Bank",
+                          "rate": 2.15,
+                          "date": "2025-09-11"
+                        },
+                        {
+                          "bank": "BOE",
+                          "name": "Bank of England",
+                          "rate": 4.0,
+                          "date": "2025-08-07"
+                        },
+                        {
+                          "bank": "BOJ",
+                          "name": "Bank of Japan",
+                          "rate": 0.5,
+                          "date": "2025-07-31"
+                        }
+                      ]
                     }
                   }
                 }
               }
             }
           },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "402": {
+            "$ref": "#/components/responses/PaymentRequired"
+          },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "504": {
+            "$ref": "#/components/responses/GatewayTimeout"
           }
         }
       }
     },
     "/macro/interest-rates/snapshot": {
       "get": {
-        "operationId": "get_macro_interest_rates_snapshot_not_implemented",
+        "operationId": "get_interest_rates_snapshot",
         "tags": [
-          "Not implemented"
+          "Macroeconomics"
         ],
-        "summary": "/macro/interest-rates/snapshot (not implemented)",
-        "description": "Registered as a Financial Datasets-compatible route for parity, but not implemented by this deployment yet. Always answers HTTP 200 with a not_implemented ErrorResponse body, at zero cost and with no Monid call made \u2014 this is authenticated (X-API-KEY required) but otherwise free. See docs/compatibility.md for the phased implementation plan.",
+        "summary": "Interest Rates (Real-Time)",
+        "description": "Returns each major central bank's current policy interest rate (Federal Reserve, European Central Bank, Bank of England, Bank of Japan), scraped live from each bank's own site and parsed on the fly by go/service/interestrates.go - not a historical time series database. This server has no historical rate storage, so both /macro/interest-rates (Financial Datasets' historical route) and /macro/interest-rates/snapshot (its real-time route) call the exact same tool and answer with today's scraped rate per bank; neither accepts a bank, start_date, or end_date parameter, since the underlying get_interest_rates tool takes no parameters at all (it always fetches every bank it can reach). A bank whose page cannot be scraped or parsed in a given call is left out of the response rather than failing the whole request.",
         "parameters": [],
         "responses": {
           "200": {
-            "description": "Zero-cost not_implemented stub.",
+            "description": "Illustrative shape (no captured live sample committed for this route); values are structural placeholders, not a claim about real reported figures. A bank is omitted entirely, not nulled out, when its page could not be scraped or parsed this call.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/NotImplementedResponse"
+                  "$ref": "#/components/schemas/InterestRatesResponse"
                 },
                 "examples": {
                   "example": {
                     "value": {
-                      "error": "not_implemented",
-                      "message": "This Financial Datasets route is not implemented by the Monid-backed server yet; the call was free and no data was fabricated."
+                      "interest_rates": [
+                        {
+                          "bank": "FED",
+                          "name": "Federal Reserve",
+                          "rate": 4.0,
+                          "date": "2025-09-17"
+                        },
+                        {
+                          "bank": "ECB",
+                          "name": "European Central Bank",
+                          "rate": 2.15,
+                          "date": "2025-09-11"
+                        },
+                        {
+                          "bank": "BOE",
+                          "name": "Bank of England",
+                          "rate": 4.0,
+                          "date": "2025-08-07"
+                        },
+                        {
+                          "bank": "BOJ",
+                          "name": "Bank of Japan",
+                          "rate": 0.5,
+                          "date": "2025-07-31"
+                        }
+                      ]
                     }
                   }
                 }
               }
             }
           },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "402": {
+            "$ref": "#/components/responses/PaymentRequired"
+          },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "504": {
+            "$ref": "#/components/responses/GatewayTimeout"
           }
         }
       }
     },
     "/macro/interest-rates/banks": {
       "get": {
-        "operationId": "get_macro_interest_rates_banks_not_implemented",
+        "operationId": "get_interest_rates_banks",
         "tags": [
-          "Not implemented"
+          "Macroeconomics"
         ],
-        "summary": "/macro/interest-rates/banks (not implemented)",
-        "description": "Registered as a Financial Datasets-compatible route for parity, but not implemented by this deployment yet. Always answers HTTP 200 with a not_implemented ErrorResponse body, at zero cost and with no Monid call made \u2014 this is authenticated (X-API-KEY required) but otherwise free. See docs/compatibility.md for the phased implementation plan.",
+        "summary": "Available central banks",
+        "description": "Returns the static list of central bank codes get_interest_rates can currently scrape a policy rate for (go/service/interestrates.go's bankSpecs: FED, ECB, BOE, BOJ). This is a fixed, hardcoded catalog, not a live query, so it never calls Monid and is served at zero cost.",
         "parameters": [],
         "responses": {
           "200": {
-            "description": "Zero-cost not_implemented stub.",
+            "description": "The four central banks this server currently scrapes.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/NotImplementedResponse"
+                  "$ref": "#/components/schemas/InterestRateBanksResponse"
                 },
                 "examples": {
                   "example": {
                     "value": {
-                      "error": "not_implemented",
-                      "message": "This Financial Datasets route is not implemented by the Monid-backed server yet; the call was free and no data was fabricated."
+                      "resource": "interest_rates",
+                      "banks": [
+                        "FED",
+                        "ECB",
+                        "BOE",
+                        "BOJ"
+                      ]
                     }
                   }
                 }
@@ -2345,185 +2521,776 @@
     },
     "/financials/segments": {
       "get": {
-        "operationId": "get_financials_segments_not_implemented",
+        "operationId": "get_segmented_financials",
         "tags": [
-          "Not implemented"
+          "Financial statements"
         ],
-        "summary": "/financials/segments (not implemented)",
-        "description": "Registered as a Financial Datasets-compatible route for parity, but not implemented by this deployment yet. Always answers HTTP 200 with a not_implemented ErrorResponse body, at zero cost and with no Monid call made \u2014 this is authenticated (X-API-KEY required) but otherwise free. See docs/compatibility.md for the phased implementation plan.",
-        "parameters": [],
+        "summary": "Get all segmented financials",
+        "description": "Extracts segment-level breakdowns from a company's most recent annual 10-K via document extraction (Context.dev /web/extract against the filing's segment note), not a segments database - see go/service/segmentedfinancials.go. Today this server only extracts income-statement revenue by product line and by geographic reportable segment; balance-sheet and cash-flow-statement segment breakdowns are never sourced, so a record here only ever carries an income_statement key. period only accepts \"annual\": passing \"quarterly\" answers 400 bad_request, since annual 10-Ks are the only filing this route extracts from. When no matching filing exists for the ticker, this server answers HTTP 200 with a not_found ErrorResponse body (mirroring the rest of this API's honest-failure convention) rather than a 404 or an empty list.",
+        "parameters": [
+          {
+            "name": "ticker",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Uppercase-normalized ticker symbol (1-20 letters/digits/dots/hyphens)."
+          },
+          {
+            "name": "period",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "annual",
+                "quarterly"
+              ],
+              "default": "annual"
+            },
+            "description": "Reporting cadence. Only \"annual\" (the default) is supported: \"quarterly\" answers 400 bad_request, since this server extracts segment data from the annual 10-K only."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 4
+            },
+            "description": "Number of records to retrieve (default: 4, max: 100)."
+          },
+          {
+            "name": "report_period",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Exact report_period date filter (YYYY-MM-DD)."
+          },
+          {
+            "name": "report_period_gte",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "report_period >= this date (YYYY-MM-DD, inclusive)."
+          },
+          {
+            "name": "report_period_lte",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "report_period <= this date (YYYY-MM-DD, inclusive)."
+          },
+          {
+            "name": "report_period_gt",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "report_period > this date (YYYY-MM-DD, exclusive)."
+          },
+          {
+            "name": "report_period_lt",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "report_period < this date (YYYY-MM-DD, exclusive)."
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Opaque base64url pagination cursor from a previous response's next_page_url. Omit for the first page."
+          }
+        ],
         "responses": {
           "200": {
-            "description": "Zero-cost not_implemented stub.",
+            "description": "Illustrative shape (no captured live sample committed for this route); values are structural placeholders, not a claim about real reported figures.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/NotImplementedResponse"
+                  "$ref": "#/components/schemas/SegmentedFinancialsResponse"
                 },
                 "examples": {
                   "example": {
                     "value": {
-                      "error": "not_implemented",
-                      "message": "This Financial Datasets route is not implemented by the Monid-backed server yet; the call was free and no data was fabricated."
+                      "segmented_financials": [
+                        {
+                          "ticker": "AAPL",
+                          "report_period": "2025-09-27",
+                          "fiscal_period": "FY2025",
+                          "period": "annual",
+                          "accession_number": "0000320193-25-000012",
+                          "filing_url": "https://www.sec.gov/Archives/edgar/data/320193/000032019325000012/aapl-20250927.htm",
+                          "income_statement": {
+                            "revenue": {
+                              "product": [
+                                {
+                                  "label": "Product line A",
+                                  "value": 210000000000
+                                },
+                                {
+                                  "label": "Product line B",
+                                  "value": 45000000000
+                                }
+                              ],
+                              "segment": [
+                                {
+                                  "label": "Americas",
+                                  "value": 120000000000
+                                },
+                                {
+                                  "label": "Europe",
+                                  "value": 75000000000
+                                }
+                              ]
+                            }
+                          }
+                        }
+                      ]
                     }
                   }
                 }
               }
             }
           },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "402": {
+            "$ref": "#/components/responses/PaymentRequired"
+          },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "504": {
+            "$ref": "#/components/responses/GatewayTimeout"
           }
         }
       }
     },
     "/financials/income-statements/segments": {
       "get": {
-        "operationId": "get_financials_income_statements_segments_not_implemented",
+        "operationId": "get_income_statement_segments",
         "tags": [
-          "Not implemented"
+          "Financial statements"
         ],
-        "summary": "/financials/income-statements/segments (not implemented)",
-        "description": "Registered as a Financial Datasets-compatible route for parity, but not implemented by this deployment yet. Always answers HTTP 200 with a not_implemented ErrorResponse body, at zero cost and with no Monid call made \u2014 this is authenticated (X-API-KEY required) but otherwise free. See docs/compatibility.md for the phased implementation plan.",
-        "parameters": [],
+        "summary": "Get income statement segments",
+        "description": "Extracts income-statement segment breakdowns (revenue by product line and by geographic reportable segment) from a company's most recent annual 10-K via document extraction - see go/service/segmentedfinancials.go. operating_income and depreciation are declared for Financial Datasets schema parity but always omitted: this server's extraction schema never asks a filing for them, and nothing is fabricated to fill them in. period only accepts \"annual\": passing \"quarterly\" answers 400 bad_request. When no matching filing exists for the ticker, this server answers HTTP 200 with a not_found ErrorResponse body (mirroring the rest of this API's honest-failure convention) rather than a 404 or an empty list.",
+        "parameters": [
+          {
+            "name": "ticker",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Uppercase-normalized ticker symbol (1-20 letters/digits/dots/hyphens)."
+          },
+          {
+            "name": "period",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "annual",
+                "quarterly"
+              ],
+              "default": "annual"
+            },
+            "description": "Reporting cadence. Only \"annual\" (the default) is supported: \"quarterly\" answers 400 bad_request, since this server extracts segment data from the annual 10-K only."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 4
+            },
+            "description": "Number of records to retrieve (default: 4, max: 100)."
+          },
+          {
+            "name": "report_period",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Exact report_period date filter (YYYY-MM-DD)."
+          },
+          {
+            "name": "report_period_gte",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "report_period >= this date (YYYY-MM-DD, inclusive)."
+          },
+          {
+            "name": "report_period_lte",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "report_period <= this date (YYYY-MM-DD, inclusive)."
+          },
+          {
+            "name": "report_period_gt",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "report_period > this date (YYYY-MM-DD, exclusive)."
+          },
+          {
+            "name": "report_period_lt",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "report_period < this date (YYYY-MM-DD, exclusive)."
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Opaque base64url pagination cursor from a previous response's next_page_url. Omit for the first page."
+          }
+        ],
         "responses": {
           "200": {
-            "description": "Zero-cost not_implemented stub.",
+            "description": "Illustrative shape (no captured live sample committed for this route); values are structural placeholders, not a claim about real reported figures.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/NotImplementedResponse"
+                  "$ref": "#/components/schemas/IncomeStatementSegmentsResponse"
                 },
                 "examples": {
                   "example": {
                     "value": {
-                      "error": "not_implemented",
-                      "message": "This Financial Datasets route is not implemented by the Monid-backed server yet; the call was free and no data was fabricated."
+                      "segmented_financials": [
+                        {
+                          "ticker": "AAPL",
+                          "report_period": "2025-09-27",
+                          "fiscal_period": "FY2025",
+                          "period": "annual",
+                          "accession_number": "0000320193-25-000012",
+                          "filing_url": "https://www.sec.gov/Archives/edgar/data/320193/000032019325000012/aapl-20250927.htm",
+                          "revenue": {
+                            "product": [
+                              {
+                                "label": "Product line A",
+                                "value": 210000000000
+                              },
+                              {
+                                "label": "Product line B",
+                                "value": 45000000000
+                              }
+                            ],
+                            "segment": [
+                              {
+                                "label": "Americas",
+                                "value": 120000000000
+                              },
+                              {
+                                "label": "Europe",
+                                "value": 75000000000
+                              }
+                            ]
+                          }
+                        }
+                      ]
                     }
                   }
                 }
               }
             }
           },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "402": {
+            "$ref": "#/components/responses/PaymentRequired"
+          },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "504": {
+            "$ref": "#/components/responses/GatewayTimeout"
           }
         }
       }
     },
     "/financials/balance-sheets/segments": {
       "get": {
-        "operationId": "get_financials_balance_sheets_segments_not_implemented",
+        "operationId": "get_balance_sheet_segments",
         "tags": [
-          "Not implemented"
+          "Financial statements"
         ],
-        "summary": "/financials/balance-sheets/segments (not implemented)",
-        "description": "Registered as a Financial Datasets-compatible route for parity, but not implemented by this deployment yet. Always answers HTTP 200 with a not_implemented ErrorResponse body, at zero cost and with no Monid call made \u2014 this is authenticated (X-API-KEY required) but otherwise free. See docs/compatibility.md for the phased implementation plan.",
-        "parameters": [],
+        "summary": "Get balance sheet segments",
+        "description": "Registered for Financial Datasets route parity and wired onto get_segmented_financials (go/service/segmentedfinancials.go), but this server's extraction schema only ever asks a filing for income-statement revenue by product/segment - never assets, goodwill, or long-lived assets by segment. Every call still identifies the filing and makes the paid Context.dev extraction call, but assets/goodwill/long_lived_assets are always omitted from the response rather than fabricated: only the segment record's identity fields (ticker, report_period, fiscal_period, period, accession_number, filing_url) come back. period only accepts \"annual\": passing \"quarterly\" answers 400 bad_request. When no matching filing exists for the ticker, this server answers HTTP 200 with a not_found ErrorResponse body (mirroring the rest of this API's honest-failure convention) rather than a 404 or an empty list.",
+        "parameters": [
+          {
+            "name": "ticker",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Uppercase-normalized ticker symbol (1-20 letters/digits/dots/hyphens)."
+          },
+          {
+            "name": "period",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "annual",
+                "quarterly"
+              ],
+              "default": "annual"
+            },
+            "description": "Reporting cadence. Only \"annual\" (the default) is supported: \"quarterly\" answers 400 bad_request, since this server extracts segment data from the annual 10-K only."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 4
+            },
+            "description": "Number of records to retrieve (default: 4, max: 100)."
+          },
+          {
+            "name": "report_period",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Exact report_period date filter (YYYY-MM-DD)."
+          },
+          {
+            "name": "report_period_gte",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "report_period >= this date (YYYY-MM-DD, inclusive)."
+          },
+          {
+            "name": "report_period_lte",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "report_period <= this date (YYYY-MM-DD, inclusive)."
+          },
+          {
+            "name": "report_period_gt",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "report_period > this date (YYYY-MM-DD, exclusive)."
+          },
+          {
+            "name": "report_period_lt",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "report_period < this date (YYYY-MM-DD, exclusive)."
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Opaque base64url pagination cursor from a previous response's next_page_url. Omit for the first page."
+          }
+        ],
         "responses": {
           "200": {
-            "description": "Zero-cost not_implemented stub.",
+            "description": "This route never has statement-specific data to return today (see description); the example shows the identity-only shape every call currently gets.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/NotImplementedResponse"
+                  "$ref": "#/components/schemas/BalanceSheetSegmentsResponse"
                 },
                 "examples": {
                   "example": {
                     "value": {
-                      "error": "not_implemented",
-                      "message": "This Financial Datasets route is not implemented by the Monid-backed server yet; the call was free and no data was fabricated."
+                      "segmented_financials": [
+                        {
+                          "ticker": "AAPL",
+                          "report_period": "2025-09-27",
+                          "fiscal_period": "FY2025",
+                          "period": "annual",
+                          "accession_number": "0000320193-25-000012",
+                          "filing_url": "https://www.sec.gov/Archives/edgar/data/320193/000032019325000012/aapl-20250927.htm"
+                        }
+                      ]
                     }
                   }
                 }
               }
             }
           },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "402": {
+            "$ref": "#/components/responses/PaymentRequired"
+          },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "504": {
+            "$ref": "#/components/responses/GatewayTimeout"
           }
         }
       }
     },
     "/financials/cash-flow-statements/segments": {
       "get": {
-        "operationId": "get_financials_cash_flow_statements_segments_not_implemented",
+        "operationId": "get_cash_flow_statement_segments",
         "tags": [
-          "Not implemented"
+          "Financial statements"
         ],
-        "summary": "/financials/cash-flow-statements/segments (not implemented)",
-        "description": "Registered as a Financial Datasets-compatible route for parity, but not implemented by this deployment yet. Always answers HTTP 200 with a not_implemented ErrorResponse body, at zero cost and with no Monid call made \u2014 this is authenticated (X-API-KEY required) but otherwise free. See docs/compatibility.md for the phased implementation plan.",
-        "parameters": [],
+        "summary": "Get cash flow statement segments",
+        "description": "Registered for Financial Datasets route parity and wired onto get_segmented_financials (go/service/segmentedfinancials.go), but this server's extraction schema only ever asks a filing for income-statement revenue by product/segment - never capital expenditure by segment. Every call still identifies the filing and makes the paid Context.dev extraction call, but capital_expenditure is always omitted from the response rather than fabricated: only the segment record's identity fields (ticker, report_period, fiscal_period, period, accession_number, filing_url) come back. period only accepts \"annual\": passing \"quarterly\" answers 400 bad_request. When no matching filing exists for the ticker, this server answers HTTP 200 with a not_found ErrorResponse body (mirroring the rest of this API's honest-failure convention) rather than a 404 or an empty list.",
+        "parameters": [
+          {
+            "name": "ticker",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Uppercase-normalized ticker symbol (1-20 letters/digits/dots/hyphens)."
+          },
+          {
+            "name": "period",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "annual",
+                "quarterly"
+              ],
+              "default": "annual"
+            },
+            "description": "Reporting cadence. Only \"annual\" (the default) is supported: \"quarterly\" answers 400 bad_request, since this server extracts segment data from the annual 10-K only."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 4
+            },
+            "description": "Number of records to retrieve (default: 4, max: 100)."
+          },
+          {
+            "name": "report_period",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Exact report_period date filter (YYYY-MM-DD)."
+          },
+          {
+            "name": "report_period_gte",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "report_period >= this date (YYYY-MM-DD, inclusive)."
+          },
+          {
+            "name": "report_period_lte",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "report_period <= this date (YYYY-MM-DD, inclusive)."
+          },
+          {
+            "name": "report_period_gt",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "report_period > this date (YYYY-MM-DD, exclusive)."
+          },
+          {
+            "name": "report_period_lt",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "report_period < this date (YYYY-MM-DD, exclusive)."
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Opaque base64url pagination cursor from a previous response's next_page_url. Omit for the first page."
+          }
+        ],
         "responses": {
           "200": {
-            "description": "Zero-cost not_implemented stub.",
+            "description": "This route never has statement-specific data to return today (see description); the example shows the identity-only shape every call currently gets.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/NotImplementedResponse"
+                  "$ref": "#/components/schemas/CashFlowStatementSegmentsResponse"
                 },
                 "examples": {
                   "example": {
                     "value": {
-                      "error": "not_implemented",
-                      "message": "This Financial Datasets route is not implemented by the Monid-backed server yet; the call was free and no data was fabricated."
+                      "segmented_financials": [
+                        {
+                          "ticker": "AAPL",
+                          "report_period": "2025-09-27",
+                          "fiscal_period": "FY2025",
+                          "period": "annual",
+                          "accession_number": "0000320193-25-000012",
+                          "filing_url": "https://www.sec.gov/Archives/edgar/data/320193/000032019325000012/aapl-20250927.htm"
+                        }
+                      ]
                     }
                   }
                 }
               }
             }
           },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "402": {
+            "$ref": "#/components/responses/PaymentRequired"
+          },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "504": {
+            "$ref": "#/components/responses/GatewayTimeout"
           }
         }
       }
     },
     "/index-funds": {
       "get": {
-        "operationId": "get_index_funds_not_implemented",
+        "operationId": "get_index_fund",
         "tags": [
-          "Not implemented"
+          "Index funds"
         ],
-        "summary": "/index-funds (not implemented)",
-        "description": "Registered as a Financial Datasets-compatible route for parity, but not implemented by this deployment yet. Always answers HTTP 200 with a not_implemented ErrorResponse body, at zero cost and with no Monid call made \u2014 this is authenticated (X-API-KEY required) but otherwise free. See docs/compatibility.md for the phased implementation plan.",
-        "parameters": [],
+        "summary": "Get ETF / index-fund holdings",
+        "description": "Returns an ETF or index fund's current holdings and each position's weight, resolved via a live web search plus a scrape of the fund's public holdings fact sheet (Context.dev /web/search and /web/scrape/markdown) - not an SEC filing feed - see go/service/indexfund.go. Only ticker mode is supported: Financial Datasets' reverse \"?holding=AAPL\" lookup (funds holding a given security) is not implemented by get_index_fund, so ticker is required regardless of what other query parameters are set (missing ticker answers a real HTTP 400). Pagination is offset/limit (not the cursor scheme this API's other list routes use), applied to the holdings already resolved for this call. If the routable holdings document could not be parsed at all, this server answers HTTP 200 with a bad_request ErrorResponse body (\"holdings document not routable for TICKER\") rather than fabricating an empty holdings list.",
+        "parameters": [
+          {
+            "name": "ticker",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "The fund's ticker symbol (e.g., SPY, QQQ, VTI). Uppercase-normalized, 1-20 letters/digits/dots/hyphens."
+          },
+          {
+            "name": "as_of",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Return the fund composition in effect on or before this date (YYYY-MM-DD). Without it, this server returns whatever the routable fact sheet currently reports. If the routable fact sheet is dated after as_of, this server answers HTTP 200 with a not_found ErrorResponse body instead of guessing an earlier composition."
+          },
+          {
+            "name": "asset_class",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "equity",
+                "bond"
+              ]
+            },
+            "description": "Restrict holdings to equity or bond instruments. Omit to return every holding the fact sheet lists."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000,
+              "default": 50
+            },
+            "description": "Number of records to retrieve (default: 50, max: 1000). Maximum number of holdings in this page."
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            },
+            "description": "Number of holdings to skip before this page starts, for paging through a large holdings list (default 0)."
+          }
+        ],
         "responses": {
           "200": {
-            "description": "Zero-cost not_implemented stub.",
+            "description": "Illustrative shape (no captured live sample committed for this route); values are structural placeholders, not a claim about real reported figures.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/NotImplementedResponse"
+                  "$ref": "#/components/schemas/IndexFundHoldingsResponse"
                 },
                 "examples": {
                   "example": {
                     "value": {
-                      "error": "not_implemented",
-                      "message": "This Financial Datasets route is not implemented by the Monid-backed server yet; the call was free and no data was fabricated."
+                      "ticker": "SPY",
+                      "fund": {
+                        "name": "Example S&P 500 ETF Trust",
+                        "as_of": "2025-08-31",
+                        "source": "public fund holdings fact sheet (markdown)",
+                        "total_holdings": 503,
+                        "returned": 1,
+                        "offset": 0
+                      },
+                      "holdings": [
+                        {
+                          "ticker": "AAPL",
+                          "name": "Apple Inc.",
+                          "weight": 7.05,
+                          "market_value": 21000000000.0,
+                          "shares": 165000000.0,
+                          "asset_class": "equity"
+                        }
+                      ]
                     }
                   }
                 }
               }
             }
           },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "402": {
+            "$ref": "#/components/responses/PaymentRequired"
+          },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "504": {
+            "$ref": "#/components/responses/GatewayTimeout"
           }
         }
       }
@@ -2535,7 +3302,7 @@
           "Not implemented"
         ],
         "summary": "/index-funds/tickers (not implemented)",
-        "description": "Registered as a Financial Datasets-compatible route for parity, but not implemented by this deployment yet. Always answers HTTP 200 with a not_implemented ErrorResponse body, at zero cost and with no Monid call made \u2014 this is authenticated (X-API-KEY required) but otherwise free. See docs/compatibility.md for the phased implementation plan.",
+        "description": "Registered as a Financial Datasets-compatible route for parity, but not implemented by this deployment yet. Always answers HTTP 200 with a not_implemented ErrorResponse body, at zero cost and with no Monid call made — this is authenticated (X-API-KEY required) but otherwise free. See docs/compatibility.md for the phased implementation plan.",
         "parameters": [],
         "responses": {
           "200": {
@@ -2567,37 +3334,127 @@
     },
     "/institutional-holdings": {
       "get": {
-        "operationId": "get_institutional_holdings_not_implemented",
+        "operationId": "get_institutional_holdings",
         "tags": [
-          "Not implemented"
+          "Institutional holdings"
         ],
-        "summary": "/institutional-holdings (not implemented)",
-        "description": "Registered as a Financial Datasets-compatible route for parity, but not implemented by this deployment yet. Always answers HTTP 200 with a not_implemented ErrorResponse body, at zero cost and with no Monid call made \u2014 this is authenticated (X-API-KEY required) but otherwise free. See docs/compatibility.md for the phased implementation plan.",
-        "parameters": [],
+        "summary": "Get 13F institutional holdings",
+        "description": "Returns SEC Form 13F institutional-holdings rows for a security, sourced from the SECForm4 provider's institutional-holdings route (go/service/institutionalholdings.go). Only the ticker path is routed: filer_cik is accepted for Financial Datasets parameter parity, but every call that sets it answers HTTP 200 with a bad_request ErrorResponse body. Without a report_period filter, this server returns the most recent quarter the underlying route has on file for the ticker. cusip, filing_date, form_type, accession_number, title_of_class, put_call, reported_price, filer_cik, and subsidiaries are declared on InstitutionalHolding for Financial Datasets schema parity but always omitted: the source route never reports them.",
+        "parameters": [
+          {
+            "name": "filer_cik",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "SEC CIK of an institutional filer. Accepted for Financial Datasets parameter parity, but every call that sets it answers HTTP 200 with a bad_request ErrorResponse body (\"filer_cik lookup is not routed; pass ticker instead\"); this server routes the ticker path only."
+          },
+          {
+            "name": "ticker",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Ticker of the held security to look up institutional filers for, for example AAPL. Required unless filer_cik is set (which is always rejected - see filer_cik above)."
+          },
+          {
+            "name": "report_period",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Restricts to the 13F quarter-end whose report_period exactly equals this date (YYYY-MM-DD)."
+          },
+          {
+            "name": "report_period_gte",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Restricts to quarter-ends on or after this date (YYYY-MM-DD)."
+          },
+          {
+            "name": "report_period_lte",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Restricts to quarter-ends on or before this date (YYYY-MM-DD)."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 10
+            },
+            "description": "Number of records to retrieve (default: 10, max: 200)."
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Opaque base64url pagination cursor from a previous response's next_page_url. Omit for the first page."
+          }
+        ],
         "responses": {
           "200": {
-            "description": "Zero-cost not_implemented stub.",
+            "description": "Illustrative shape (no captured live sample committed for this route); values are structural placeholders, not a claim about real reported figures.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/NotImplementedResponse"
+                  "$ref": "#/components/schemas/InstitutionalHoldingsResponse"
                 },
                 "examples": {
                   "example": {
                     "value": {
-                      "error": "not_implemented",
-                      "message": "This Financial Datasets route is not implemented by the Monid-backed server yet; the call was free and no data was fabricated."
+                      "institutional_holdings": [
+                        {
+                          "ticker": "AAPL",
+                          "name_of_issuer": "Apple Inc.",
+                          "report_period": "2025-06-30",
+                          "shares": 1300000000,
+                          "value_usd": 260000000000,
+                          "filer_name": "Example Capital Management LLC"
+                        }
+                      ]
                     }
                   }
                 }
               }
             }
           },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "402": {
+            "$ref": "#/components/responses/PaymentRequired"
+          },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "504": {
+            "$ref": "#/components/responses/GatewayTimeout"
           }
         }
       }
@@ -2609,7 +3466,7 @@
           "Not implemented"
         ],
         "summary": "/institutional-holdings/investors (not implemented)",
-        "description": "Registered as a Financial Datasets-compatible route for parity, but not implemented by this deployment yet. Always answers HTTP 200 with a not_implemented ErrorResponse body, at zero cost and with no Monid call made \u2014 this is authenticated (X-API-KEY required) but otherwise free. See docs/compatibility.md for the phased implementation plan.",
+        "description": "Registered as a Financial Datasets-compatible route for parity, but not implemented by this deployment yet. Always answers HTTP 200 with a not_implemented ErrorResponse body, at zero cost and with no Monid call made — this is authenticated (X-API-KEY required) but otherwise free. See docs/compatibility.md for the phased implementation plan.",
         "parameters": [],
         "responses": {
           "200": {
@@ -2646,7 +3503,7 @@
           "Not implemented"
         ],
         "summary": "/institutional-holdings/tickers (not implemented)",
-        "description": "Registered as a Financial Datasets-compatible route for parity, but not implemented by this deployment yet. Always answers HTTP 200 with a not_implemented ErrorResponse body, at zero cost and with no Monid call made \u2014 this is authenticated (X-API-KEY required) but otherwise free. See docs/compatibility.md for the phased implementation plan.",
+        "description": "Registered as a Financial Datasets-compatible route for parity, but not implemented by this deployment yet. Always answers HTTP 200 with a not_implemented ErrorResponse body, at zero cost and with no Monid call made — this is authenticated (X-API-KEY required) but otherwise free. See docs/compatibility.md for the phased implementation plan.",
         "parameters": [],
         "responses": {
           "200": {
@@ -2683,7 +3540,7 @@
           "Not implemented"
         ],
         "summary": "/insider-ownership (not implemented)",
-        "description": "Registered as a Financial Datasets-compatible route for parity, but not implemented by this deployment yet. Always answers HTTP 200 with a not_implemented ErrorResponse body, at zero cost and with no Monid call made \u2014 this is authenticated (X-API-KEY required) but otherwise free. See docs/compatibility.md for the phased implementation plan.",
+        "description": "Registered as a Financial Datasets-compatible route for parity, but not implemented by this deployment yet. Always answers HTTP 200 with a not_implemented ErrorResponse body, at zero cost and with no Monid call made — this is authenticated (X-API-KEY required) but otherwise free. See docs/compatibility.md for the phased implementation plan.",
         "parameters": [],
         "responses": {
           "200": {
@@ -2720,7 +3577,7 @@
           "Not implemented"
         ],
         "summary": "/beneficial-ownership (not implemented)",
-        "description": "Registered as a Financial Datasets-compatible route for parity, but not implemented by this deployment yet. Always answers HTTP 200 with a not_implemented ErrorResponse body, at zero cost and with no Monid call made \u2014 this is authenticated (X-API-KEY required) but otherwise free. See docs/compatibility.md for the phased implementation plan.",
+        "description": "Registered as a Financial Datasets-compatible route for parity, but not implemented by this deployment yet. Always answers HTTP 200 with a not_implemented ErrorResponse body, at zero cost and with no Monid call made — this is authenticated (X-API-KEY required) but otherwise free. See docs/compatibility.md for the phased implementation plan.",
         "parameters": [],
         "responses": {
           "200": {
@@ -2757,7 +3614,7 @@
           "Not implemented"
         ],
         "summary": "/activist-ownership (not implemented)",
-        "description": "Registered as a Financial Datasets-compatible route for parity, but not implemented by this deployment yet. Always answers HTTP 200 with a not_implemented ErrorResponse body, at zero cost and with no Monid call made \u2014 this is authenticated (X-API-KEY required) but otherwise free. See docs/compatibility.md for the phased implementation plan.",
+        "description": "Registered as a Financial Datasets-compatible route for parity, but not implemented by this deployment yet. Always answers HTTP 200 with a not_implemented ErrorResponse body, at zero cost and with no Monid call made — this is authenticated (X-API-KEY required) but otherwise free. See docs/compatibility.md for the phased implementation plan.",
         "parameters": [],
         "responses": {
           "200": {
@@ -2794,7 +3651,7 @@
         "type": "apiKey",
         "in": "header",
         "name": "X-API-KEY",
-        "description": "The caller's own Monid API key (get one at https://monid.ai). Passed straight through to Monid on every call, so usage bills the caller's own wallet \u2014 this is never a shared server-side credential, and the server never logs or stores it. Missing, empty, or malformed values answer 401 unauthorized before any paid call is attempted."
+        "description": "The caller's own Monid API key (get one at https://monid.ai). Passed straight through to Monid on every call, so usage bills the caller's own wallet — this is never a shared server-side credential, and the server never logs or stores it. Missing, empty, or malformed values answer 401 unauthorized before any paid call is attempted."
       }
     },
     "schemas": {
@@ -2863,7 +3720,7 @@
           },
           "filing_datetime": {
             "type": "string",
-            "description": "Filing acceptance timestamp. Omitted for ttm rows.",
+            "description": "Filing acceptance timestamp. Declared for Financial-Datasets-contract parity, but no provider integration in this codebase currently sets this field on any record type; always omitted in practice today.",
             "format": "date-time"
           },
           "revenue": {
@@ -2998,7 +3855,7 @@
           },
           "filing_datetime": {
             "type": "string",
-            "description": "Filing acceptance timestamp. Omitted for ttm rows.",
+            "description": "Filing acceptance timestamp. Declared for Financial-Datasets-contract parity, but no provider integration in this codebase currently sets this field on any record type; always omitted in practice today.",
             "format": "date-time"
           },
           "total_assets": {
@@ -3153,7 +4010,7 @@
           },
           "filing_datetime": {
             "type": "string",
-            "description": "Filing acceptance timestamp. Omitted for ttm rows.",
+            "description": "Filing acceptance timestamp. Declared for Financial-Datasets-contract parity, but no provider integration in this codebase currently sets this field on any record type; always omitted in practice today.",
             "format": "date-time"
           },
           "net_income": {
@@ -3233,7 +4090,7 @@
           },
           "accession_number": {
             "type": "string",
-            "description": "SEC EDGAR accession number, e.g. 0000320193-25-000079."
+            "description": "SEC EDGAR accession number, e.g. 0000320193-26-000018."
           },
           "filing_type": {
             "type": "string",
@@ -3784,7 +4641,7 @@
           },
           "filing_datetime": {
             "type": "string",
-            "description": "Filing acceptance timestamp.",
+            "description": "Filing acceptance timestamp. Declared for Financial-Datasets-contract parity, but no provider integration in this codebase currently sets this field on any record type; always omitted in practice today.",
             "format": "date-time"
           },
           "filing_window": {
@@ -4416,6 +5273,825 @@
         },
         "required": [
           "filters"
+        ]
+      },
+      "SegmentBreakdown": {
+        "type": "object",
+        "title": "SegmentBreakdown",
+        "description": "One labeled value from a segment breakdown, matching go/service/segmentedfinancials.go's segmentRow (label, value).",
+        "properties": {
+          "label": {
+            "type": "string",
+            "description": "The product line or business/geographic segment name, exactly as extracted from the filing."
+          },
+          "value": {
+            "type": "number",
+            "description": "The value stated in the filing for this label."
+          }
+        },
+        "required": [
+          "label",
+          "value"
+        ]
+      },
+      "SegmentCategory": {
+        "type": "object",
+        "title": "SegmentCategory",
+        "description": "Segment breakdowns grouped by category. Each key is present only when the extraction found at least one row of that kind.",
+        "properties": {
+          "product": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SegmentBreakdown"
+            },
+            "description": "Breakdowns by product line."
+          },
+          "segment": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SegmentBreakdown"
+            },
+            "description": "Breakdowns by business or geographic reportable segment."
+          }
+        }
+      },
+      "SegmentedFinancialsRecord": {
+        "type": "object",
+        "title": "SegmentedFinancialsRecord",
+        "description": "One segmented-financials record for /financials/segments, the combined route. Field order matches go/service/segmentedfinancials.go's newOrderedJSONObject construction. Every field is emitted only when sourced from the filing; nothing here is fabricated.",
+        "properties": {
+          "ticker": {
+            "type": "string",
+            "description": "Uppercase ticker symbol."
+          },
+          "report_period": {
+            "type": "string",
+            "format": "date",
+            "description": "Reporting period end date (YYYY-MM-DD)."
+          },
+          "fiscal_period": {
+            "type": "string",
+            "description": "Fiscal-period label (e.g. FY2025). Omitted when the filing's fiscal year could not be determined."
+          },
+          "period": {
+            "type": "string",
+            "enum": [
+              "annual"
+            ],
+            "description": "Always \"annual\": this route only extracts from annual 10-Ks."
+          },
+          "accession_number": {
+            "type": "string",
+            "description": "SEC EDGAR accession number of the source 10-K, when it could be derived from the filing URL."
+          },
+          "filing_url": {
+            "type": "string",
+            "format": "uri",
+            "description": "SEC EDGAR filing index URL for the source 10-K."
+          },
+          "income_statement": {
+            "type": "object",
+            "description": "Income-statement segment breakdowns for this period. Present only when the extraction found product and/or geographic revenue rows; balance-sheet and cash-flow-statement breakdowns are never sourced today, so this is the only statement-type key this record ever carries.",
+            "properties": {
+              "revenue": {
+                "$ref": "#/components/schemas/SegmentCategory"
+              }
+            }
+          }
+        },
+        "required": [
+          "ticker",
+          "report_period"
+        ]
+      },
+      "SegmentedFinancialsResponse": {
+        "type": "object",
+        "title": "SegmentedFinancialsResponse",
+        "description": "Wrapped list envelope: {\"segmented_financials\": [...], \"next_page_url\": \"...\"}. Page size is 10 records. May instead be a two-key ErrorResponse ({\"error\": \"not_found\", \"message\": ...}) when no 10-K filing exists for the ticker.",
+        "properties": {
+          "segmented_financials": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SegmentedFinancialsRecord"
+            }
+          },
+          "next_page_url": {
+            "type": "string",
+            "format": "uri",
+            "description": "Absolute URL for the next page, present only when more records remain."
+          }
+        },
+        "required": [
+          "segmented_financials"
+        ]
+      },
+      "IncomeStatementSegmentsRecord": {
+        "type": "object",
+        "title": "IncomeStatementSegmentsRecord",
+        "description": "One record for /financials/income-statements/segments: segment metadata plus this server's income-statement segment breakdowns.",
+        "properties": {
+          "ticker": {
+            "type": "string",
+            "description": "Uppercase ticker symbol."
+          },
+          "report_period": {
+            "type": "string",
+            "format": "date",
+            "description": "Reporting period end date (YYYY-MM-DD)."
+          },
+          "fiscal_period": {
+            "type": "string",
+            "description": "Fiscal-period label (e.g. FY2025). Omitted when the filing's fiscal year could not be determined."
+          },
+          "period": {
+            "type": "string",
+            "enum": [
+              "annual"
+            ],
+            "description": "Always \"annual\": this route only extracts from annual 10-Ks."
+          },
+          "accession_number": {
+            "type": "string",
+            "description": "SEC EDGAR accession number of the source 10-K, when it could be derived from the filing URL."
+          },
+          "filing_url": {
+            "type": "string",
+            "format": "uri",
+            "description": "SEC EDGAR filing index URL for the source 10-K."
+          },
+          "revenue": {
+            "$ref": "#/components/schemas/SegmentCategory"
+          },
+          "operating_income": {
+            "$ref": "#/components/schemas/SegmentCategory"
+          },
+          "depreciation": {
+            "$ref": "#/components/schemas/SegmentCategory"
+          }
+        },
+        "required": [
+          "ticker",
+          "report_period"
+        ]
+      },
+      "IncomeStatementSegmentsResponse": {
+        "type": "object",
+        "title": "IncomeStatementSegmentsResponse",
+        "description": "Wrapped list envelope: {\"segmented_financials\": [...], \"next_page_url\": \"...\"}. Page size is 10 records. May instead be a two-key ErrorResponse when no 10-K filing exists for the ticker.",
+        "properties": {
+          "segmented_financials": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IncomeStatementSegmentsRecord"
+            }
+          },
+          "next_page_url": {
+            "type": "string",
+            "format": "uri"
+          }
+        },
+        "required": [
+          "segmented_financials"
+        ]
+      },
+      "BalanceSheetSegmentsRecord": {
+        "type": "object",
+        "title": "BalanceSheetSegmentsRecord",
+        "description": "One record for /financials/balance-sheets/segments: segment identity metadata only. assets, goodwill, and long_lived_assets are declared for Financial Datasets schema parity but always omitted - this server's extraction schema only ever asks a filing for income-statement revenue by segment, never balance-sheet figures.",
+        "properties": {
+          "ticker": {
+            "type": "string",
+            "description": "Uppercase ticker symbol."
+          },
+          "report_period": {
+            "type": "string",
+            "format": "date",
+            "description": "Reporting period end date (YYYY-MM-DD)."
+          },
+          "fiscal_period": {
+            "type": "string",
+            "description": "Fiscal-period label (e.g. FY2025). Omitted when the filing's fiscal year could not be determined."
+          },
+          "period": {
+            "type": "string",
+            "enum": [
+              "annual"
+            ],
+            "description": "Always \"annual\": this route only extracts from annual 10-Ks."
+          },
+          "accession_number": {
+            "type": "string",
+            "description": "SEC EDGAR accession number of the source 10-K, when it could be derived from the filing URL."
+          },
+          "filing_url": {
+            "type": "string",
+            "format": "uri",
+            "description": "SEC EDGAR filing index URL for the source 10-K."
+          },
+          "assets": {
+            "$ref": "#/components/schemas/SegmentCategory"
+          },
+          "goodwill": {
+            "$ref": "#/components/schemas/SegmentCategory"
+          },
+          "long_lived_assets": {
+            "$ref": "#/components/schemas/SegmentCategory"
+          }
+        },
+        "required": [
+          "ticker",
+          "report_period"
+        ]
+      },
+      "BalanceSheetSegmentsResponse": {
+        "type": "object",
+        "title": "BalanceSheetSegmentsResponse",
+        "description": "Wrapped list envelope: {\"segmented_financials\": [...], \"next_page_url\": \"...\"}. Page size is 10 records. May instead be a two-key ErrorResponse when no 10-K filing exists for the ticker.",
+        "properties": {
+          "segmented_financials": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BalanceSheetSegmentsRecord"
+            }
+          },
+          "next_page_url": {
+            "type": "string",
+            "format": "uri"
+          }
+        },
+        "required": [
+          "segmented_financials"
+        ]
+      },
+      "CashFlowStatementSegmentsRecord": {
+        "type": "object",
+        "title": "CashFlowStatementSegmentsRecord",
+        "description": "One record for /financials/cash-flow-statements/segments: segment identity metadata only. capital_expenditure is declared for Financial Datasets schema parity but always omitted - this server's extraction schema only ever asks a filing for income-statement revenue by segment, never cash-flow figures.",
+        "properties": {
+          "ticker": {
+            "type": "string",
+            "description": "Uppercase ticker symbol."
+          },
+          "report_period": {
+            "type": "string",
+            "format": "date",
+            "description": "Reporting period end date (YYYY-MM-DD)."
+          },
+          "fiscal_period": {
+            "type": "string",
+            "description": "Fiscal-period label (e.g. FY2025). Omitted when the filing's fiscal year could not be determined."
+          },
+          "period": {
+            "type": "string",
+            "enum": [
+              "annual"
+            ],
+            "description": "Always \"annual\": this route only extracts from annual 10-Ks."
+          },
+          "accession_number": {
+            "type": "string",
+            "description": "SEC EDGAR accession number of the source 10-K, when it could be derived from the filing URL."
+          },
+          "filing_url": {
+            "type": "string",
+            "format": "uri",
+            "description": "SEC EDGAR filing index URL for the source 10-K."
+          },
+          "capital_expenditure": {
+            "$ref": "#/components/schemas/SegmentCategory"
+          }
+        },
+        "required": [
+          "ticker",
+          "report_period"
+        ]
+      },
+      "CashFlowStatementSegmentsResponse": {
+        "type": "object",
+        "title": "CashFlowStatementSegmentsResponse",
+        "description": "Wrapped list envelope: {\"segmented_financials\": [...], \"next_page_url\": \"...\"}. Page size is 10 records. May instead be a two-key ErrorResponse when no 10-K filing exists for the ticker.",
+        "properties": {
+          "segmented_financials": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CashFlowStatementSegmentsRecord"
+            }
+          },
+          "next_page_url": {
+            "type": "string",
+            "format": "uri"
+          }
+        },
+        "required": [
+          "segmented_financials"
+        ]
+      },
+      "KPIMetric": {
+        "type": "object",
+        "title": "KPIMetric",
+        "description": "One KPI-taxonomy metric extracted from a filing. Field order matches go/fd/types.go's KPIMetric struct declaration, the JSON key order this server emits. Every field is a pointer with omitempty in the Go source: unsourced values are omitted, never nulled or fabricated. segment, yoy_value, and yoy_change_pct are declared for Financial Datasets schema parity but always omitted - this server's extraction (go/service/kpi.go) never asks a filing for them.",
+        "properties": {
+          "ticker": {
+            "type": "string",
+            "description": "Uppercase ticker symbol."
+          },
+          "metric_name": {
+            "type": "string",
+            "description": "Canonical snake_case metric name (e.g. load_factor, cet1_ratio)."
+          },
+          "value": {
+            "type": "number",
+            "description": "The metric's numeric value, as printed in the filing."
+          },
+          "unit": {
+            "type": "string",
+            "description": "Unit of measure the filing uses (%, USD, count, etc.)."
+          },
+          "period": {
+            "type": "string",
+            "description": "The fiscal period label exactly as the filing states it (e.g. Q4 2025)."
+          },
+          "period_type": {
+            "type": "string",
+            "enum": [
+              "quarterly",
+              "annual"
+            ],
+            "description": "Which basis this metric was reported on."
+          },
+          "segment": {
+            "type": "string",
+            "description": "Always omitted today; see this schema's description."
+          },
+          "yoy_value": {
+            "type": "number",
+            "description": "Always omitted today; see this schema's description."
+          },
+          "yoy_change_pct": {
+            "type": "number",
+            "description": "Always omitted today; see this schema's description."
+          },
+          "source_text": {
+            "type": "string",
+            "description": "The filing sentence(s) that state this metric."
+          },
+          "source_url": {
+            "type": "string",
+            "format": "uri",
+            "description": "SEC EDGAR URL of the source filing."
+          }
+        }
+      },
+      "KPIMetricsResponse": {
+        "type": "object",
+        "title": "KPIMetricsResponse",
+        "description": "Wrapped list envelope: {\"kpi_metrics\": [...], \"next_page_url\": \"...\"}. Page size is 10 records. May instead be a two-key ErrorResponse when no matching 10-K/10-Q exists for the ticker.",
+        "properties": {
+          "kpi_metrics": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/KPIMetric"
+            }
+          },
+          "next_page_url": {
+            "type": "string",
+            "format": "uri"
+          }
+        },
+        "required": [
+          "kpi_metrics"
+        ]
+      },
+      "KPIGuidanceItem": {
+        "type": "object",
+        "title": "KPIGuidanceItem",
+        "description": "One forward-guidance item extracted from a filing. Field order matches go/fd/types.go's KPIGuidanceItem struct declaration. Every field is a pointer with omitempty: unsourced values are omitted, never nulled or fabricated. segment, low, high, point_estimate, prior_value, and change_direction are declared for Financial Datasets schema parity but always omitted - this server's extraction (go/service/kpi.go) never asks a filing for them.",
+        "properties": {
+          "ticker": {
+            "type": "string",
+            "description": "Uppercase ticker symbol."
+          },
+          "metric_name": {
+            "type": "string",
+            "description": "Canonical snake_case metric name being guided (e.g. revenue_guidance)."
+          },
+          "value": {
+            "type": "number",
+            "description": "The guided value, as a plain number."
+          },
+          "unit": {
+            "type": "string",
+            "description": "Unit of measure the filing uses (%, USD, USD per share, etc.)."
+          },
+          "period": {
+            "type": "string",
+            "description": "The forward fiscal period being guided, exactly as the filing states it."
+          },
+          "period_type": {
+            "type": "string",
+            "enum": [
+              "quarterly",
+              "annual"
+            ],
+            "description": "Which basis this guidance was issued on."
+          },
+          "segment": {
+            "type": "string",
+            "description": "Always omitted today; see this schema's description."
+          },
+          "low": {
+            "type": "number",
+            "description": "Always omitted today; see this schema's description."
+          },
+          "high": {
+            "type": "number",
+            "description": "Always omitted today; see this schema's description."
+          },
+          "point_estimate": {
+            "type": "number",
+            "description": "Always omitted today; see this schema's description."
+          },
+          "prior_value": {
+            "type": "number",
+            "description": "Always omitted today; see this schema's description."
+          },
+          "raw_text": {
+            "type": "string",
+            "description": "The guided number exactly as printed in the filing."
+          },
+          "change_direction": {
+            "type": "string",
+            "description": "Always omitted today; see this schema's description."
+          },
+          "source_text": {
+            "type": "string",
+            "description": "The filing sentence(s) that state this guidance."
+          },
+          "source_url": {
+            "type": "string",
+            "format": "uri",
+            "description": "SEC EDGAR URL of the source filing."
+          }
+        }
+      },
+      "KPIGuidanceResponse": {
+        "type": "object",
+        "title": "KPIGuidanceResponse",
+        "description": "Wrapped list envelope: {\"kpi_guidance\": [...], \"next_page_url\": \"...\"}. Page size is 10 records. May instead be a two-key ErrorResponse when no matching 10-K/10-Q exists for the ticker.",
+        "properties": {
+          "kpi_guidance": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/KPIGuidanceItem"
+            }
+          },
+          "next_page_url": {
+            "type": "string",
+            "format": "uri"
+          }
+        },
+        "required": [
+          "kpi_guidance"
+        ]
+      },
+      "KPINonGAAPMetric": {
+        "type": "object",
+        "title": "KPINonGAAPMetric",
+        "description": "One non-GAAP metric extracted from a filing. Field order matches go/fd/types.go's KPINonGAAPMetric struct declaration. Every field is a pointer with omitempty: unsourced values are omitted, never nulled or fabricated. gaap_equivalent and key_adjustments are declared for Financial Datasets schema parity but always omitted - this server's extraction (go/service/kpi.go) never asks a filing for them.",
+        "properties": {
+          "ticker": {
+            "type": "string",
+            "description": "Uppercase ticker symbol."
+          },
+          "metric_name": {
+            "type": "string",
+            "description": "Canonical snake_case metric name (e.g. adjusted_ebitda)."
+          },
+          "value": {
+            "type": "number",
+            "description": "The metric's numeric value, as printed in the filing."
+          },
+          "unit": {
+            "type": "string",
+            "description": "Unit of measure the filing uses (USD, %, etc.)."
+          },
+          "period": {
+            "type": "string",
+            "description": "The fiscal period label exactly as the filing states it."
+          },
+          "period_type": {
+            "type": "string",
+            "enum": [
+              "quarterly",
+              "annual"
+            ],
+            "description": "Which basis this metric was reported on."
+          },
+          "gaap_equivalent": {
+            "type": "string",
+            "description": "Always omitted today; see this schema's description."
+          },
+          "key_adjustments": {
+            "type": "string",
+            "description": "Always omitted today; see this schema's description."
+          },
+          "source_text": {
+            "type": "string",
+            "description": "The filing sentence(s) that state this metric."
+          },
+          "source_url": {
+            "type": "string",
+            "format": "uri",
+            "description": "SEC EDGAR URL of the source filing."
+          }
+        }
+      },
+      "KPINonGAAPResponse": {
+        "type": "object",
+        "title": "KPINonGAAPResponse",
+        "description": "Wrapped list envelope: {\"kpi_non_gaap\": [...], \"next_page_url\": \"...\"}. Page size is 10 records. May instead be a two-key ErrorResponse when no matching 10-K/10-Q exists for the ticker.",
+        "properties": {
+          "kpi_non_gaap": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/KPINonGAAPMetric"
+            }
+          },
+          "next_page_url": {
+            "type": "string",
+            "format": "uri"
+          }
+        },
+        "required": [
+          "kpi_non_gaap"
+        ]
+      },
+      "InterestRate": {
+        "type": "object",
+        "title": "InterestRate",
+        "description": "One central bank's current policy interest rate, field order matching go/fd/types.go's InterestRate struct declaration. date is omitted when the bank's page was scraped but no effective date could be parsed nearby the rate.",
+        "properties": {
+          "bank": {
+            "type": "string",
+            "description": "Central bank code: FED, ECB, BOE, or BOJ."
+          },
+          "name": {
+            "type": "string",
+            "description": "Central bank full name."
+          },
+          "rate": {
+            "type": "number",
+            "description": "Current policy rate, in percent."
+          },
+          "date": {
+            "type": "string",
+            "format": "date",
+            "description": "Effective date of the rate, when the source page states one nearby."
+          }
+        },
+        "required": [
+          "bank",
+          "name",
+          "rate"
+        ]
+      },
+      "InterestRatesResponse": {
+        "type": "object",
+        "title": "InterestRatesResponse",
+        "description": "Unpaginated envelope: {\"interest_rates\": [...]}. Every bank whose page was scraped and parsed successfully in this call, in go/service/interestrates.go's bankSpecs order (FED, ECB, BOE, BOJ); a bank that failed to scrape or parse is left out entirely, not nulled.",
+        "properties": {
+          "interest_rates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InterestRate"
+            }
+          }
+        },
+        "required": [
+          "interest_rates"
+        ]
+      },
+      "InterestRateBanksResponse": {
+        "type": "object",
+        "title": "InterestRateBanksResponse",
+        "description": "Static coverage-list response for /macro/interest-rates/banks: the central bank codes get_interest_rates can currently scrape a rate for.",
+        "properties": {
+          "resource": {
+            "type": "string",
+            "description": "Label identifying what this catalog is a list of."
+          },
+          "banks": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Central bank codes, in go/service/interestrates.go's bankSpecs order."
+          }
+        },
+        "required": [
+          "resource",
+          "banks"
+        ]
+      },
+      "FundHolding": {
+        "type": "object",
+        "title": "FundHolding",
+        "description": "One index-fund/ETF constituent, field order matching go/fd/types.go's FundHolding struct declaration. Parsed from a public holdings fact-sheet markdown table (go/service/indexfund.go); a field is omitted whenever that column was blank or missing from the source table.",
+        "properties": {
+          "ticker": {
+            "type": "string",
+            "description": "Holding's ticker symbol, when the fact sheet lists one."
+          },
+          "name": {
+            "type": "string",
+            "description": "Holding's name, when the fact sheet lists one."
+          },
+          "cusip": {
+            "type": "string",
+            "description": "9-character CUSIP, when the fact sheet lists one."
+          },
+          "isin": {
+            "type": "string",
+            "description": "12-character ISIN, when the fact sheet lists one."
+          },
+          "weight": {
+            "type": "number",
+            "description": "Percent of fund net assets."
+          },
+          "market_value": {
+            "type": "number",
+            "description": "Market value of the position, in the fact sheet's stated units."
+          },
+          "shares": {
+            "type": "number",
+            "description": "Number of shares held."
+          },
+          "asset_class": {
+            "type": "string",
+            "enum": [
+              "equity",
+              "bond",
+              "other"
+            ],
+            "description": "Derived from the row's ticker/name/CUSIP text, not stated directly by most fact sheets."
+          }
+        }
+      },
+      "IndexFund": {
+        "type": "object",
+        "title": "IndexFund",
+        "description": "Fund header for /index-funds: identity, as-of date, and coverage counts for the full fund (not just the returned page). Every field is present only when this server could source it - see go/service/indexfund.go's fund object construction.",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Fund name, taken from the matched search result's title. Omitted when the routable result had none."
+          },
+          "as_of": {
+            "type": "string",
+            "format": "date",
+            "description": "Reporting date the holdings fact sheet states for itself. Omitted when no as-of date could be parsed from the page."
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "public fund holdings fact sheet (markdown)"
+            ],
+            "description": "Always this literal value: every fund's data comes from the same kind of source."
+          },
+          "total_holdings": {
+            "type": "integer",
+            "description": "Total holdings this server parsed from the fact sheet, before the asset_class filter and offset/limit paging applied."
+          },
+          "returned": {
+            "type": "integer",
+            "description": "Number of holdings in this page (after asset_class filtering and offset/limit paging)."
+          },
+          "offset": {
+            "type": "integer",
+            "description": "Echoes the request's offset."
+          }
+        },
+        "required": [
+          "source",
+          "total_holdings",
+          "returned",
+          "offset"
+        ]
+      },
+      "IndexFundHoldingsResponse": {
+        "type": "object",
+        "title": "IndexFundHoldingsResponse",
+        "description": "Unwrapped body for /index-funds (ticker mode only - see this route's description). May instead be a two-key ErrorResponse ({\"error\": \"bad_request\" or \"not_found\", \"message\": ...}) when no holdings document is routable, or when as_of predates the routable fact sheet.",
+        "properties": {
+          "ticker": {
+            "type": "string",
+            "description": "The fund ticker, echoed back uppercase-normalized."
+          },
+          "fund": {
+            "$ref": "#/components/schemas/IndexFund"
+          },
+          "holdings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FundHolding"
+            },
+            "description": "Sorted by weight descending (holdings with no weight sort last, by ticker-or-name)."
+          }
+        },
+        "required": [
+          "ticker",
+          "fund",
+          "holdings"
+        ]
+      },
+      "InstitutionalHolding": {
+        "type": "object",
+        "title": "InstitutionalHolding",
+        "description": "One 13F institutional-holdings row, field order matching go/fd/types.go's InstitutionalHolding struct declaration. Every field is a pointer with omitempty in the Go source: unsourced values are omitted, never nulled or fabricated. cusip, filing_date, form_type, accession_number, title_of_class, put_call, reported_price, filer_cik, and subsidiaries are declared for Financial Datasets schema parity but always omitted - the SECForm4 institution holders route (go/service/institutionalholdings.go) never reports them.",
+        "properties": {
+          "ticker": {
+            "type": "string",
+            "description": "Uppercase ticker symbol of the held security."
+          },
+          "name_of_issuer": {
+            "type": "string",
+            "description": "Issuer name, when the source route reports one."
+          },
+          "cusip": {
+            "type": "string",
+            "description": "Always omitted today; see this schema's description."
+          },
+          "report_period": {
+            "type": "string",
+            "format": "date",
+            "description": "13F quarter-end date, when the source route reports one."
+          },
+          "filing_date": {
+            "type": "string",
+            "format": "date",
+            "description": "Always omitted today; see this schema's description."
+          },
+          "form_type": {
+            "type": "string",
+            "description": "Always omitted today; see this schema's description."
+          },
+          "accession_number": {
+            "type": "string",
+            "description": "Always omitted today; see this schema's description."
+          },
+          "title_of_class": {
+            "type": "string",
+            "description": "Always omitted today; see this schema's description."
+          },
+          "put_call": {
+            "type": "string",
+            "description": "Always omitted today; see this schema's description."
+          },
+          "shares": {
+            "type": "integer",
+            "description": "Shares held, when the source route reports them."
+          },
+          "value_usd": {
+            "type": "integer",
+            "description": "Position value in USD, when the source route reports it."
+          },
+          "reported_price": {
+            "type": "number",
+            "description": "Always omitted today; see this schema's description."
+          },
+          "filer_cik": {
+            "type": "string",
+            "description": "Always omitted today; see this schema's description."
+          },
+          "filer_name": {
+            "type": "string",
+            "description": "Institutional filer's name, when the source route reports one."
+          },
+          "subsidiaries": {
+            "type": "array",
+            "items": {},
+            "description": "Always omitted today; see this schema's description."
+          }
+        }
+      },
+      "InstitutionalHoldingsResponse": {
+        "type": "object",
+        "title": "InstitutionalHoldingsResponse",
+        "description": "Wrapped list envelope: {\"institutional_holdings\": [...], \"next_page_url\": \"...\"}. Page size is 10 records. Unlike Financial Datasets' own contract, the envelope does not echo ticker or filer_cik back (this route's ticker is only carried per-row, on each InstitutionalHolding), matching every other ticker-scoped list route in this API (get_financial_metrics, get_filings, and so on) except /prices. May instead be a two-key ErrorResponse when filer_cik is set (see the route description).",
+        "properties": {
+          "institutional_holdings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InstitutionalHolding"
+            }
+          },
+          "next_page_url": {
+            "type": "string",
+            "format": "uri"
+          }
+        },
+        "required": [
+          "institutional_holdings"
         ]
       }
     },

@@ -1,0 +1,56 @@
+---
+title: "Cash Flow Statements"
+description: "Operating, investing, and financing cash flows for each reporting period, from filed SEC data."
+openapi: "api-reference/openapi.json GET /financials/cash-flow-statements"
+---
+
+This route returns one cash flow statement row per reporting period: cash generated or consumed by operations, investing, and financing activities, plus the resulting change in cash. It shares its provider chain and pagination shape with [Income Statements](/datasets/financial-statements/income-statements): the same `/equities/v1/statements` fetch, joined against `/equities/v1/filings` for SEC identity.
+
+## What this answers
+
+- How much cash a company generated from operations in a given period, and where it went.
+- What a company's free cash flow was for a given fiscal year or quarter.
+
+## Coverage
+
+| | |
+|---|---|
+| Provider chain | DefiLlama `/equities/v1/statements`, joined with `/equities/v1/filings` |
+| Reporting periods | Annual, quarterly, and trailing-twelve-month (`ttm`) |
+| Measured cost | \$0.0012 per call (statement fetch plus the filings identity join) |
+| Cache TTL | 600 seconds, see [Caching](/guides/caching) |
+
+## Query rules
+
+`ticker` is required. `period` accepts `annual`, `quarterly`, or `ttm`, and defaults to `annual` on this REST route, unlike the underlying MCP tool's own `ttm` default. Pass `period` explicitly if the default matters.
+
+`as_reported=true` is accepted for parameter parity but always answers `400 bad_request`. `limit` defaults to `4` and caps at `100`. The `report_period*` family of filters narrows by report date, the same way it does on [Income Statements](/datasets/financial-statements/income-statements).
+
+Fields the current Go source declares but our own live captures never populate: `currency`, `accession_number`, `form_type`, `filing_url`, `filing_date`, `filing_datetime`, `net_income`, `depreciation_and_amortization`, `share_based_compensation`, `capital_expenditure`, `business_acquisitions_and_disposals`, `investment_acquisitions_and_disposals`, `issuance_or_repayment_of_debt_securities`, `issuance_or_purchase_of_equity_shares`, `effect_of_exchange_rate_changes`. These are schema-legal and left out of the response rather than guessed.
+
+## Worked example
+
+```bash curl
+curl -s 'https://monid-finance-api.fly.dev/financials/cash-flow-statements?ticker=AAPL&period=annual&limit=1' \
+  -H 'X-API-KEY: <your-api-key>'
+```
+
+```json Response
+{
+  "cash_flow_statements": [
+    {
+      "ticker": "AAPL",
+      "report_period": "2025-09-30",
+      "fiscal_period": "FY2025",
+      "period": "annual",
+      "net_cash_flow_from_operations": 111482000000,
+      "net_cash_flow_from_investing": 27910000000,
+      "dividends_and_other_cash_distributions": -15421000000,
+      "net_cash_flow_from_financing": -120686000000,
+      "change_in_cash_and_equivalents": 18706000000,
+      "ending_cash_balance": 35934000000,
+      "free_cash_flow": 98767000000
+    }
+  ]
+}
+```

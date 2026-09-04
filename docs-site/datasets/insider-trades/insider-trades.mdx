@@ -16,7 +16,7 @@ This route returns individual SEC Form 4 transactions, officers, directors, and 
 |---|---|
 | Provider chain | SECForm4 `/search` |
 | Row cap | 15 rows total, regardless of `limit` |
-| Measured cost | $0.01 per call, the most expensive route on this API |
+| Measured cost | \$0.01 per call, the most expensive route on this API |
 | Cache TTL | 600 seconds, see [Caching](/guides/caching) |
 
 ## Query rules
@@ -27,12 +27,14 @@ This route returns individual SEC Form 4 transactions, officers, directors, and 
 
 ## Worked example
 
+This repo has no committed live capture for `/insider-trades`. The example below is illustrative only, field names follow `go/fd/types.go`, and every name and figure is a synthetic placeholder, not a real reported transaction.
+
 ```bash curl
 curl -s 'https://monid-finance-api.fly.dev/insider-trades?ticker=AAPL&limit=1' \
   -H 'X-API-KEY: <your-api-key>'
 ```
 
-```json Response
+```json Response, illustrative
 {
   "insider_trades": [
     {
@@ -41,6 +43,7 @@ curl -s 'https://monid-finance-api.fly.dev/insider-trades?ticker=AAPL&limit=1' \
       "name": "Cook Timothy D",
       "is_board_director": true,
       "filing_date": "2026-08-15",
+      "report_period": "2026-08-13",
       "transaction_date": "2026-08-13",
       "transaction_type": "SALE",
       "transaction_shares": 90000.0,

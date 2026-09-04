@@ -29,8 +29,13 @@ import (
 const defaultCacheTTL = 300 * time.Second
 
 // ttlByEndpoint is the per-endpoint TTL policy, mirroring cache.TTL_BY_ENDPOINT.
+//
+// companies-list gets a much longer TTL than every other endpoint: it is
+// the full US ticker catalog (3,227 records, measured $0.0006/call), the
+// backing source for every list*Tickers coverage list (coverage.go), and
+// changes on the order of days (new listings/delistings), not minutes.
 var ttlByEndpoint = map[string]time.Duration{
-	"/equities/v1/companies-list": 600 * time.Second,
+	"/equities/v1/companies-list": 24 * time.Hour,
 	"/equities/v1/statements":     600 * time.Second,
 	"/equities/v1/filings":        600 * time.Second,
 	"/equities/v1/summary":        60 * time.Second,

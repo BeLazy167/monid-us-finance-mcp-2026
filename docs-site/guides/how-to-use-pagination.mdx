@@ -1,0 +1,52 @@
+---
+title: "How to Use Pagination"
+description: "Page through more filings than one response page holds, using limit and the cursor."
+---
+
+This walkthrough lists more of a company's filings than fit on one page. It applies the same way to any list-returning REST route: statements, financial metrics, filings, prices, news, earnings, insider trades.
+
+## 1. Ask for more than one page holds
+
+`limit` is a budget for the whole request, not a page size. Each response page holds a fixed number of records regardless of the `limit` you pass, 10 for most list endpoints, 100 for `/prices`. Ask for 25 filings and the first response gives you 10, plus a link to the rest.
+
+```bash curl
+curl -s 'https://monid-finance-api.fly.dev/filings?ticker=AAPL&limit=25' \
+  -H 'X-API-KEY: <your-api-key>'
+```
+
+```json Response, trimmed
+{
+  "filings": [ ],
+  "next_page_url": "https://monid-finance-api.fly.dev/filings?ticker=AAPL&cursor=eyJvIjoxMH0"
+}
+```
+
+## 2. Follow next_page_url, unchanged
+
+Pass the URL back exactly as given. Do not construct your own cursor value, decoding `eyJvIjoxMH0` gives `{"o":10}`, a record offset, but nothing about that format is documented as stable.
+
+```bash curl
+curl -s 'https://monid-finance-api.fly.dev/filings?ticker=AAPL&cursor=eyJvIjoxMH0' \
+  -H 'X-API-KEY: <your-api-key>'
+```
+
+`next_page_url` always points back at the host you called. It never sends you to a different domain.
+
+## 3. Know when to stop
+
+When no more records remain, `next_page_url` is left out of the response entirely. Stop paging once you stop seeing it, rather than looping on a fixed page count.
+
+## What happens with a bad cursor
+
+A `cursor` value this server did not mint, hand-edited, corrupted, or in a format it does not use, answers `400`.
+
+```json
+{
+  "error": "invalid_cursor",
+  "message": "cursor is not a valid opaque pagination token"
+}
+```
+
+## MCP does not paginate
+
+An MCP tool call returns a bare result, an array for list tools, with no `cursor` and no `next_page_url`. Use the tool's own `limit` parameter to bound how much comes back instead. Some tools cap below what the REST mechanics above would suggest, `get_insider_trades` returns at most 15 rows no matter what `limit` you pass. See [Coverage](/overview/coverage) for per-tool caps like that one.

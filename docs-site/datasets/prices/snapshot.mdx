@@ -1,0 +1,44 @@
+---
+title: "Snapshot"
+description: "The most recent price and day change for a ticker."
+openapi: "api-reference/openapi.json GET /prices/snapshot"
+---
+
+This route returns the most recent price and day change for a ticker, sourced from the same `/equities/v1/summary` endpoint the [financial metrics snapshot](/datasets/financial-metrics/snapshot) uses.
+
+## What this answers
+
+- What a stock is trading at right now, and how much it moved today.
+
+## Coverage
+
+| | |
+|---|---|
+| Provider chain | DefiLlama `/equities/v1/summary` |
+| Measured cost | \$0.0006 per call |
+| Cache TTL | 60 seconds, see [Caching](/guides/caching) |
+
+## Query rules
+
+`ticker` is required, and it is the only parameter this route accepts.
+
+`time_milliseconds` is declared on the `PriceSnapshot` schema but our own live captures never populate it. It is schema-legal and left out of the response rather than guessed.
+
+## Worked example
+
+```bash curl
+curl -s 'https://monid-finance-api.fly.dev/prices/snapshot?ticker=AAPL' \
+  -H 'X-API-KEY: <your-api-key>'
+```
+
+```json Response
+{
+  "snapshot": {
+    "price": 318.27,
+    "ticker": "AAPL",
+    "day_change": -9.94,
+    "day_change_percent": -3.029,
+    "time": "2026-09-04T15:01:00Z"
+  }
+}
+```

@@ -39,7 +39,7 @@ The REST facade wires 15 of the 27 tools to a path. The rest, including `list_fi
 
 | REST path | Behavior | MCP tool that works today |
 |---|---|---|
-| `/kpi/metrics`, `/kpi/guidance`, `/kpi/non-gaap` | Stub, HTTP 200 | `get_kpi_metrics`, `get_kpi_guidance`, `get_kpi_non_gaap` |
+| `/kpi/metrics`, `/kpi/metrics/tickers`, `/kpi/metrics/sectors`, `/kpi/guidance`, `/kpi/non-gaap` | Stub, HTTP 200 | `get_kpi_metrics`, `get_kpi_guidance`, `get_kpi_non_gaap` |
 | `/macro/interest-rates*` | Stub | `get_interest_rates` |
 | `/financials/segments`, `/financials/*/segments` | Stub | `get_segmented_financials` |
 | `/index-funds*` | Stub | `get_index_fund` |
@@ -59,7 +59,7 @@ The same tool can return different data depending on which transport called it, 
 
 ## Response contract
 
-A success response contains only Financial Datasets schema keys, in schema property order. A field the server cannot source is left out, never set to null or guessed. Every failure uses the Financial Datasets `{"error": <code>, "message": <text>}` shape, covered in full in [Errors](/guides/errors). Pagination follows the pattern in [Pagination](/guides/pagination). Cost and provenance never appear in a response body. They go to an internal receipts ledger, one row per Monid call.
+A success response contains only Financial Datasets schema keys, in schema property order. A field the server cannot source is left out, never set to null or guessed. Every failure uses the Financial Datasets `{"error": <code>, "message": <text>}` shape, covered in full in [Errors](/guides/errors). Pagination follows the pattern in [Pagination](/guides/how-to-use-pagination). Cost and provenance never appear in a response body. They go to an internal receipts ledger, one row per Monid call.
 
 ## Known gaps, endpoint by endpoint
 

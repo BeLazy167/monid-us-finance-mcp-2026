@@ -1,0 +1,49 @@
+---
+title: "Historical"
+description: "Margins, turnovers, and growth rates computed from the statement matrix, one row per reporting period."
+openapi: "api-reference/openapi.json GET /financial-metrics"
+---
+
+This route returns one row per historical reporting period: margins, turnovers, and growth rates computed from the statement matrix behind [Financial Statements](/datasets/financial-statements/income-statements). It has no market price attached to past periods, so valuation fields are left out. Use [Snapshot](/datasets/financial-metrics/snapshot) instead for current market cap, P/E, and other live valuation multiples.
+
+## What this answers
+
+- How a company's gross margin or net margin has trended over recent fiscal periods.
+- How efficiently a company turns over inventory or receivables, by period.
+
+## Coverage
+
+| | |
+|---|---|
+| Provider chain | DefiLlama `/equities/v1/statements` and `/equities/v1/filings` |
+| Measured cost | \$0.0012 per call |
+| Cache TTL | 600 seconds, see [Caching](/guides/caching) |
+
+## Query rules
+
+`ticker` is required. `period` accepts `annual`, `quarterly`, or `ttm`, and defaults to `annual` on this REST route, unlike the underlying MCP tool's `ttm` default. `limit` defaults to `4` and caps at `100`. The same `report_period*` date filters as the statements routes apply here too.
+
+This route always omits `enterprise_value`, every `price_to_*` ratio, EV multiples, `free_cash_flow_yield`, `peg_ratio`, `return_on_invested_capital`, `currency`, and `filing_datetime`. None of these are sourceable for a past period without a historical market price this server does not have. `ttm` rows also drop filing identity (`accession_number`, `form_type`, `filing_url`, `filing_date`), since a trailing-twelve-month window spans more than one filing. Our own live captures show filing identity absent even on annual rows in practice, the filings join is best effort, not guaranteed on every row.
+
+## Worked example
+
+```bash curl
+curl -s 'https://monid-finance-api.fly.dev/financial-metrics?ticker=AAPL&period=annual&limit=1' \
+  -H 'X-API-KEY: <your-api-key>'
+```
+
+```json Response
+{
+  "financial_metrics": [
+    {
+      "ticker": "AAPL",
+      "report_period": "2025-09-30",
+      "fiscal_period": "FY2025",
+      "period": "annual",
+      "gross_margin": 0.4865291555900202,
+      "operating_margin": 0.3317,
+      "net_margin": 0.27618604910212224
+    }
+  ]
+}
+```

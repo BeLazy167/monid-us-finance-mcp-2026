@@ -1,0 +1,109 @@
+---
+title: "How to Get Fundamentals"
+description: "Go from a ticker to three statements plus a metrics snapshot in four calls."
+---
+
+This walkthrough pulls a company's income statement, balance sheet, cash flow statement, and current valuation metrics for one ticker. Four calls, one ticker, no pagination needed at these limits.
+
+## 1. Income statement
+
+```bash curl
+curl -s 'https://monid-finance-api.fly.dev/financials/income-statements?ticker=AAPL&period=annual&limit=1' \
+  -H 'X-API-KEY: <your-api-key>'
+```
+
+```json Response, trimmed
+{
+  "income_statements": [
+    {
+      "ticker": "AAPL",
+      "report_period": "2025-09-30",
+      "fiscal_period": "FY2025",
+      "period": "annual",
+      "revenue": 416161000000,
+      "gross_profit": 195201000000,
+      "operating_income": 133050000000,
+      "net_income": 112010000000,
+      "earnings_per_share": 7.49,
+      "earnings_per_share_diluted": 7.46
+    }
+  ]
+}
+```
+
+Measured cost: \$0.0012.
+
+## 2. Balance sheet
+
+```bash curl
+curl -s 'https://monid-finance-api.fly.dev/financials/balance-sheets?ticker=AAPL&period=annual&limit=1' \
+  -H 'X-API-KEY: <your-api-key>'
+```
+
+```json Response, trimmed
+{
+  "balance_sheets": [
+    {
+      "ticker": "AAPL",
+      "report_period": "2025-09-30",
+      "total_assets": 359241000000,
+      "total_liabilities": 285508000000,
+      "shareholders_equity": 73733000000
+    }
+  ]
+}
+```
+
+Measured cost: \$0.0012.
+
+## 3. Cash flow statement
+
+```bash curl
+curl -s 'https://monid-finance-api.fly.dev/financials/cash-flow-statements?ticker=AAPL&period=annual&limit=1' \
+  -H 'X-API-KEY: <your-api-key>'
+```
+
+```json Response, trimmed
+{
+  "cash_flow_statements": [
+    {
+      "ticker": "AAPL",
+      "report_period": "2025-09-30",
+      "net_cash_flow_from_operations": 111482000000,
+      "free_cash_flow": 98767000000
+    }
+  ]
+}
+```
+
+Measured cost: \$0.0012.
+
+## 4. Current valuation
+
+The three statements above cover filed history. They carry no live market price, so `enterprise_value` and every `price_to_*` ratio are left out on purpose. Pull the snapshot route for those.
+
+```bash curl
+curl -s 'https://monid-finance-api.fly.dev/financial-metrics/snapshot?ticker=AAPL' \
+  -H 'X-API-KEY: <your-api-key>'
+```
+
+```json Response, trimmed
+{
+  "snapshot": {
+    "ticker": "AAPL",
+    "market_cap": 4674544794120,
+    "price_to_earnings_ratio": 36.26,
+    "gross_margin": 0.4865291555900202,
+    "operating_margin": 0.3317,
+    "net_margin": 0.27618604910212224
+  }
+}
+```
+
+Measured cost: \$0.0006.
+
+## Total
+
+Four calls, \$0.0042 combined at these measured costs. Each response caches independently for 600 seconds on the statement routes and 60 seconds on the snapshot, see [Caching](/guides/caching), so repeating this sequence for the same ticker inside those windows costs nothing on the cached calls.
+
+See [Income Statements](/datasets/financial-statements/income-statements), [Balance Sheets](/datasets/financial-statements/balance-sheets), [Cash Flow Statements](/datasets/financial-statements/cash-flow-statements), and [Financial Metrics Snapshot](/datasets/financial-metrics/snapshot) for the full field list and query rules behind each call.

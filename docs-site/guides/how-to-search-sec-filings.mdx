@@ -1,0 +1,73 @@
+---
+title: "How to Search SEC Filings"
+description: "List a company's filings, then extract one section from a specific filing."
+---
+
+This walkthrough finds a company's recent 10-K filings, then extracts one named section from the most recent one. Two calls.
+
+## 1. List recent 10-Ks
+
+```bash curl
+curl -s 'https://monid-finance-api.fly.dev/filings?ticker=AAPL&filing_type=10-K&limit=2' \
+  -H 'X-API-KEY: <your-api-key>'
+```
+
+```json Response
+{
+  "filings": [
+    {
+      "accession_number": "0000320193-26-000018",
+      "filing_type": "8-K",
+      "report_date": "2026-07-30",
+      "filing_date": "2026-07-30",
+      "ticker": "AAPL",
+      "url": "https://www.sec.gov/Archives/edgar/data/0000320193/000032019326000018/aapl-20260730.htm"
+    }
+  ]
+}
+```
+
+`filing_type` narrows to one form. `cik` is not supported here, pass `ticker` instead. Measured cost: \$0.0006.
+
+## 2. Extract one section
+
+Take the `filing_type` and the fiscal year of the filing you found, and pull one item from it. `year` is required on this route, the auto-resolve-latest-year behavior the Financial Datasets schema describes is MCP only here.
+
+```bash curl
+curl -s 'https://monid-finance-api.fly.dev/filings/items?ticker=AAPL&filing_type=10-K&year=2026&item=Item%201' \
+  -H 'X-API-KEY: <your-api-key>'
+```
+
+```json Response, illustrative shape
+{
+  "resource": "https://www.sec.gov/Archives/edgar/data/0000320193/000032019326000001/example-10k.htm",
+  "ticker": "AAPL",
+  "filing_type": "10-K",
+  "accession_number": "0000320193-26-000001",
+  "year": 2026,
+  "items": [
+    {
+      "number": "Item 1",
+      "name": "Business",
+      "text": "The extracted section text, matching the filing verbatim, not a summary."
+    }
+  ]
+}
+```
+
+Extraction is rule-based against known SEC section boundaries, not an LLM guessing where a section starts and ends. Measured cost: \$0.0015 (index lookup plus scrape).
+
+## When no filing matches
+
+A `year` with no matching filing, or a ticker with no filing of that type, answers `HTTP 200` with an `ErrorResponse` body rather than a `404`, at no additional cost.
+
+```json
+{
+  "error": "not_found",
+  "message": "No 10-K filing matches ticker AAPL, year 1999."
+}
+```
+
+## Total
+
+Two calls, \$0.0021 combined at these measured costs. See [Filings](/datasets/filings/filings) and [Filing Items](/datasets/filings/filing-items) for the full parameter list, including the closed list of valid `filing_type` values and why `item` takes one code per request here instead of an array.

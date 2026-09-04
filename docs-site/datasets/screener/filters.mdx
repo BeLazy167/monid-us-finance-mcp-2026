@@ -1,0 +1,67 @@
+---
+title: "Screener Filters"
+description: "The exact filter fields, operators, and allowed values the screener executes."
+openapi: "api-reference/openapi.json GET /financials/search/screener/filters"
+---
+
+This route returns the exact executable filter catalog for [Stock Screener](/datasets/screener/stock-screener): field names, operators, and allowed values, so a client can check what is filterable before building a request. It is a static, deterministic list. No Monid call is made.
+
+## What this answers
+
+- Which filter fields and values `POST /financials/search/screener` will actually accept.
+
+## Coverage
+
+| | |
+|---|---|
+| Provider chain | None, static, no Monid call |
+| Measured cost | \$0 per call |
+| Cache TTL | Not cached, the response never changes |
+
+## Query rules
+
+This route accepts no parameters.
+
+## Worked example
+
+```bash curl
+curl -s 'https://monid-finance-api.fly.dev/financials/search/screener/filters' \
+  -H 'X-API-KEY: <your-api-key>'
+```
+
+```json Response
+{
+  "metrics": {
+    "company": [
+      {
+        "field": "exchange",
+        "operators": [
+          "eq"
+        ],
+        "values": [
+          "AMEX",
+          "NASDAQ",
+          "NYSE"
+        ]
+      },
+      {
+        "field": "market_cap",
+        "operators": [
+          "eq"
+        ],
+        "values": [
+          "mega",
+          "large",
+          "mid",
+          "small",
+          "micro",
+          "nano"
+        ]
+      }
+    ]
+  },
+  "operators": [
+    "eq"
+  ]
+}
+```

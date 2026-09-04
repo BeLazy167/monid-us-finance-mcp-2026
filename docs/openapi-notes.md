@@ -38,8 +38,12 @@ every route this server's HTTP router actually registers.
 9. `docs/compatibility.md` — cross-checked against the Go source for the honest-gap
    language; where it disagreed with the current Go source (see below), the Go source
    won, since it is the literal thing this server runs.
-10. `docs/fd-live-samples/*.json` — real captured AAPL values, used for examples
-    wherever their shape matches the current Go structs (see "Examples" below).
+10. `docs/our-live-samples/*.json` — real captured responses from **our own** live
+    deployment (https://monid-finance-api.fly.dev), used for every response example that
+    has a captured sample (see "Examples" below). `docs/fd-live-samples/*.json` is
+    Financial Datasets' own captured output and is explicitly **not** a source for this
+    document: an earlier revision of this file mistakenly copied values from it (a real
+    provenance bug, since fixed — see "Examples" below for what changed and why).
 
 ## REST-vs-tool-schema deviations worth flagging explicitly
 
@@ -119,47 +123,104 @@ place this spec's declared property order is a *readability* choice rather than 
 transcription of what `json.Marshal` emits. Every individual **record** schema (the
 objects inside those arrays) still transcribes the real, literal Go struct field order.
 
-## Examples: real data preferred, nothing fabricated
+## Examples: our own live responses, nothing from a third party
 
-- **Real, sourced values** (kept byte-for-byte from the repo, filtered down to only the
-  fields the current Go structs actually emit): `/financials/income-statements`
-  (AAPL FY2025/FY2024 10-K, `docs/fd-live-samples/income_statements.json`),
-  `/filings` (AAPL 10-Ks, `filings.json`), `/prices` (AAPL daily bars, `prices.json`),
-  `/earnings` (AAPL 8-K earnings record, `earnings.json`), `/financial-metrics/snapshot`
-  (AAPL snapshot, `snap.json`). Some of these live samples include fields our current Go
-  structs do not have (e.g. `nonoperating_income_expense` on income statements, a
-  per-row `ticker` on price bars) — those extra fields were dropped from the examples
-  rather than documented, since they do not match `go/fd/types.go` today.
-- **Derived-from-real values, not captured live but computed from committed real
-  numbers:** `/prices/snapshot`'s `day_change`/`day_change_percent` are the literal
-  close-minus-open and percent change of the real 2026-08-28 AAPL bar in `prices.json`.
-  `/financial-metrics`'s `gross_margin`/`operating_margin`/`net_margin` are the literal
-  ratios of the real AAPL FY2025 `gross_profit`/`operating_income`/`net_income` over
-  `revenue` from `income_statements.json`.
-- **Identity-only, numbers omitted rather than fabricated:** `/financials/balance-sheets`
-  and `/financials/cash-flow-statements` have no committed live sample in this repo. Their
-  examples reuse the real AAPL FY2025 10-K identity fields (ticker, report_period,
-  accession_number, filing_url, filing_date — the same filing joined across all three
-  statement kinds by `buildFilingIdentityMap`) and omit every numeric field, rather than
-  inventing balance sheet or cash flow figures with no committed source.
-- **Illustrative shape only, clearly not a live capture:** `/news`, `/insider-trades`,
-  `/financials/search/screener`, and the `item.text` excerpt in `/filings/items` have no
-  committed live sample in this repo. Their examples are structurally accurate (correct
-  field names, types, and — where known — realistic formats, e.g. Nasdaq's `"$319.70"`
-  string style for screener rows) but use generic placeholder text/names, and each
-  operation's example `summary`/description says so explicitly. No specific real-world
-  fact (a real trade, a real headline, a real filing excerpt) is asserted.
-- The two `not_found` examples (`/company/facts`, `/filings/items`) use a
-  deliberately-invalid ticker/year so the "no data fabricated" contract is obvious from
-  the example itself.
+**Provenance fix (this revision).** An earlier revision of this file copied response
+examples from `docs/fd-live-samples/*.json` — Financial Datasets' own captured output,
+not ours. That was both a licensing/provenance problem (this repo is headed for
+open-sourcing) and a factual bug: it asserted fields and values our own API does not
+emit (most visibly `filing_datetime`, and the accession `0000320193-25-000079` /
+`report_period` `2025-09-27` from a Financial Datasets 10-K capture that does not match
+our own AAPL FY2025 capture, `report_period` `2025-09-30`). Every response example in
+this document is now sourced exclusively from `docs/our-live-samples/*.json` — real,
+verified responses captured from our own live deployment
+(https://monid-finance-api.fly.dev) — or, where no live sample exists, built from
+`go/fd/types.go` field names with clearly-labeled synthetic placeholder values. No value
+in this document is copied from `docs/fd-live-samples/**` or any Financial Datasets
+page.
+
+**Endpoints with a real captured sample** (`docs/our-live-samples/*.json`, values kept
+byte-for-byte, arrays trimmed to 1-2 records for readability):
+
+- `/financials/income-statements` — `income_statements.json` (AAPL FY2025/FY2024 annual).
+- `/financials/balance-sheets` — `balance_sheets.json` (AAPL FY2025 annual).
+- `/financials/cash-flow-statements` — `cash_flow.json` (AAPL FY2025 annual).
+- `/filings` — `filings.json` (AAPL 8-K/10-Q filings).
+- `/prices` — `prices.json` (AAPL daily bars).
+- `/prices/snapshot` — `price_snapshot.json`.
+- `/financial-metrics/snapshot` — `metrics_snapshot.json`.
+- `/company/facts` (found case) — `company_facts.json`.
+- `/financial-metrics` (historical) — identity fields (`ticker`, `report_period`,
+  `fiscal_period`, `period`) from `income_statements.json` and margin ratios
+  (`gross_margin`, `operating_margin`, `net_margin`) from `metrics_snapshot.json`,
+  recombined into the historical-route response shape. Both source files are our own
+  live captures; no value is fabricated. Filing-identity fields (`accession_number`,
+  `form_type`, `filing_url`, `filing_date`) and every valuation field
+  (`enterprise_value`, `price_to_*_ratio`, EV multiples) are omitted from the example:
+  our own captures never populate them for this route (see the field's schema
+  description and the gap list below).
+
+**Endpoints with no captured live sample** (`news`, `insider-trades`,
+`financials/search/screener`, `earnings`, `filings/items`, and the 20 `not_implemented`
+stub paths): examples are built strictly from `go/fd/types.go` (or, for `/earnings`,
+also `go/providers/earnings.go`'s `EarningsTimeDimension`) field names, with clearly
+synthetic, round, illustrative values. No value here is copied from
+`docs/fd-live-samples/**`. Each operation's `description` says explicitly that the
+example is illustrative-only. The `/earnings` example previously copied real AAPL 8-K
+figures byte-for-byte from `docs/fd-live-samples/earnings.json` (revenue, EPS, every
+`signals[]` entry, the accession number, and the filing timestamp all matched
+exactly) — that example has been replaced entirely with synthetic placeholder values.
+The `/financials/search/screener` example's `market_cap` previously matched Financial
+Datasets' own captured market cap byte-for-byte too (`4785139738400`); it is now a
+distinct round placeholder number.
+
+**`filing_datetime` — the clearest single fact behind this fix.** `filing_datetime` is
+declared (for Financial-Datasets-contract parity) on `IncomeStatement`, `BalanceSheet`,
+`CashFlowStatement`, `EarningsRecord`, and the dynamic `FinancialMetric` response, but a
+full-repo search (`grep -rn FilingDatetime go/`) shows it is assigned nowhere in this
+codebase — only declared in `go/fd/types.go`. It is always omitted from every real
+response this server can produce today. The schema `properties` for this field on every
+affected schema now say so explicitly, and it never appears in any example.
+
+**Fields documented as schema-optional but not present in any of our own live
+captures** (kept as schema properties — they are real `go/fd/types.go` fields the Go
+source can in principle populate — but intentionally left out of every example because
+our own captured samples never show them populated):
+
+- **IncomeStatement (`/financials/income-statements`)**: `currency`, `accession_number`, `form_type`, `filing_url`, `filing_date`, `filing_datetime`, `selling_general_and_administrative_expenses`, `interest_expense`, `net_income_discontinued_operations`, `net_income_non_controlling_interests`, `preferred_dividends_impact`, `consolidated_income`, `dividends_per_common_share`
+- **BalanceSheet (`/financials/balance-sheets`)**: `currency`, `accession_number`, `form_type`, `filing_url`, `filing_date`, `filing_datetime`, `current_investments`, `property_plant_and_equipment`, `goodwill_and_intangible_assets`, `investments`, `non_current_investments`, `outstanding_shares`, `tax_assets`, `trade_and_non_trade_payables`, `deferred_revenue`, `deposit_liabilities`, `tax_liabilities`, `accumulated_other_comprehensive_income`, `total_debt`
+- **CashFlowStatement (`/financials/cash-flow-statements`)**: `currency`, `accession_number`, `form_type`, `filing_url`, `filing_date`, `filing_datetime`, `net_income`, `depreciation_and_amortization`, `share_based_compensation`, `capital_expenditure`, `business_acquisitions_and_disposals`, `investment_acquisitions_and_disposals`, `issuance_or_repayment_of_debt_securities`, `issuance_or_purchase_of_equity_shares`, `effect_of_exchange_rate_changes`
+- **Filing (`/filings`)**: `cik`
+- **PriceSnapshot (`/prices/snapshot`)**: `time_milliseconds`
+- **CompanyFacts (`/company/facts`)**: `cik`, `industry`, `sector`, `exchange`, `is_active`, `location`, `sec_filings_url`, `sic_code`, `sic_industry`, `sic_sector`
+- **FinancialMetricSnapshot (`/financial-metrics/snapshot`)**: `currency`, `enterprise_value_to_revenue_ratio`, `free_cash_flow_yield`, `peg_ratio`, `return_on_equity`, `return_on_assets`, `return_on_invested_capital`, `asset_turnover`, `inventory_turnover`, `receivables_turnover`, `days_sales_outstanding`, `operating_cycle`, `working_capital_turnover`, `current_ratio`, `quick_ratio`, `cash_ratio`, `operating_cash_flow_ratio`, `debt_to_equity`, `debt_to_assets`, `interest_coverage`, `revenue_growth`, `earnings_growth`, `book_value_growth`, `earnings_per_share_growth`, `free_cash_flow_growth`, `operating_income_growth`, `ebitda_growth`, `payout_ratio`, `earnings_per_share`, `book_value_per_share`, `free_cash_flow_per_share`
+
+Two of these are worth calling out specifically: `Filing.cik` and every `CompanyFacts`
+field except `ticker`/`name` are declared fields this server's structs support, but our
+own `docs/our-live-samples/filings.json` and `company_facts.json` captures show them
+consistently absent — this appears to be a genuine gap in what the current provider
+integration populates for these two endpoints, not sampling noise, so it is documented
+as such rather than backfilled with a plausible-looking value.
+
+The two `not_found` examples (`/company/facts`, `/filings/items`) use a
+deliberately-invalid ticker/year so the "no data fabricated" contract is obvious from
+the example itself; this is unchanged from before.
 
 ## Validation
 
-`npx @redocly/cli lint docs/openapi.json` passes with zero errors and zero warnings
-(after fixing two real authoring bugs it caught: a `style`/`explode` pair nested inside
-a parameter's `schema` instead of the parameter object, and a `/financial-metrics/
-snapshot` example that was missing its `{"snapshot": ...}` wrapper). The document also
-round-trips through `json.load`/`json.dump` with no changes in shape.
+`npx @redocly/cli lint docs/openapi.json` passes with zero errors (from the repo root).
+The document also round-trips through `json.load`/`json.dump` with no changes in shape.
+The validated file is copied byte-for-byte to `docs-site/api-reference/openapi.json`
+(`diff docs/openapi.json docs-site/api-reference/openapi.json` is empty) so the Mintlify
+API reference tab renders from the same, provenance-clean spec.
+
+A full-document sweep for every distinctive value found in `docs/fd-live-samples/*.json`
+(accession numbers, filing timestamps, dollar figures with 5+ significant digits, signal
+headlines) turned up zero remaining matches after this revision, aside from real AAPL
+financial facts our own live samples independently confirm (e.g. FY2025
+`cost_of_revenue` — the same real SEC-reported number both Financial Datasets and our
+own provider report for the same fiscal year; this is expected overlap of public fact,
+not copied vendor data, and every such value traces back to `docs/our-live-samples/`).
 
 ## Routes/tools this document does not attempt to characterize in full
 

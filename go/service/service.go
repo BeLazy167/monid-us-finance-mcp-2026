@@ -142,9 +142,20 @@ func (s *Service) Call(ctx context.Context, apiKey, tool string, args map[string
 	if args == nil {
 		args = map[string]any{}
 	}
+	return handler(s.newCallCtx(ctx, apiKey, tool), args)
+}
+
+// newCallCtx builds one callCtx for apiKey, mirroring the client
+// construction Call itself does. Every exported capability that is not a
+// Financial Datasets MCP tool (the coverage lists, get_all_financials,
+// search_line_items - see go/service/coverage.go,
+// go/service/allfinancials.go, go/service/searchlineitems.go) goes through
+// this instead of the toolHandlers table, per this port's brief: register
+// a capability in toolHandlers only when it maps to a real MCP tool name
+// in go/mcpserver/tool_schemas.json.
+func (s *Service) newCallCtx(ctx context.Context, apiKey, tool string) *callCtx {
 	client := monid.NewClient(apiKey, s.http, s.allowlist, s.maxConcurrentRuns)
-	cc := &callCtx{ctx: ctx, client: client, svc: s, tool: tool}
-	return handler(cc, args)
+	return &callCtx{ctx: ctx, client: client, svc: s, tool: tool}
 }
 
 // run executes one Monid call, records a receipt, and serves repeat calls
@@ -462,19 +473,36 @@ func (c *callCtx) statementResponse(statement string, args map[string]any) (Resu
 	if err != nil {
 		return Result{}, err
 	}
-	series, err := providers.ParseStatementSeries(value, statement)
-	if err != nil {
-		return Result{}, err
-	}
-	rows := statementRowsForPeriod(series, parsed.period, statement)
-	endMonth := providers.FiscalYearEndMonth(series)
-
 	identityMap, err := buildFilingIdentityMap(filingsRun, filingsErr, parsed.ticker, parsed.period != "quarterly")
 	if err != nil {
 		return Result{}, err
 	}
+	records, err := buildStatementRecords(statement, parsed, value, identityMap)
+	if err != nil {
+		return Result{}, err
+	}
+	return Result{Value: records, WrapperKey: statementResponseKeys[statement], Paginate: true}, nil
+}
+
+// buildStatementRecords derives one statement kind's FD records
+// (income/balance/cash) from an already-fetched, already-unmarshaled
+// statements payload and an already-joined filing identity map: this is
+// the row-filtering, sorting, limiting, and per-row FD record construction
+// that used to live inline in statementResponse. Factored out so
+// getAllFinancials can build all three statement kinds from ONE
+// concurrently-fetched statements+filings pair instead of paying for the
+// same /equities/v1/statements call three times (see getAllFinancials's
+// own doc comment for why).
+func buildStatementRecords(statement string, parsed statementArgs, value any, identityMap map[string]FilingIdentity) ([]any, error) {
+	series, err := providers.ParseStatementSeries(value, statement)
+	if err != nil {
+		return nil, err
+	}
+	rows := statementRowsForPeriod(series, parsed.period, statement)
+	endMonth := providers.FiscalYearEndMonth(series)
+
 	if identityMap == nil && parsed.filing.any() {
-		return Result{}, &monid.RunError{Kind: monid.ErrProviderHTTP,
+		return nil, &monid.RunError{Kind: monid.ErrProviderHTTP,
 			Message: "Filing identity join failed; filing_date filters cannot be applied."}
 	}
 	rows = applyFilingFilters(rows, identityMap, parsed.filing)
@@ -506,7 +534,7 @@ func (c *callCtx) statementResponse(statement string, args map[string]any) (Resu
 			records = append(records, buildCashFlowStatement(parsed.ticker, parsed.period, key, fiscalPeriod, row.Values, identity))
 		}
 	}
-	return Result{Value: records, WrapperKey: statementResponseKeys[statement], Paginate: true}, nil
+	return records, nil
 }
 
 // statementRowsForPeriod mirrors service._statement_rows.

@@ -11,7 +11,7 @@ It is an independent, Monid-backed implementation, not affiliated with or endors
 
 Most SEC research and market-data APIs charge a fixed monthly plan whether you make ten calls or ten thousand. That works for a trading desk. It doesn't work for an agent that checks one company's balance sheet twice a week.
 
-Each call here routes through SEC EDGAR, DefiLlama US equities, and Context.dev via Monid. Measured cost per call has run $0.0006 to $0.01 on the live deployment, against a $200/month or $2,000/month commitment on the plan this replaces. You bring your own Monid API key, and every call bills your wallet directly. We take no cut and never see or store the key.
+Each call here routes through SEC EDGAR, DefiLlama US equities, and Context.dev via Monid. Measured cost per call has run \$0.0006 to \$0.01 on the live deployment, against a \$200/month or \$2,000/month commitment on the plan this replaces. You bring your own Monid API key, and every call bills your wallet directly. We take no cut and never see or store the key.
 
 The scope isn't complete. Some Financial Datasets routes aren't implemented yet, and they answer with a typed, zero-cost `not_implemented` error rather than a guess. A few implemented routes cover less ground than the original, with capped result sizes and omitted fields in places. Read [Compatibility](/overview/coverage) before you build on this.
 

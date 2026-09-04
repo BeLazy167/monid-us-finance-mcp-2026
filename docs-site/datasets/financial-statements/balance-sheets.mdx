@@ -1,0 +1,62 @@
+---
+title: "Balance Sheets"
+description: "Total assets, liabilities, and shareholders' equity for each reporting period, from filed SEC data."
+openapi: "api-reference/openapi.json GET /financials/balance-sheets"
+---
+
+This route returns one balance sheet row per reporting period: total assets, total liabilities, and shareholders' equity, alongside their component lines, normalized to the Financial Datasets field names and order. It shares its provider chain and pagination shape with [Income Statements](/datasets/financial-statements/income-statements): the same `/equities/v1/statements` fetch, joined against `/equities/v1/filings` for SEC identity.
+
+## What this answers
+
+- How a company's total assets and shareholders' equity have moved over recent periods.
+- How much cash, inventory, and receivables a company is carrying right now, or as of a past period.
+
+## Coverage
+
+| | |
+|---|---|
+| Provider chain | DefiLlama `/equities/v1/statements`, joined with `/equities/v1/filings` |
+| Reporting periods | Annual, quarterly, and trailing-twelve-month (`ttm`) |
+| Measured cost | \$0.0012 per call (statement fetch plus the filings identity join) |
+| Cache TTL | 600 seconds, see [Caching](/guides/caching) |
+
+## Query rules
+
+`ticker` is required. `period` accepts `annual`, `quarterly`, or `ttm`, and defaults to `annual` on this REST route, unlike the underlying MCP tool's own `ttm` default. Pass `period` explicitly if the default matters.
+
+`as_reported=true` is accepted for parameter parity but always answers `400 bad_request`. `limit` defaults to `4` and caps at `100`. The `report_period*` family of filters narrows by report date, the same way it does on [Income Statements](/datasets/financial-statements/income-statements).
+
+Fields the current Go source declares but our own live captures never populate: `currency`, `accession_number`, `form_type`, `filing_url`, `filing_date`, `filing_datetime`, `current_investments`, `property_plant_and_equipment`, `goodwill_and_intangible_assets`, `investments`, `non_current_investments`, `outstanding_shares`, `tax_assets`, `trade_and_non_trade_payables`, `deferred_revenue`, `deposit_liabilities`, `tax_liabilities`, `accumulated_other_comprehensive_income`, `total_debt`. These are schema-legal and left out of the response rather than guessed.
+
+## Worked example
+
+```bash curl
+curl -s 'https://monid-finance-api.fly.dev/financials/balance-sheets?ticker=AAPL&period=annual&limit=1' \
+  -H 'X-API-KEY: <your-api-key>'
+```
+
+```json Response
+{
+  "balance_sheets": [
+    {
+      "ticker": "AAPL",
+      "report_period": "2025-09-30",
+      "fiscal_period": "FY2025",
+      "period": "annual",
+      "total_assets": 359241000000,
+      "current_assets": 147957000000,
+      "cash_and_equivalents": 35934000000,
+      "inventory": 5718000000,
+      "trade_and_non_trade_receivables": 39777000000,
+      "non_current_assets": 211284000000,
+      "total_liabilities": 285508000000,
+      "current_liabilities": 165631000000,
+      "current_debt": 20329000000,
+      "non_current_liabilities": 119877000000,
+      "non_current_debt": 78328000000,
+      "shareholders_equity": 73733000000,
+      "retained_earnings": -14264000000
+    }
+  ]
+}
+```

@@ -1,0 +1,49 @@
+---
+title: "Snapshot"
+description: "A single current financial-metrics snapshot: market cap, P/E, and other live valuation multiples."
+openapi: "api-reference/openapi.json GET /financial-metrics/snapshot"
+---
+
+This route returns a single current snapshot, market cap, P/E, EV/EBITDA, and margins, sourced from Monid's DefiLlama `/equities/v1/summary` endpoint. Because this snapshot carries a live price, its valuation fields are populated where [Historical](/datasets/financial-metrics/historical) leaves them out.
+
+## What this answers
+
+- What a company's current market cap and P/E ratio are, right now.
+
+## Coverage
+
+| | |
+|---|---|
+| Provider chain | DefiLlama `/equities/v1/summary` |
+| Measured cost | \$0.0006 per call |
+| Cache TTL | 60 seconds, see [Caching](/guides/caching) |
+
+## Query rules
+
+`ticker` is required, and it is the only parameter this route accepts.
+
+Fields the `FinancialMetricSnapshot` schema declares but our own live captures never populate: `currency`, `enterprise_value_to_revenue_ratio`, `free_cash_flow_yield`, `peg_ratio`, `return_on_equity`, `return_on_assets`, `return_on_invested_capital`, `asset_turnover`, `inventory_turnover`, `receivables_turnover`, `days_sales_outstanding`, `operating_cycle`, `working_capital_turnover`, `current_ratio`, `quick_ratio`, `cash_ratio`, `operating_cash_flow_ratio`, `debt_to_equity`, `debt_to_assets`, `interest_coverage`, `revenue_growth`, `earnings_growth`, `book_value_growth`, `earnings_per_share_growth`, `free_cash_flow_growth`, `operating_income_growth`, `ebitda_growth`, `payout_ratio`, `earnings_per_share`, `book_value_per_share`, `free_cash_flow_per_share`. These are schema-legal and left out of the response rather than guessed.
+
+## Worked example
+
+```bash curl
+curl -s 'https://monid-finance-api.fly.dev/financial-metrics/snapshot?ticker=AAPL' \
+  -H 'X-API-KEY: <your-api-key>'
+```
+
+```json Response
+{
+  "snapshot": {
+    "ticker": "AAPL",
+    "market_cap": 4674544794120,
+    "enterprise_value": 4698970959518,
+    "price_to_earnings_ratio": 36.26,
+    "price_to_book_ratio": 43.48,
+    "price_to_sales_ratio": 10.01,
+    "enterprise_value_to_ebitda_ratio": 27.98,
+    "gross_margin": 0.4865291555900202,
+    "operating_margin": 0.3317,
+    "net_margin": 0.27618604910212224
+  }
+}
+```

@@ -15,7 +15,7 @@ This route returns recent news articles matched to a specific company, sourced f
 | | |
 |---|---|
 | Provider chain | Context.dev `/news/search` |
-| Measured cost | $0.0009 per call |
+| Measured cost | \$0.0009 per call |
 | Cache TTL | 60 seconds, see [Caching](/guides/caching) |
 
 ## Query rules
@@ -24,12 +24,14 @@ This route returns recent news articles matched to a specific company, sourced f
 
 ## Worked example
 
+This repo has no committed live capture for `/news`. The example below is illustrative only, field names follow `go/fd/types.go`, and the title, source, and URL are synthetic placeholders, not a real published article.
+
 ```bash curl
 curl -s 'https://monid-finance-api.fly.dev/news?ticker=AAPL&limit=1' \
   -H 'X-API-KEY: <your-api-key>'
 ```
 
-```json Response
+```json Response, illustrative
 {
   "news": [
     {

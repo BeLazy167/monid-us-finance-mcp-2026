@@ -15,7 +15,7 @@ A REST failure returns the Financial Datasets `ErrorResponse` shape.
 |---|---|---|
 | `400` | `bad_request` | The request is malformed, or a parameter combination this server cannot honor was supplied, for example `as_reported=true`, or a required field is missing. This check runs before any Monid call, so a `400` never costs you anything. |
 | `400` | `unsupported` | The request is well formed but describes something this deployment cannot answer honestly, for example an unsupported filter combination. Also free. |
-| `400` | `invalid_cursor` | The `cursor` query parameter is not a token this server minted. See [Pagination](/guides/pagination). |
+| `400` | `invalid_cursor` | The `cursor` query parameter is not a token this server minted. See [Pagination](/guides/how-to-use-pagination). |
 | `401` | `unauthorized` | `X-API-KEY` is missing, malformed, or rejected by Monid. See [Authentication](/overview/authentication). |
 | `402` | `payment_required` | Monid accepted your key but blocked the call, usually because the wallet is empty or restricted. |
 | `429` | `rate_limited` | You went over the per-key rate limit. See [Rate limits](/guides/rate-limits). |

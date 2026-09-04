@@ -4,9 +4,9 @@
   "name": "Monid Finance MCP",
   "description": "Financial Datasets-compatible US finance API and MCP server, backed by pay-per-call Monid providers.",
   "colors": {
-    "primary": "#6D28D9",
-    "light": "#A78BFA",
-    "dark": "#4C1D95"
+    "primary": "#1D5F49",
+    "light": "#5CBE92",
+    "dark": "#113A2D"
   },
   "logo": {
     "light": "/logo/logo-light.svg",
@@ -63,7 +63,6 @@
             "icon": "plug",
             "pages": [
               "integrations/mcp-server",
-              "mcp-tools/overview",
               "integrations/openapi-spec"
             ]
           },
@@ -71,25 +70,95 @@
             "group": "Datasets",
             "icon": "database",
             "pages": [
-              "datasets/financial-statements",
-              "datasets/financial-metrics",
-              "datasets/earnings",
-              "datasets/filings",
-              "datasets/prices",
-              "datasets/news",
-              "datasets/insider-trades",
-              "datasets/screener",
-              "datasets/company"
+              {
+                "group": "Company",
+                "icon": "building-2",
+                "pages": [
+                  "datasets/company/facts"
+                ]
+              },
+              {
+                "group": "Financial Statements",
+                "icon": "file-text",
+                "pages": [
+                  "datasets/financial-statements/income-statements",
+                  "datasets/financial-statements/balance-sheets",
+                  "datasets/financial-statements/cash-flow-statements"
+                ]
+              },
+              {
+                "group": "Financial Metrics",
+                "icon": "gauge",
+                "pages": [
+                  "datasets/financial-metrics/historical",
+                  "datasets/financial-metrics/snapshot"
+                ]
+              },
+              {
+                "group": "Earnings",
+                "icon": "megaphone",
+                "pages": [
+                  "datasets/earnings/earnings"
+                ]
+              },
+              {
+                "group": "Stock Prices",
+                "icon": "candlestick-chart",
+                "pages": [
+                  "datasets/prices/historical",
+                  "datasets/prices/snapshot"
+                ]
+              },
+              {
+                "group": "SEC Filings",
+                "icon": "folder",
+                "pages": [
+                  "datasets/filings/filings",
+                  "datasets/filings/filing-items"
+                ]
+              },
+              {
+                "group": "News",
+                "icon": "newspaper",
+                "pages": [
+                  "datasets/news/news"
+                ]
+              },
+              {
+                "group": "Insider Trades",
+                "icon": "user-check",
+                "pages": [
+                  "datasets/insider-trades/insider-trades"
+                ]
+              },
+              {
+                "group": "Search",
+                "icon": "search",
+                "pages": [
+                  "datasets/screener/stock-screener",
+                  "datasets/screener/filters"
+                ]
+              }
             ]
           },
           {
             "group": "Guides",
             "icon": "book-open",
             "pages": [
-              "guides/pagination",
+              "guides/how-to-get-fundamentals",
+              "guides/how-to-search-sec-filings",
+              "guides/how-to-get-stock-prices",
+              "guides/how-to-use-pagination",
               "guides/errors",
               "guides/rate-limits",
               "guides/caching"
+            ]
+          },
+          {
+            "group": "MCP Tools",
+            "icon": "wrench",
+            "pages": [
+              "mcp-tools/overview"
             ]
           }
         ]
@@ -107,6 +176,19 @@
     }
   },
   "styling": {
+    "codeblocks": {
+      "theme": "css-variables"
+    },
     "latex": false
+  },
+  "fonts": {
+    "heading": {
+      "family": "Geist",
+      "weight": 600
+    },
+    "body": {
+      "family": "Geist",
+      "weight": 400
+    }
   }
 }

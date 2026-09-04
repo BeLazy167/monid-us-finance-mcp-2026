@@ -1,0 +1,290 @@
+/* =========================================================================
+   Monid Finance MCP — docs-site custom styles
+   A calm, warm, near-monochrome system with one restrained accent.
+   Written by hand for this project. No stylesheet, class list, or color
+   value here is copied from another vendor's site.
+   ========================================================================= */
+
+/* -------------------------------------------------------------------------
+   1. Tokens
+   ------------------------------------------------------------------------- */
+:root {
+  --page: #F5F3EE;    /* warm paper, the dominant surface */
+  --surface: #FAF9F6; /* cards, code blocks, panels; barely lighter than page */
+  --ink: #22201B;     /* body text, warm near-black */
+  --muted: #6E6A60;   /* secondary text, captions, table headers */
+  --line: #DEDAD0;    /* borders and rules, must stay subtle */
+  --accent: #1D5F49;  /* links, active nav, focus rings. Deep ledger green */
+
+  --font-body: 'Geist', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, monospace;
+}
+
+.dark {
+  --page: #131210;
+  --surface: #1B1917;
+  --ink: #EBE8E1;
+  --muted: #948F85;
+  --line: #2B2824;
+  --accent: #5CBE92;
+}
+
+/* -------------------------------------------------------------------------
+   2. Page surfaces
+   ------------------------------------------------------------------------- */
+#background-color,
+#body-content,
+body {
+  background-color: var(--page) !important;
+  color: var(--ink);
+}
+
+#navbar,
+#sidebar,
+#table-of-contents-layout,
+#footer,
+footer {
+  background-color: var(--page) !important;
+  border-color: var(--line) !important;
+}
+
+/* Cards and panels sit one step lighter than the page, never a stacked box. */
+card,
+tile,
+frame,
+panel,
+#panel {
+  background-color: var(--surface) !important;
+  border: 1px solid var(--line) !important;
+  box-shadow: none !important;
+}
+
+/* -------------------------------------------------------------------------
+   3. Code: blocks, groups, and inline code always match the page's mode.
+   Shiki writes literal inline colors on the <pre> root and on every token
+   span (background-color / color / --shiki-dark / --shiki-dark-bg), which
+   normal-specificity rules cannot beat. Only an !important author rule can
+   override an inline style, so the block-level overrides below use it
+   deliberately and only for the two properties Shiki hardcodes.
+   ------------------------------------------------------------------------- */
+/* Mintlify renders code through Shiki with the css-variables theme, so every
+   block reads --mint-background and --mint-foreground rather than hardcoded
+   colors. Rebinding those two is enough to make code follow the page, and it
+   keeps Shiki's token colors intact. The `bg-code` utility on the container
+   still needs an override, since it is a literal near-black in both modes. */
+:root,
+.dark {
+  --mint-background: var(--surface);
+  --mint-foreground: var(--ink);
+}
+
+code-block,
+code-group,
+.code-block,
+.code-group,
+.bg-code,
+.bg-codeblock {
+  background-color: var(--surface) !important;
+  border-color: var(--line) !important;
+}
+
+/* Panel headers ship a fixed near-white text color, which disappears once the
+   panel follows a light page. Bind them to the ink token instead. */
+.code-block .text-gray-50,
+.code-group .text-gray-50,
+.bg-codeblock .text-gray-50,
+.bg-codeblock [class*="text-gray-"] {
+  color: var(--ink) !important;
+}
+
+.code-block,
+.code-group {
+  border: 1px solid var(--line) !important;
+  border-radius: 8px;
+}
+
+code-block-icon,
+code-block-copy-button,
+.code-block button,
+.code-group button {
+  color: var(--muted) !important;
+}
+
+/* Inline code in prose: a subtle chip, not a colored badge. */
+p code,
+li code,
+td code,
+h1 code,
+h2 code,
+h3 code {
+  background-color: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0.1em 0.4em;
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+
+code-block code,
+.shiki code,
+pre.shiki code {
+  font-family: var(--font-mono);
+  background-color: transparent;
+  border: none;
+  padding: 0;
+}
+
+/* -------------------------------------------------------------------------
+   4. Method pills: never a saturated green or blue chip. Ink at low opacity.
+   ------------------------------------------------------------------------- */
+method-pill,
+method-nav-pill {
+  background-color: color-mix(in srgb, var(--ink) 12%, transparent) !important;
+  color: var(--ink) !important;
+  border: none !important;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  border-radius: 4px;
+}
+
+.dark method-pill,
+.dark method-nav-pill {
+  background-color: color-mix(in srgb, var(--ink) 15%, transparent) !important;
+}
+
+/* -------------------------------------------------------------------------
+   5. Accordions and expandables: transparent, so surfaces never stack.
+   ------------------------------------------------------------------------- */
+accordion,
+accordion-group,
+expandable {
+  background-color: transparent !important;
+  border-color: var(--line) !important;
+  box-shadow: none !important;
+}
+
+/* -------------------------------------------------------------------------
+   6. Typography
+   ------------------------------------------------------------------------- */
+html {
+  font-size: 16px;
+}
+
+body,
+#mdx-content {
+  font-family: var(--font-body);
+  line-height: 1.6;
+}
+
+#mdx-content {
+  font-size: 15px;
+  max-width: 68ch;
+}
+
+#mdx-content h1,
+#mdx-content h2,
+#mdx-content h3,
+#mdx-content h4,
+#page-title {
+  font-weight: 600;
+  line-height: 1.25;
+  margin-top: 2em;
+  margin-bottom: 0.4em;
+  color: var(--ink);
+}
+
+#mdx-content h1:first-child,
+#page-title {
+  margin-top: 0;
+}
+
+eyebrow {
+  color: var(--muted);
+}
+
+/* -------------------------------------------------------------------------
+   7. Tables: single-rule row separation, no zebra striping.
+   ------------------------------------------------------------------------- */
+#mdx-content table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+#mdx-content thead th {
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 0.75em;
+  font-weight: 600;
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+  background-color: transparent !important;
+}
+
+#mdx-content tbody tr {
+  background-color: transparent !important;
+}
+
+#mdx-content tbody td {
+  border-bottom: 1px solid var(--line);
+}
+
+#mdx-content tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* -------------------------------------------------------------------------
+   8. Links and focus rings
+   ------------------------------------------------------------------------- */
+#mdx-content a,
+link {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+#mdx-content a:hover {
+  text-decoration: underline;
+}
+
+navbar-link,
+nav-anchor,
+.nav-tabs-item,
+sidebar-group,
+#sidebar-content a {
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.nav-tabs-item[data-active],
+#sidebar-content li[data-active] a,
+toc-item[data-active] {
+  color: var(--accent);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* -------------------------------------------------------------------------
+   9. Motion: respect prefers-reduced-motion; keep transitions short either way.
+   ------------------------------------------------------------------------- */
+a,
+method-pill,
+accordion,
+card,
+button {
+  transition: color 120ms ease, background-color 120ms ease, opacity 120ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

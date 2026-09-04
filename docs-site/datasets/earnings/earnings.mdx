@@ -18,7 +18,7 @@ The same `report_period` can show up twice if a company files an 8-K earnings an
 | | |
 |---|---|
 | Provider chain | DefiLlama `/equities/v1/statements` and `/equities/v1/filings`, composed into filing-event records. No-ticker mode adds the Nasdaq earnings calendar |
-| Measured cost | $0.0012 per call (statements plus the filings composition) |
+| Measured cost | \$0.0012 per call (statements plus the filings composition) |
 | Cache TTL | 600 seconds, see [Caching](/guides/caching) |
 
 ## Query rules
@@ -27,32 +27,58 @@ The same `report_period` can show up twice if a company files an 8-K earnings an
 
 Records only cover 10-K and 10-Q filing events. 8-K earnings releases that have not yet been followed by a matching 10-Q, and the real-time feed's underlying calendar coverage, are narrower than a dedicated earnings-calendar API. A block whose period is missing from the underlying statements matrix is left out of the record rather than filled with an estimate.
 
+`filing_datetime` is declared on this record for Financial Datasets-contract parity, but no provider integration in this codebase currently sets it. It is always omitted in practice.
+
 ## Worked example
+
+This repo has no committed live capture for `/earnings`. The example below is illustrative only, field names follow `go/fd/types.go` and `go/providers/earnings.go`, values are synthetic placeholders, not a real filing or a real reported figure.
 
 ```bash curl
 curl -s 'https://monid-finance-api.fly.dev/earnings?ticker=AAPL' \
   -H 'X-API-KEY: <your-api-key>'
 ```
 
-```json Response, trimmed
+```json Response, illustrative
 {
   "earnings": [
     {
       "ticker": "AAPL",
-      "report_period": "2026-06-27",
-      "fiscal_period": "2026-Q3",
+      "report_period": "2026-06-30",
+      "fiscal_period": "2026-Q2",
       "currency": "USD",
-      "source_type": "8-K",
-      "filing_date": "2026-07-30",
+      "source_type": "10-Q",
+      "filing_date": "2026-07-15",
+      "filing_window": "BEFORE_MARKET",
       "signals": [
         {
-          "type": "EPS_BEAT",
-          "metric": "earnings_per_share",
-          "headline": "EPS of $2.02 beat estimate of $1.75 by 15.4%"
+          "type": "example_signal",
+          "metric": "revenue",
+          "period": "2026-Q2",
+          "headline": "Illustrative placeholder headline \u2014 signal vocabulary is provider-defined and not asserted here.",
+          "details": {
+            "actual": 100000000000.0,
+            "estimate": 95000000000.0
+          }
         }
-      ]
+      ],
+      "filing_url": "https://www.sec.gov/Archives/edgar/data/0000320193/000032019326000000/example-10q.htm",
+      "accession_number": "0000320193-26-000000",
+      "quarterly": {
+        "revenue": 100000000000.0,
+        "revenue_yoy_chg": 0.05,
+        "earnings_per_share": 1.5,
+        "earnings_per_share_yoy_chg": 0.03,
+        "gross_profit": 45000000000.0,
+        "gross_margin": 0.45,
+        "operating_income": 25000000000.0,
+        "operating_margin": 0.25,
+        "net_income": 20000000000.0,
+        "net_margin": 0.2,
+        "weighted_average_shares": 15000000000.0,
+        "weighted_average_shares_diluted": 15050000000.0,
+        "free_cash_flow": 22000000000.0
+      }
     }
-  ],
-  "next_page_url": null
+  ]
 }
 ```
