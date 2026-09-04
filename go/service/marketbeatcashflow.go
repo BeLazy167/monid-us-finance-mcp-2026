@@ -32,7 +32,6 @@ package service
 
 import (
 	"encoding/json"
-	"fmt"
 	"sort"
 	"strconv"
 	"strings"
@@ -59,26 +58,24 @@ const (
 	marketbeatPeriodEndMetric = "Period end date"
 )
 
-// marketbeatCashFlowMetrics maps a Financial Datasets field to the
-// marketbeat row that carries it. Every field not listed here is one
-// marketbeat does not report, and is omitted rather than guessed.
-var marketbeatCashFlowMetrics = struct {
-	netIncome, depreciation, operating, capex, investing, dividends, financing, change string
-}{
-	netIncome:    "Net Income / (Loss) Continuing Operations",
-	depreciation: "Depreciation Expense",
-	operating:    "Net Cash From Operating Activities",
-	capex:        "Purchase of Property, Plant & Equipment",
-	investing:    "Net Cash From Investing Activities",
-	dividends:    "Payment of Dividends",
-	financing:    "Net Cash From Financing Activities",
-	change:       "Net Change in Cash & Equivalents",
-}
+// The marketbeat rows carrying each Financial Datasets cash flow field.
+// A field with no row here is one marketbeat does not report, and is
+// omitted rather than guessed.
+const (
+	mbNetIncome    = "Net Income / (Loss) Continuing Operations"
+	mbDepreciation = "Depreciation Expense"
+	mbOperating    = "Net Cash From Operating Activities"
+	mbCapex        = "Purchase of Property, Plant & Equipment"
+	mbInvesting    = "Net Cash From Investing Activities"
+	mbDividends    = "Payment of Dividends"
+	mbFinancing    = "Net Cash From Financing Activities"
+	mbChangeInCash = "Net Change in Cash & Equivalents"
+)
 
 // marketbeatColumn is one reporting period from a marketbeat statement
 // table, already scaled to whole units and keyed by metric name.
 type marketbeatColumn struct {
-	periodEnd string // YYYY-MM-DD
+	periodEnd time.Time
 	values    map[string]float64
 }
 
@@ -154,9 +151,9 @@ func marketbeatColumns(rows []map[string]any) ([]marketbeatColumn, error) {
 
 	columns := make([]marketbeatColumn, 0, len(labels))
 	for _, label := range labels {
-		end := marketbeatDate(periodRow[label])
-		if end == "" {
-			continue // a column with no period end cannot be dated, so it is skipped
+		end, ok := marketbeatDate(periodRow[label])
+		if !ok {
+			continue
 		}
 		values := make(map[string]float64, len(byMetric))
 		for metric, row := range byMetric {
@@ -199,25 +196,19 @@ func marketbeatNumber(raw any) (float64, bool) {
 	return value * marketbeatScale, true
 }
 
-// marketbeatDate converts marketbeat's M/D/YYYY period end to the
-// YYYY-MM-DD every record in this package uses.
-func marketbeatDate(raw any) string {
+// marketbeatDate parses marketbeat's M/D/YYYY period end. A column whose
+// date will not parse is skipped by the caller: a period that cannot be
+// dated cannot be filtered or joined to a filing.
+func marketbeatDate(raw any) (time.Time, bool) {
 	text, ok := raw.(string)
 	if !ok {
-		return ""
+		return time.Time{}, false
 	}
-	parts := strings.Split(strings.TrimSpace(text), "/")
-	if len(parts) != 3 {
-		return ""
+	day, err := time.Parse("1/2/2006", strings.TrimSpace(text))
+	if err != nil {
+		return time.Time{}, false
 	}
-	month, err1 := strconv.Atoi(parts[0])
-	day, err2 := strconv.Atoi(parts[1])
-	year, err3 := strconv.Atoi(parts[2])
-	if err1 != nil || err2 != nil || err3 != nil ||
-		month < 1 || month > 12 || day < 1 || day > 31 || year < 1900 {
-		return ""
-	}
-	return fmt.Sprintf("%04d-%02d-%02d", year, month, day)
+	return day, true
 }
 
 // buildMarketbeatCashFlow shapes one column into a Financial Datasets
@@ -230,8 +221,7 @@ func marketbeatDate(raw any) string {
 // that positive capex, which reproduces their 98,767,000,000 exactly.
 func buildMarketbeatCashFlow(ticker, period string, col marketbeatColumn,
 	fiscalPeriod *string, identity *FilingIdentity) fd.CashFlowStatement {
-	m := marketbeatCashFlowMetrics
-	reportPeriod := col.periodEnd
+	reportPeriod := col.periodEnd.Format(dateLayout)
 	rec := fd.CashFlowStatement{
 		Ticker:       &ticker,
 		ReportPeriod: &reportPeriod,
@@ -247,21 +237,22 @@ func buildMarketbeatCashFlow(ticker, period string, col marketbeatColumn,
 		return nil
 	}
 	negated := func(metric string) *float64 {
-		if v, ok := col.values[metric]; ok {
-			v = -v
-			return &v
+		v := get(metric)
+		if v == nil {
+			return nil
 		}
-		return nil
+		flipped := -*v
+		return &flipped
 	}
 
-	rec.NetIncome = get(m.netIncome)
-	rec.DepreciationAndAmortization = get(m.depreciation)
-	rec.NetCashFlowFromOperations = get(m.operating)
-	rec.CapitalExpenditure = negated(m.capex)
-	rec.NetCashFlowFromInvesting = get(m.investing)
-	rec.DividendsAndOtherCashDistributions = negated(m.dividends)
-	rec.NetCashFlowFromFinancing = get(m.financing)
-	rec.ChangeInCashAndEquivalents = get(m.change)
+	rec.NetIncome = get(mbNetIncome)
+	rec.DepreciationAndAmortization = get(mbDepreciation)
+	rec.NetCashFlowFromOperations = get(mbOperating)
+	rec.CapitalExpenditure = negated(mbCapex)
+	rec.NetCashFlowFromInvesting = get(mbInvesting)
+	rec.DividendsAndOtherCashDistributions = negated(mbDividends)
+	rec.NetCashFlowFromFinancing = get(mbFinancing)
+	rec.ChangeInCashAndEquivalents = get(mbChangeInCash)
 	if rec.NetCashFlowFromOperations != nil && rec.CapitalExpenditure != nil {
 		fcf := *rec.NetCashFlowFromOperations - *rec.CapitalExpenditure
 		rec.FreeCashFlow = &fcf
@@ -293,12 +284,14 @@ func (c *callCtx) marketbeatCashFlowResponse(parsed statementArgs) (Result, erro
 		return Result{}, err
 	}
 
+	// Loop-invariant: the fiscal year end comes from the column set, not
+	// from any one column. buildStatementRecords hoists its equivalent
+	// the same way.
+	fiscalEndMonth := marketbeatFiscalEndMonth(columns)
+
 	records := make([]any, 0, len(columns))
 	for _, col := range columns {
-		day, perr := time.Parse(dateLayout, col.periodEnd)
-		if perr != nil {
-			continue
-		}
+		day := col.periodEnd
 		if parsed.report.any() && !parsed.report.matches(day) {
 			continue
 		}
@@ -309,7 +302,7 @@ func (c *callCtx) marketbeatCashFlowResponse(parsed statementArgs) (Result, erro
 			}
 		}
 		row := providers.PeriodRow{ReportPeriod: day}
-		fiscalPeriod := providers.FiscalPeriodLabel(row, marketbeatFiscalEndMonth(columns), parsed.period == "annual")
+		fiscalPeriod := providers.FiscalPeriodLabel(row, fiscalEndMonth, parsed.period == "annual")
 		records = append(records, buildMarketbeatCashFlow(parsed.ticker, parsed.period, col, fiscalPeriod, identity))
 		if len(records) == parsed.limit {
 			break
@@ -320,14 +313,12 @@ func (c *callCtx) marketbeatCashFlowResponse(parsed statementArgs) (Result, erro
 
 // marketbeatFiscalEndMonth reads the company's fiscal year end from its
 // own reported period ends, which is what the quarterly fiscal label
-// counts from. Nil when no column carries a usable date, in which case
-// the label is omitted rather than counted from January.
+// counts from. Nil when there are no columns, in which case the label is
+// omitted rather than counted from January.
 func marketbeatFiscalEndMonth(columns []marketbeatColumn) *int {
-	for _, col := range columns {
-		if day, err := time.Parse(dateLayout, col.periodEnd); err == nil {
-			month := int(day.Month())
-			return &month
-		}
+	if len(columns) == 0 {
+		return nil
 	}
-	return nil
+	month := int(columns[0].periodEnd.Month())
+	return &month
 }
