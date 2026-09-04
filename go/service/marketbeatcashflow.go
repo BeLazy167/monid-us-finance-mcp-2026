@@ -81,10 +81,10 @@ type marketbeatColumn struct {
 
 // fetchMarketbeatCashFlow returns one issuer's cash flow columns, newest
 // first, for the requested period.
-func (c *callCtx) fetchMarketbeatCashFlow(symbol, period string) ([]marketbeatColumn, error) {
+func (c *callCtx) fetchMarketbeatCashFlow(symbol, period string) ([]marketbeatColumn, *int, error) {
 	run, err := c.run(marketbeat, marketbeatStatementsEndpoint, nil, map[string]any{"ticker": symbol})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	var payload struct {
 		Status string `json:"status"`
@@ -93,10 +93,10 @@ func (c *callCtx) fetchMarketbeatCashFlow(symbol, period string) ([]marketbeatCo
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(run.Output, &payload); err != nil {
-		return nil, &providers.SchemaDriftError{Msg: "marketbeat statements payload must be an object"}
+		return nil, nil, &providers.SchemaDriftError{Msg: "marketbeat statements payload must be an object"}
 	}
 	if payload.Status != "success" {
-		return nil, &providers.SchemaDriftError{Msg: "marketbeat statements status must be 'success'"}
+		return nil, nil, &providers.SchemaDriftError{Msg: "marketbeat statements status must be 'success'"}
 	}
 
 	// Table names embed the company ("Annual Cash Flow Statements for
@@ -105,18 +105,35 @@ func (c *callCtx) fetchMarketbeatCashFlow(symbol, period string) ([]marketbeatCo
 	if period == "quarterly" {
 		wantPrefix = marketbeatCashFlowQuarterly
 	}
-	var rows []map[string]any
+	var rows, annualRows []map[string]any
 	for name, table := range payload.Data.Statements {
 		if strings.HasPrefix(name, wantPrefix) {
 			rows = table
-			break
+		}
+		if strings.HasPrefix(name, marketbeatCashFlowAnnualPrefix) {
+			annualRows = table
 		}
 	}
 	if rows == nil {
-		return nil, &providers.SchemaDriftError{
+		return nil, nil, &providers.SchemaDriftError{
 			Msg: "marketbeat returned no " + strings.ToLower(wantPrefix) + " table for " + symbol}
 	}
-	return marketbeatColumns(rows)
+	columns, err := marketbeatColumns(rows)
+	if err != nil {
+		return nil, nil, err
+	}
+	// The fiscal year end comes from the ANNUAL table's period ends, which
+	// are true year ends, whichever period the caller asked for. Reading
+	// it from the quarterly table gave the newest quarter's month instead,
+	// which labelled Apple's June quarter Q4 rather than Q3.
+	var fiscalEnd *int
+	if annualRows != nil {
+		if annual, aerr := marketbeatColumns(annualRows); aerr == nil && len(annual) > 0 {
+			month := int(annual[0].periodEnd.Month())
+			fiscalEnd = &month
+		}
+	}
+	return columns, fiscalEnd, nil
 }
 
 // marketbeatColumns pivots marketbeat's metric-per-row table into one
@@ -135,36 +152,41 @@ func marketbeatColumns(rows []map[string]any) ([]marketbeatColumn, error) {
 			Msg: "marketbeat cash flow table omitted its " + marketbeatPeriodEndMetric + " row"}
 	}
 
-	// Column keys are the fiscal year labels ("2025"). Sorting them
-	// descending puts the newest period first, matching every other list
-	// this server returns.
-	labels := make([]string, 0, len(periodRow))
-	for key := range periodRow {
-		if _, err := strconv.Atoi(key); err == nil {
-			labels = append(labels, key)
-		}
+	// Column labels differ by table: the annual table is keyed by fiscal
+	// year ("2025"), the quarterly one by quarter ("Q3 2025"), and both
+	// carry a junk "col_1". The period-end ROW is the reliable key: any
+	// column whose period end parses as a date is a real period, and
+	// sorting by that date puts the newest first regardless of label.
+	type dated struct {
+		label string
+		end   time.Time
 	}
-	if len(labels) == 0 {
-		return nil, &providers.SchemaDriftError{Msg: "marketbeat cash flow table carried no period columns"}
-	}
-	sort.Sort(sort.Reverse(sort.StringSlice(labels)))
-
-	columns := make([]marketbeatColumn, 0, len(labels))
-	for _, label := range labels {
-		end, ok := marketbeatDate(periodRow[label])
-		if !ok {
+	periods := make([]dated, 0, len(periodRow))
+	for label, raw := range periodRow {
+		if label == "Metric" {
 			continue
 		}
+		if end, ok := marketbeatDate(raw); ok {
+			periods = append(periods, dated{label: label, end: end})
+		}
+	}
+	if len(periods) == 0 {
+		return nil, &providers.SchemaDriftError{Msg: "marketbeat cash flow table carried no dated period columns"}
+	}
+	sort.Slice(periods, func(i, j int) bool { return periods[i].end.After(periods[j].end) })
+
+	columns := make([]marketbeatColumn, 0, len(periods))
+	for _, p := range periods {
 		values := make(map[string]float64, len(byMetric))
 		for metric, row := range byMetric {
 			if metric == marketbeatPeriodEndMetric {
 				continue
 			}
-			if v, ok := marketbeatNumber(row[label]); ok {
+			if v, ok := marketbeatNumber(row[p.label]); ok {
 				values[metric] = v
 			}
 		}
-		columns = append(columns, marketbeatColumn{periodEnd: end, values: values})
+		columns = append(columns, marketbeatColumn{periodEnd: p.end, values: values})
 	}
 	return columns, nil
 }
@@ -266,11 +288,12 @@ func buildMarketbeatCashFlow(ticker, period string, col marketbeatColumn,
 // accession number, form type and filing URL.
 func (c *callCtx) marketbeatCashFlowResponse(parsed statementArgs) (Result, error) {
 	var columns []marketbeatColumn
+	var fiscalEnd *int
 	var cashErr error
 	var filingsRun *monid.Run
 	var filingsErr error
 	concurrent2(
-		func() { columns, cashErr = c.fetchMarketbeatCashFlow(parsed.ticker, parsed.period) },
+		func() { columns, fiscalEnd, cashErr = c.fetchMarketbeatCashFlow(parsed.ticker, parsed.period) },
 		func() {
 			filingsRun, filingsErr = c.run(defillama, filingsEndpoint, nil,
 				map[string]any{"ticker": parsed.ticker, "country": "US"})
@@ -284,10 +307,14 @@ func (c *callCtx) marketbeatCashFlowResponse(parsed statementArgs) (Result, erro
 		return Result{}, err
 	}
 
-	// Loop-invariant: the fiscal year end comes from the column set, not
-	// from any one column. buildStatementRecords hoists its equivalent
-	// the same way.
-	fiscalEndMonth := marketbeatFiscalEndMonth(columns)
+	records := marketbeatCashFlowRecords(parsed, columns, fiscalEnd, identityMap)
+	return Result{Value: records, WrapperKey: "cash_flow_statements", Paginate: true}, nil
+}
+
+// marketbeatCashFlowRecords filters, limits and shapes one issuer's
+// marketbeat columns into Financial Datasets cash flow records.
+func marketbeatCashFlowRecords(parsed statementArgs, columns []marketbeatColumn,
+	fiscalEndMonth *int, identityMap map[string]FilingIdentity) []any {
 
 	records := make([]any, 0, len(columns))
 	for _, col := range columns {
@@ -308,17 +335,91 @@ func (c *callCtx) marketbeatCashFlowResponse(parsed statementArgs) (Result, erro
 			break
 		}
 	}
-	return Result{Value: records, WrapperKey: "cash_flow_statements", Paginate: true}, nil
+	return records
 }
 
-// marketbeatFiscalEndMonth reads the company's fiscal year end from its
-// own reported period ends, which is what the quarterly fiscal label
-// counts from. Nil when there are no columns, in which case the label is
-// omitted rather than counted from January.
-func marketbeatFiscalEndMonth(columns []marketbeatColumn) *int {
-	if len(columns) == 0 {
-		return nil
+// statementRecords builds one statement kind's records, routing the cash
+// flow statement to marketbeat.
+//
+// This is the seam every caller must cross, and the reason it exists.
+// buildStatementRecords is where "which statement kind" becomes "which
+// fields", and three call sites reach it: statementResponse,
+// getAllFinancials and mergedLineItemRows. Deciding the source above that
+// point fixed get_cash_flow_statement while leaving the other two on the
+// bad feed, so the same server answered Apple's FY2025 investing as
+// 15,195,000,000 on one route and 27,910,000,000 on another. One server
+// contradicting itself is worse than one wrong number.
+//
+// ttm still composes from the normalized feed: marketbeat reports filed
+// periods only, and a trailing window is not one.
+func (c *callCtx) statementRecords(kind string, parsed statementArgs, value any,
+	identityMap map[string]FilingIdentity) ([]any, error) {
+	if kind != "cash" {
+		return buildStatementRecords(kind, parsed, value, identityMap)
 	}
-	month := int(columns[0].periodEnd.Month())
-	return &month
+	if parsed.period == "ttm" {
+		columns, _, err := c.fetchMarketbeatCashFlow(parsed.ticker, "quarterly")
+		if err != nil {
+			return nil, err
+		}
+		return marketbeatTTMRecords(parsed, columns), nil
+	}
+	columns, fiscalEnd, err := c.fetchMarketbeatCashFlow(parsed.ticker, parsed.period)
+	if err != nil {
+		return nil, err
+	}
+	return marketbeatCashFlowRecords(parsed, columns, fiscalEnd, identityMap), nil
+}
+
+// ttmQuarters is how many consecutive quarters make a trailing year.
+const ttmQuarters = 4
+
+// marketbeatTTMRecords sums four consecutive quarters into each trailing
+// window, newest first.
+//
+// The normalized feed used to build these, which meant summing four
+// quarters of the investing and net-change lines measured 0/8 correct
+// against SEC: four wrong quarters make a wrong year. Every field on a
+// cash flow statement is a flow, so summing is the right operation here,
+// unlike the balance sheet where the trailing path carries balances
+// forward instead.
+//
+// A window is emitted only when all four quarters are present, and a
+// field only when all four report it. A three-quarter sum is not a
+// trailing year, and neither is a sum with a hole in it.
+func marketbeatTTMRecords(parsed statementArgs, columns []marketbeatColumn) []any {
+	records := make([]any, 0, parsed.limit)
+	for start := 0; start+ttmQuarters <= len(columns); start++ {
+		window := columns[start : start+ttmQuarters]
+		newest := window[0]
+		if parsed.report.any() && !parsed.report.matches(newest.periodEnd) {
+			continue
+		}
+		summed := marketbeatColumn{periodEnd: newest.periodEnd, values: map[string]float64{}}
+		for _, metric := range []string{
+			mbNetIncome, mbDepreciation, mbOperating, mbCapex,
+			mbInvesting, mbDividends, mbFinancing, mbChangeInCash,
+		} {
+			total, complete := 0.0, true
+			for _, col := range window {
+				v, ok := col.values[metric]
+				if !ok {
+					complete = false
+					break
+				}
+				total += v
+			}
+			if complete {
+				summed.values[metric] = total
+			}
+		}
+		// A trailing window spans more than one filing, so it carries no
+		// filing identity and no fiscal period label, matching what the
+		// normalized trailing path already returns.
+		records = append(records, buildMarketbeatCashFlow(parsed.ticker, "ttm", summed, nil, nil))
+		if len(records) == parsed.limit {
+			break
+		}
+	}
+	return records
 }

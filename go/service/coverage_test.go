@@ -206,12 +206,18 @@ func TestAllFinancials_ComposesAllThreeConcurrently(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	// income+balance+cash all live in the SAME /equities/v1/statements
-	// payload, so composing all three must not triple-fetch it: exactly
-	// one statements call and one filings call, however many statement
-	// kinds are derived from them.
-	if transport.CallCount() != 2 {
-		t.Fatalf("expected exactly 2 calls (statements + filings), got %d", transport.CallCount())
+	// income and balance both come out of the SAME /equities/v1/statements
+	// payload, so composing them must not double-fetch it. The third call
+	// is marketbeat: that feed's cash flow subtotals disagree with SEC on
+	// three of four lines, so the cash flow statement is sourced there
+	// instead (see marketbeatcashflow.go). Paying one extra run beats
+	// answering this route with a number measured wrong 8 times out of 8,
+	// and beats the alternative that shipped briefly, where this route
+	// and get_cash_flow_statement returned different values for the same
+	// field.
+	if transport.CallCount() != 3 {
+		t.Fatalf("expected 3 calls (statements + filings + marketbeat cash flow), got %d",
+			transport.CallCount())
 	}
 	body := jsonRoundTrip(t, result.Value)
 	financials, ok := body["financials"].(map[string]any)

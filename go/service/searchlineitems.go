@@ -114,7 +114,7 @@ func (c *callCtx) searchLineItems(args map[string]any) (Result, error) {
 	var results []any
 	for i, ticker := range tickers {
 		parsed.ticker = ticker
-		rows, rerr := mergedLineItemRows(parsed, values[i])
+		rows, rerr := c.mergedLineItemRows(parsed, values[i], wantsCashFlowFields(lineItems))
 		if rerr != nil {
 			return Result{}, rerr
 		}
@@ -133,6 +133,34 @@ type lineItemRow struct {
 	fields       map[string]any
 }
 
+// cashFlowFieldsFromMarketbeat are the cash flow fields this server
+// sources from marketbeat rather than the normalized feed (see
+// marketbeatcashflow.go). Only a request touching one of them needs that
+// extra paid call.
+var cashFlowFieldsFromMarketbeat = map[string]bool{
+	"net_income": true, "depreciation_and_amortization": true,
+	"net_cash_flow_from_operations": true, "capital_expenditure": true,
+	"net_cash_flow_from_investing": true, "net_cash_flow_from_financing": true,
+	"dividends_and_other_cash_distributions": true,
+	"change_in_cash_and_equivalents":         true, "free_cash_flow": true,
+}
+
+// wantsCashFlowFields reports whether a line-item request asks for
+// anything the corrected cash flow source supplies.
+//
+// This gate exists because search_line_items fans out across many
+// tickers, so routing every one through marketbeat unconditionally would
+// multiply the bill for callers who only asked for revenue. A request
+// that does touch a cash flow field pays for the correct number.
+func wantsCashFlowFields(lineItems []string) bool {
+	for _, item := range lineItems {
+		if cashFlowFieldsFromMarketbeat[item] {
+			return true
+		}
+	}
+	return false
+}
+
 // mergedLineItemRows builds one ticker's merged rows for searchLineItems,
 // reusing buildStatementRecords - the same row-filtering/limiting/record-
 // building logic get_income_statement/get_balance_sheet/
@@ -145,10 +173,16 @@ type lineItemRow struct {
 // is skipped (not fatal): a company may report income and balance data
 // with no separately labeled cash-flow section, and the caller still gets
 // whichever requested line items exist.
-func mergedLineItemRows(parsed statementArgs, value any) ([]lineItemRow, error) {
+func (c *callCtx) mergedLineItemRows(parsed statementArgs, value any, correctedCashFlow bool) ([]lineItemRow, error) {
 	merged := map[string]map[string]any{}
 	for _, kind := range [3]string{"income", "balance", "cash"} {
-		records, err := buildStatementRecords(kind, parsed, value, nil)
+		var records []any
+		var err error
+		if kind == "cash" && correctedCashFlow {
+			records, err = c.statementRecords(kind, parsed, value, nil)
+		} else {
+			records, err = buildStatementRecords(kind, parsed, value, nil)
+		}
 		if err != nil {
 			if _, ok := err.(*providers.SchemaDriftError); ok {
 				continue

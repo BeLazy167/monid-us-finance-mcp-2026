@@ -115,19 +115,15 @@ server actually scrapes rather than ten. Route-by-route notes are in
 [docs/openapi-notes.md](docs/openapi-notes.md) and
 [docs/compatibility.md](docs/compatibility.md).
 
-### A known upstream data defect
+### Cash flow is sourced from a second provider, deliberately
 
-Measured 2026-09-04 against Apple's FY2025 10-K: the normalized statements feed
-behind `/financials/cash-flow-statements` reports investing activities as
-27,910,000,000 where the filing says 15,195,000,000. The gap is exactly Apple's
-12,715,000,000 capital expenditure, which that feed omits from the investing
-subtotal while still using it to compute Free Cash Flow correctly. The error
-carries into `change_in_cash_and_equivalents`. Operating and financing match the
-filing exactly.
+Measured 2026-09-04 against SEC XBRL across eight large caps (AAPL, MSFT, XOM, KO, TSLA, PFE, VZ, NVDA), the normalized statements feed's cash flow subtotals came back: operating 8/8 correct, investing 0/8, financing 4/8, net change in cash 0/8. Apple FY2025 investing read 27,910,000,000 against the 10-K's 15,195,000,000; Microsoft FY2026 read -23,552,000,000 against SEC's -139,500,000,000.
 
-This is an upstream aggregation defect, not a parsing bug here, and it will be
-wrong for any company with material capex. It is written down rather than
-quietly carried.
+The cash flow statement is therefore sourced from marketbeat, which matched SEC line for line on every figure checked. That applies on every path that builds one: `get_cash_flow_statement`, `get_all_financials`, and `search_line_items` when a cash flow field is requested. Income statement and balance sheet stay on the normalized feed, which agrees with SEC where measured.
+
+Two consequences a caller will notice. marketbeat does not report `share_based_compensation` or `ending_cash_balance`, so those two fields are omitted on annual, quarterly and ttm cash flow records rather than carried over from a feed proven wrong on three of four subtotals. And the correction costs one extra provider call per statement, $0.02 measured, which is why `search_line_items` only pays it when the requested line items include a cash flow field.
+
+The defect was reported to the upstream provider on 2026-09-04.
 
 ### Data freshness is measured, not assumed
 

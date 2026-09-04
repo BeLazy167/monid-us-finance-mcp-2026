@@ -47,13 +47,15 @@ These routes work, but not the way Financial Datasets does. Read them before poi
 | `/news` | Requires `ticker`. Market-wide news is not routed. |
 | `/prices/snapshot/market` | Nasdaq's most-active set, not the whole market. Record shape matches exactly. |
 
-## A known upstream data defect
+## Cash flow statement source
 
-Measured 2026-09-04 against Apple's FY2025 10-K. The normalized statements feed behind `/financials/cash-flow-statements` reports **Net Cash From Investing Activities as 27,910,000,000**. The filing says **15,195,000,000**. The gap is exactly Apple's property-plant-and-equipment purchase of 12,715,000,000, which that feed omits from the investing subtotal while still using it to compute Free Cash Flow correctly.
+Measured 2026-09-04 against SEC XBRL across eight large caps (AAPL, MSFT, XOM, KO, TSLA, PFE, VZ, NVDA), the normalized statements feed's cash flow subtotals came back: operating 8/8 correct, investing 0/8, financing 4/8, net change in cash 0/8. Apple FY2025 investing read 27,910,000,000 against the 10-K's 15,195,000,000; Microsoft FY2026 read -23,552,000,000 against SEC's -139,500,000,000.
 
-The error propagates to `change_in_cash_and_equivalents`. Operating and financing activities match the filing exactly.
+The cash flow statement is therefore sourced from marketbeat, which matched SEC line for line on every figure checked. That applies on every path that builds one: `get_cash_flow_statement`, `get_all_financials`, and `search_line_items` when a cash flow field is requested. Income statement and balance sheet stay on the normalized feed, which agrees with SEC where measured.
 
-This is an upstream aggregation defect, not a parsing bug on our side, and it will be wrong for any company with material capital expenditure. Treat the investing and net-change lines from this route as unreliable until it is re-sourced. Operating cash flow, free cash flow and the income statement are unaffected.
+Two consequences a caller will notice. marketbeat does not report `share_based_compensation` or `ending_cash_balance`, so those two fields are omitted on annual, quarterly and ttm cash flow records rather than carried over from a feed proven wrong on three of four subtotals. And the correction costs one extra provider call per statement, $0.02 measured, which is why `search_line_items` only pays it when the requested line items include a cash flow field.
+
+The defect was reported to the upstream provider on 2026-09-04.
 
 ## REST and MCP disagree on defaults
 

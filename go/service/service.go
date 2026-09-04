@@ -447,14 +447,7 @@ func (c *callCtx) getCashFlowStatement(args map[string]any) (Result, error) {
 	if err := checkAsReported(args); err != nil {
 		return Result{}, err
 	}
-	parsed, err := parseStatementArgs(args, "ttm", 4, 100)
-	if err != nil {
-		return Result{}, err
-	}
-	if parsed.period == "ttm" {
-		return c.statementResponse("cash", args)
-	}
-	return c.marketbeatCashFlowResponse(parsed)
+	return c.statementResponse("cash", args)
 }
 
 // statementResponse mirrors service._statement_response. The FD JSON
@@ -493,7 +486,7 @@ func (c *callCtx) statementResponse(statement string, args map[string]any) (Resu
 	if err != nil {
 		return Result{}, err
 	}
-	records, err := buildStatementRecords(statement, parsed, value, identityMap)
+	records, err := c.statementRecords(statement, parsed, value, identityMap)
 	if err != nil {
 		return Result{}, err
 	}

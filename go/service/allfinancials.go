@@ -69,7 +69,7 @@ func (c *callCtx) getAllFinancials(args map[string]any) (Result, error) {
 	for i, kind := range kinds {
 		go func(i int, kind string) {
 			defer wg.Done()
-			results[i], errs[i] = buildStatementRecords(kind, parsed, value, identityMap)
+			results[i], errs[i] = c.statementRecords(kind, parsed, value, identityMap)
 		}(i, kind)
 	}
 	wg.Wait()
