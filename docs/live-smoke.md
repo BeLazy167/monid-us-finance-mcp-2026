@@ -44,3 +44,16 @@ Second full pass after the Financial Datasets contract refactor, run through `sc
 | `get_filing_items` | Context.dev `/web/scrape/markdown` | `01M1NCK35M70PF31T2F791KVQG` | $0.0009 | completed, HTTP 200 |
 
 Verified live behaviors: Apple FY2025 income statement ($416.161B revenue, EPS 7.49) with fiscal-period labels and schema key order; TTM cash flow derived from four consecutive quarters; monthly price bars aggregated locally with integer volumes; margins as ratios; AAPL news with title/date/url; Item-1A risk factors extracted from the FY2024 10-K (`0000320193-24-000123`).
+
+
+## Gate B full pass — 2026-09-04 (working tree after `57d5189`)
+
+Third pass adds the Gate B tools: earnings composition, historical financial metrics, SECForm4 insider trades, the Nasdaq screener, and the static filter catalog. `monid inspect` remained broken registry-side, so the committed discovery allowlist again gated every run. 18 calls this pass, 2 upstream failures (one companies-list 503-style failure, two OHLCV flakes) recorded as receipts; measured cost this pass $0.0302 (cumulative ledger $0.0515 over three passes). Notably the SECForm4 insider search and the Nasdaq screener each cost $0.01 — the two most expensive single calls in the ledger, still 1/2 of one Financial Datasets Starter request.
+
+| Tool | Monid endpoint | Result |
+|---|---|---|
+| `get_earnings` | DefiLlama `/statements` + `/filings` | AAPL FY2023 10-K record with full quarterly block (revenue $89.498B, EPS 1.46, margins with bps/pct changes) |
+| `get_financial_metrics` | DefiLlama `/statements` + `/filings` | AAPL FY2025 metrics: ROE 1.519, DSO 32.09 days, inventory turnover 33.98, full growth set |
+| `get_insider_trades` | SECForm4 `/search` ($0.01) | 3 live Form 4 transactions (Newstead sales at $317.01/share) |
+| `screen_stocks` | Nasdaq `/get_stock_screener` ($0.01) | NASDAQ mega-caps: NVDA, AAPL, GOOGL, GOOG, MSFT |
+| `list_stock_screener_filters` | static | exchange + market_cap catalog, zero calls |

@@ -254,9 +254,8 @@ def create_server(service: FinanceService | None = None) -> FastMCP:
     async def get_earnings(
         ticker: str | None = None, limit: int = 1, cursor: str | None = None
     ) -> JsonObject:
-        """Get earnings data from SEC filings. Not implemented yet."""
-        del ticker, limit, cursor
-        return {"error": "not_implemented", "message": NOT_IMPLEMENTED}
+        """Get earnings data composed from SEC 10-K and 10-Q filings."""
+        return await finance.get_earnings(ticker=ticker, limit=limit, cursor=cursor)
 
     @server.tool(name="get_financial_metrics")
     async def get_financial_metrics(
@@ -276,13 +275,24 @@ def create_server(service: FinanceService | None = None) -> FastMCP:
         filing_date_lt: str | None = None,
         cursor: str | None = None,
     ) -> JsonObject:
-        """Get historical financial metrics such as P/E ratio. Not implemented yet."""
-        del (
-            ticker, period, limit, cik, report_period, report_period_gte,
-            report_period_lte, report_period_gt, report_period_lt, filing_date,
-            filing_date_gte, filing_date_lte, filing_date_gt, filing_date_lt, cursor,
+        """Get historical financial metrics and ratios for a company."""
+        return await finance.get_financial_metrics(
+            ticker=ticker,
+            period=period,
+            limit=limit,
+            cik=cik,
+            report_period=report_period,
+            report_period_gte=report_period_gte,
+            report_period_lte=report_period_lte,
+            report_period_gt=report_period_gt,
+            report_period_lt=report_period_lt,
+            filing_date=filing_date,
+            filing_date_gte=filing_date_gte,
+            filing_date_lte=filing_date_lte,
+            filing_date_gt=filing_date_gt,
+            filing_date_lt=filing_date_lt,
+            cursor=cursor,
         )
-        return {"error": "not_implemented", "message": NOT_IMPLEMENTED}
 
     @server.tool(name="get_index_fund")
     async def get_index_fund(
@@ -302,11 +312,32 @@ def create_server(service: FinanceService | None = None) -> FastMCP:
 
     @server.tool(name="get_insider_trades")
     async def get_insider_trades(
-        ticker: str | None = None, limit: int = 10, cursor: str | None = None
+        ticker: str | None = None,
+        limit: int = 10,
+        name: str | None = None,
+        transaction_type: str | None = None,
+        form_type: str | None = None,
+        filing_date: str | None = None,
+        filing_date_gte: str | None = None,
+        filing_date_lte: str | None = None,
+        filing_date_gt: str | None = None,
+        filing_date_lt: str | None = None,
+        cursor: str | None = None,
     ) -> JsonObject:
-        """Get insider transactions for a company. Not implemented yet."""
-        del ticker, limit, cursor
-        return {"error": "not_implemented", "message": NOT_IMPLEMENTED}
+        """Get insider trading transactions for a company."""
+        return await finance.get_insider_trades(
+            ticker=ticker,
+            limit=limit,
+            name=name,
+            transaction_type=transaction_type,
+            form_type=form_type,
+            filing_date=filing_date,
+            filing_date_gte=filing_date_gte,
+            filing_date_lte=filing_date_lte,
+            filing_date_gt=filing_date_gt,
+            filing_date_lt=filing_date_lt,
+            cursor=cursor,
+        )
 
     @server.tool(name="get_institutional_investors")
     async def get_institutional_investors(
@@ -374,16 +405,17 @@ def create_server(service: FinanceService | None = None) -> FastMCP:
 
     @server.tool(name="screen_stocks")
     async def screen_stocks(
-        query: str | None = None, limit: int = 10, cursor: str | None = None
+        filters: list[JsonObject] | None = None,
+        limit: int = 10,
+        cursor: str | None = None,
     ) -> JsonObject:
-        """Screen stocks by financial metrics. Not implemented yet."""
-        del query, limit, cursor
-        return {"error": "not_implemented", "message": NOT_IMPLEMENTED}
+        """Screen stocks by company attributes (exchange, market cap)."""
+        return await finance.screen_stocks(filters=filters, limit=limit, cursor=cursor)
 
     @server.tool(name="list_stock_screener_filters")
     async def list_stock_screener_filters() -> JsonObject:
-        """List available stock screener filters. Not implemented yet."""
-        return {"error": "not_implemented", "message": NOT_IMPLEMENTED}
+        """List available stock screener filters and operators."""
+        return await finance.list_stock_screener_filters()
 
     _ = (
         get_company_facts,

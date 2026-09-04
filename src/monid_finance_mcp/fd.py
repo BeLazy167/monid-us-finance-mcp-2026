@@ -35,6 +35,15 @@ def _number(value: JsonValue) -> JsonValue:
     return value if isinstance(value, int | float) and not isinstance(value, bool) else None
 
 
+def _clean_number(value: int | float | None) -> int | float | None:
+    """Return integral floats as ints and drop representation noise."""
+    if value is None:
+        return None
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    return value
+
+
 def company_facts_response(
     *, ticker: str, name: str | None, sector: str | None, industry: str | None, exchange: str | None
 ) -> JsonObject:
@@ -321,3 +330,72 @@ _CASH_FIELDS: tuple[tuple[str, str], ...] = (
     ("ending_cash_balance", "End Cash Position"),
     ("free_cash_flow", "Free Cash Flow"),
 )
+
+
+def insider_trade_record(
+    *,
+    ticker: str,
+    issuer: str | None,
+    name: str | None,
+    filing_date: str | None,
+    transaction_date: str | None,
+    transaction_type: str | None,
+    transaction_shares: int | float | None,
+    transaction_price_per_share: int | float | None,
+    transaction_value: int | float | None,
+    shares_owned_after_transaction: int | float | None,
+) -> JsonObject:
+    record: JsonObject = {"ticker": ticker}
+    _set(record, "issuer", issuer)
+    _set(record, "name", name)
+    _set(record, "filing_date", filing_date)
+    _set(record, "transaction_date", transaction_date)
+    _set(record, "transaction_type", transaction_type)
+    _set(record, "transaction_shares", _clean_number(transaction_shares))
+    _set(record, "transaction_price_per_share", _number(transaction_price_per_share))
+    _set(record, "transaction_value", _clean_number(transaction_value))
+    _set(
+        record,
+        "shares_owned_after_transaction",
+        _clean_number(shares_owned_after_transaction),
+    )
+    return record
+
+
+def screener_search_result(
+    *,
+    ticker: str,
+    exchange: str | None,
+    market_cap: str | None,
+    last_sale: str | None,
+    net_change: str | None,
+    percent_change: str | None,
+) -> JsonObject:
+    record: JsonObject = {"ticker": ticker}
+    _set(record, "exchange", exchange)
+    _set(record, "market_cap", market_cap)
+    _set(record, "last_sale", last_sale)
+    _set(record, "net_change", net_change)
+    _set(record, "percent_change", percent_change)
+    return record
+
+
+def screener_filters_response() -> JsonObject:
+    """The executable filter catalog for the validated Nasdaq screener route."""
+    return {
+        "metrics": {
+            "company": [
+                {
+                    "field": "exchange",
+                    "operators": ["eq"],
+                    "values": ["NASDAQ", "NYSE", "AMEX"],
+                },
+                {
+                    "field": "market_cap",
+                    "operators": ["eq"],
+                    "values": ["mega", "large", "mid", "small", "micro", "nano"],
+                },
+            ]
+        },
+        "operators": ["eq"],
+    }

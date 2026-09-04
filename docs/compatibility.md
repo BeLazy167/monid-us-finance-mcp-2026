@@ -12,9 +12,9 @@ This server mirrors the Financial Datasets API **public interface**: the same 27
 
 ## Tool status
 
-Working tools (live Monid routes, contract-tested): `get_company_facts`, `get_income_statement`, `get_balance_sheet`, `get_cash_flow_statement`, `get_financial_metrics_snapshot`, `get_filings`, `get_stock_prices`, `get_stock_price`, `get_news`, `get_filing_items`, `list_filing_item_types`.
+Working tools (live Monid routes, contract-tested): `get_company_facts`, `get_income_statement`, `get_balance_sheet`, `get_cash_flow_statement`, `get_financial_metrics_snapshot`, `get_filings`, `get_stock_prices`, `get_stock_price`, `get_news`, `get_filing_items`, `list_filing_item_types`, `get_earnings`, `get_financial_metrics`, `get_insider_trades`, `screen_stocks`, `list_stock_screener_filters`.
 
-The remaining 16 tools are registered with their Financial Datasets parameters and answer `{"error": "not_implemented", ...}` at zero cost until their route and contract tests land.
+The remaining 11 tools are registered with their Financial Datasets parameters and answer `{"error": "not_implemented", ...}` at zero cost until their route and contract tests land.
 
 | Dataset | MCP tool | Phase 1 path |
 |---|---|---|
@@ -58,4 +58,8 @@ A tool becomes working only after a live endpoint probe and a contract test. Unt
 - `get_filing_items` accepts `include_exhibits` for parity but answers `bad_request` when set: exhibits are not sourced.
 - `get_filings` validates `filing_type` against the Financial Datasets enum (10-K, 10-Q, 8-K, 20-F, 6-K).
 - `list_filing_item_types` reuses each item's SEC title as `description`.
+- `get_earnings` composes records from 10-K and 10-Q filing events only; 8-K earnings releases and the market-wide real-time feed (no ticker) are not routed. Records omit blocks whose period is not in the statements matrix.
+- `get_financial_metrics` omits valuation fields (enterprise_value, price_to_* ratios, EV multiples, free_cash_flow_yield, peg_ratio, return_on_invested_capital, currency, filing_datetime): historical per-period market values are not sourceable without fabricating data. TTM rows omit filing identity (a TTM window spans filings). Margins/ROE/ROA use ending balances; turnovers use average balances.
+- `get_insider_trades` is capped at the validated 15-row SECForm4 feed (FD allows 5000); `form_type` filtering is rejected because the route does not report form types. `name` is the full insider relationship text; title, transaction_code, security_title, and shares_owned_before_transaction are omitted.
+- `screen_stocks` executes only `exchange` and `market_cap` filters with the `eq` operator via the Nasdaq screener; any other field or operator answers `bad_request` before spending. `list_stock_screener_filters` lists only those executable filters, not the full Financial Datasets catalog.
 - Records omit fields the validated routes cannot source (for example CIK, currency, EBITDA on income statements); omitted keys are schema-legal.

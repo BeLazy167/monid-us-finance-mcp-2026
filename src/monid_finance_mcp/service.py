@@ -35,19 +35,28 @@ from monid_finance_mcp.fd import (
     filing_items_response,
     filing_record,
     income_statement_record,
+    insider_trade_record,
     list_response,
     metric_snapshot_record,
     news_record,
     price_record,
     price_snapshot_response,
     prices_response,
+    screener_filters_response,
+    screener_search_result,
 )
 from monid_finance_mcp.models import JsonObject, JsonValue
+from monid_finance_mcp.providers.us.earnings import normalize_earnings
 from monid_finance_mcp.providers.us.filing_items import (
     derive_accession,
     normalize_accession,
     validate_sec_url,
 )
+from monid_finance_mcp.providers.us.financial_metrics import (
+    MetricsPeriod,
+    normalize_financial_metrics,
+)
+from monid_finance_mcp.providers.us.insider_trades import normalize_insider_trades
 from monid_finance_mcp.providers.us.normalize import (
     InputError,
     SchemaDriftError,
@@ -74,6 +83,10 @@ from monid_finance_mcp.providers.us.statements import (
     fiscal_year_end_month,
     parse_statement_series,
 )
+from monid_finance_mcp.providers.us.stock_screener import (
+    normalize_screener,
+    validate_screener_request,
+)
 from monid_finance_mcp.receipts import ReceiptsLedger
 
 DEFILLAMA = "defillama"
@@ -84,6 +97,11 @@ FILINGS_ENDPOINT = "/equities/v1/filings"
 OHLCV_ENDPOINT = "/equities/v1/ohlcv"
 NEWS_PROVIDER = "context.dev"
 NEWS_ENDPOINT = "/news/search"
+SECFORM4 = "secform4"
+INSIDER_ENDPOINT = "/search"
+NASDAQ = "nasdaq"
+SCREENER_ENDPOINT = "/get_stock_screener"
+SCREENER_MAX_ROWS = 25
 
 STATEMENT_RESPONSE_KEYS = {
     "income": ("income_statements", "income-statements"),
@@ -640,6 +658,299 @@ class FinanceService:
         return list_response("news", page.records, page.next_url)
 
     @_fd_errors
+    async def get_earnings(
+        self,
+        ticker: str | None = None,
+        limit: int = 1,
+        cursor: str | None = None,
+    ) -> JsonObject:
+        if ticker is None:
+            raise InputError(
+                "ticker is required (the market-wide real-time earnings feed is not routed)"
+            )
+        symbol = validate_ticker(ticker)
+        bounded_limit = validate_limit(limit, maximum=40)
+        offset = decode_cursor(cursor)[0] if cursor is not None else 0
+        statements_run = await self._call(
+            "get_earnings",
+            DEFILLAMA,
+            STATEMENTS_ENDPOINT,
+            query_params={"ticker": symbol, "country": "US"},
+        )
+        filings_run = await self._call(
+            "get_earnings",
+            DEFILLAMA,
+            FILINGS_ENDPOINT,
+            query_params={"ticker": symbol, "country": "US"},
+        )
+        filings_rows = normalize_filings(
+            filings_run.output,
+            filing_types=None,
+            limit=10_000,
+            filing_date_gte=None,
+            filing_date_lte=None,
+        )
+        data = normalize_earnings(
+            statements_run.output, filings_rows, ticker=symbol, limit=bounded_limit
+        )
+        page = paginate(data.records, offset=offset, path="/earnings")
+        return list_response("earnings", page.records, page.next_url)
+
+    async def get_financial_metrics(
+        self,
+        ticker: str | None = None,
+        period: str = "annual",
+        limit: int = 4,
+        cik: str | None = None,
+        report_period: str | None = None,
+        report_period_gte: str | None = None,
+        report_period_lte: str | None = None,
+        report_period_gt: str | None = None,
+        report_period_lt: str | None = None,
+        filing_date: str | None = None,
+        filing_date_gte: str | None = None,
+        filing_date_lte: str | None = None,
+        filing_date_gt: str | None = None,
+        filing_date_lt: str | None = None,
+        cursor: str | None = None,
+    ) -> JsonObject:
+        return await self._financial_metrics_response(
+            ticker=ticker,
+            period=period,
+            limit=limit,
+            cik=cik,
+            report_period=report_period,
+            report_period_gte=report_period_gte,
+            report_period_lte=report_period_lte,
+            report_period_gt=report_period_gt,
+            report_period_lt=report_period_lt,
+            filing_date=filing_date,
+            filing_date_gte=filing_date_gte,
+            filing_date_lte=filing_date_lte,
+            filing_date_gt=filing_date_gt,
+            filing_date_lt=filing_date_lt,
+            cursor=cursor,
+        )
+
+    @_fd_errors
+    async def _financial_metrics_response(
+        self,
+        *,
+        ticker: str | None,
+        period: str,
+        limit: int,
+        cik: str | None,
+        report_period: str | None,
+        report_period_gte: str | None,
+        report_period_lte: str | None,
+        report_period_gt: str | None,
+        report_period_lt: str | None,
+        filing_date: str | None,
+        filing_date_gte: str | None,
+        filing_date_lte: str | None,
+        filing_date_gt: str | None,
+        filing_date_lt: str | None,
+        cursor: str | None,
+    ) -> JsonObject:
+        if ticker is None:
+            raise InputError("ticker is required (cik lookup is not supported)")
+        if cik is not None:
+            raise InputError("cik lookup is not supported; pass ticker instead")
+        symbol = validate_ticker(ticker)
+        normalized_period = validate_period(period)
+        bounded_limit = validate_limit(limit, maximum=100)
+        report = _date_filters(
+            report_period,
+            report_period_gte,
+            report_period_lte,
+            report_period_gt,
+            report_period_lt,
+            prefix="report_period",
+        )
+        filing = _date_filters(
+            filing_date,
+            filing_date_gte,
+            filing_date_lte,
+            filing_date_gt,
+            filing_date_lt,
+            prefix="filing_date",
+        )
+        offset = decode_cursor(cursor)[0] if cursor is not None else 0
+
+        statements_run = await self._call(
+            "get_financial_metrics",
+            DEFILLAMA,
+            STATEMENTS_ENDPOINT,
+            query_params={"ticker": symbol, "country": "US"},
+        )
+        metrics_period: MetricsPeriod = (
+            normalized_period if normalized_period in ("annual", "quarterly", "ttm") else "annual"
+        )
+        data = normalize_financial_metrics(
+            statements_run.output,
+            ticker=symbol,
+            period=metrics_period,
+            limit=bounded_limit,
+            report_period=report["exact"],
+            report_period_gte=report["gte"],
+            report_period_lte=report["lte"],
+            report_period_gt=report["gt"],
+            report_period_lt=report["lt"],
+        )
+        identity_map = await self._filing_identity_map(
+            "get_financial_metrics", symbol, annual=normalized_period != "quarterly"
+        )
+        if identity_map is None and any(value is not None for value in filing.values()):
+            raise UpstreamError(
+                "upstream_error",
+                "Filing identity join failed; filing_date filters cannot be applied.",
+            )
+        records: list[JsonObject] = []
+        for record in data.records:
+            report_day = _opt_date(record.get("report_period"))
+            enriched = dict(record)
+            if identity_map is not None and report_day is not None:
+                identity = identity_map.get(report_day)
+                if identity is not None:
+                    enriched["accession_number"] = identity.accession_number
+                    enriched["form_type"] = identity.form_type
+                    enriched["filing_url"] = identity.filing_url
+                    if identity.filing_date is not None:
+                        enriched["filing_date"] = identity.filing_date.isoformat()
+            if any(value is not None for value in filing.values()):
+                filing_day_value = enriched.get("filing_date")
+                filing_day = _opt_date(filing_day_value) if filing_day_value is not None else None
+                if filing_day is None or not _date_matches(
+                    filing_day,
+                    exact=filing["exact"],
+                    gte=filing["gte"],
+                    lte=filing["lte"],
+                    gt=filing["gt"],
+                    lt=filing["lt"],
+                ):
+                    continue
+            if metrics_period == "ttm":
+                enriched.pop("accession_number", None)
+                enriched.pop("form_type", None)
+                enriched.pop("filing_url", None)
+                enriched.pop("filing_date", None)
+            records.append(_ordered_metrics_record(enriched))
+        page = paginate(records, offset=offset, path="/financial-metrics")
+        return list_response("financial_metrics", page.records, page.next_url)
+
+    @_fd_errors
+    async def get_insider_trades(
+        self,
+        ticker: str | None = None,
+        limit: int = 10,
+        name: str | None = None,
+        transaction_type: str | None = None,
+        form_type: str | None = None,
+        filing_date: str | None = None,
+        filing_date_gte: str | None = None,
+        filing_date_lte: str | None = None,
+        filing_date_gt: str | None = None,
+        filing_date_lt: str | None = None,
+        cursor: str | None = None,
+    ) -> JsonObject:
+        if ticker is None:
+            raise InputError("ticker is required")
+        if form_type is not None:
+            raise InputError(
+                "form_type filtering is not supported: the validated SECForm4 route "
+                "does not report form types"
+            )
+        symbol = validate_ticker(ticker)
+        bounded_limit = validate_limit(limit, maximum=15)
+        offset = decode_cursor(cursor)[0] if cursor is not None else 0
+        filing = _date_filters(
+            filing_date,
+            filing_date_gte,
+            filing_date_lte,
+            filing_date_gt,
+            filing_date_lt,
+            prefix="filing_date",
+        )
+        run = await self._call(
+            "get_insider_trades",
+            SECFORM4,
+            INSIDER_ENDPOINT,
+            query_params={"query": symbol},
+        )
+        data = normalize_insider_trades(
+            run.output,
+            ticker=symbol,
+            limit=bounded_limit,
+            name=name,
+            transaction_type=transaction_type,
+            filing_date=filing["exact"],
+            filing_date_gte=filing["gte"],
+            filing_date_lte=filing["lte"],
+        )
+        records: list[JsonObject] = []
+        for row in data.records:
+            records.append(
+                insider_trade_record(
+                    ticker=symbol,
+                    issuer=_opt_str(row.get("company")),
+                    name=_opt_str(row.get("insider_relationship")),
+                    filing_date=_opt_str(row.get("filing_date")),
+                    transaction_date=_opt_str(row.get("transaction_date")),
+                    transaction_type=_opt_str(row.get("transaction_type")),
+                    transaction_shares=_opt_num(row.get("shares_traded")),
+                    transaction_price_per_share=_opt_num(row.get("average_price")),
+                    transaction_value=_opt_num(row.get("total_amount")),
+                    shares_owned_after_transaction=_opt_num(row.get("shares_owned")),
+                )
+            )
+        page = paginate(records, offset=offset, path="/insider-trades")
+        return list_response("insider_trades", page.records, page.next_url)
+
+    @_fd_errors
+    async def screen_stocks(
+        self,
+        filters: list[JsonObject] | None = None,
+        limit: int = 10,
+        cursor: str | None = None,
+    ) -> JsonObject:
+        if filters is None:
+            raise InputError(
+                "filters is required and must include exchange and/or market_cap"
+            )
+        bounded_limit = validate_limit(limit, maximum=100)
+        offset = decode_cursor(cursor)[0] if cursor is not None else 0
+        request = validate_screener_request(filters, bounded_limit, offset)
+        run = await self._call(
+            "screen_stocks",
+            NASDAQ,
+            SCREENER_ENDPOINT,
+            query_params=request.query_params,
+        )
+        data = normalize_screener(run.output)
+        records: list[JsonObject] = []
+        exchange_value = request.query_params.get("exchange")
+        for row in data.records[: bounded_limit]:
+            market_cap = row.get("market_cap")
+            last_sale = row.get("last_sale")
+            net_change = row.get("net_change")
+            percent_change = row.get("percent_change")
+            records.append(
+                screener_search_result(
+                    ticker=_opt_str(row.get("ticker")) or "",
+                    exchange=_opt_str(exchange_value),
+                    market_cap=_metric_string(market_cap),
+                    last_sale=_metric_string(last_sale),
+                    net_change=_metric_string(net_change),
+                    percent_change=_metric_string(percent_change),
+                )
+            )
+        return list_response("search_results", records, None)
+
+    @_fd_errors
+    async def list_stock_screener_filters(self) -> JsonObject:
+        return screener_filters_response()
+
+    @_fd_errors
     async def get_filing_items(
         self,
         ticker: str,
@@ -746,6 +1057,107 @@ class FinanceService:
                 for item in catalog.items
             ]
         return response
+
+
+def _metric_string(value: object) -> str | None:
+    """Render a screener metric value as a clean string."""
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return None
+    if isinstance(value, float):
+        if value.is_integer():
+            return str(int(value))
+        return str(round(value, 6))
+    return str(value)
+
+
+def _opt_num(value: JsonValue) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return None
+    return float(value)
+
+
+def _date_matches(
+    value: date,
+    *,
+    exact: date | None,
+    gte: date | None,
+    lte: date | None,
+    gt: date | None,
+    lt: date | None,
+) -> bool:
+    if exact is not None and value != exact:
+        return False
+    if gte is not None and value < gte:
+        return False
+    if lte is not None and value > lte:
+        return False
+    if gt is not None and value <= gt:
+        return False
+    return lt is None or value < lt
+
+
+_METRICS_KEY_ORDER: tuple[str, ...] = (
+    "ticker",
+    "report_period",
+    "fiscal_period",
+    "period",
+    "currency",
+    "accession_number",
+    "form_type",
+    "filing_url",
+    "filing_date",
+    "filing_datetime",
+    "enterprise_value",
+    "price_to_earnings_ratio",
+    "price_to_book_ratio",
+    "price_to_sales_ratio",
+    "enterprise_value_to_ebitda_ratio",
+    "enterprise_value_to_revenue_ratio",
+    "free_cash_flow_yield",
+    "peg_ratio",
+    "gross_margin",
+    "operating_margin",
+    "net_margin",
+    "return_on_equity",
+    "return_on_assets",
+    "return_on_invested_capital",
+    "asset_turnover",
+    "inventory_turnover",
+    "receivables_turnover",
+    "days_sales_outstanding",
+    "operating_cycle",
+    "working_capital_turnover",
+    "current_ratio",
+    "quick_ratio",
+    "cash_ratio",
+    "operating_cash_flow_ratio",
+    "debt_to_equity",
+    "debt_to_assets",
+    "interest_coverage",
+    "revenue_growth",
+    "earnings_growth",
+    "book_value_growth",
+    "earnings_per_share_growth",
+    "free_cash_flow_growth",
+    "operating_income_growth",
+    "ebitda_growth",
+    "payout_ratio",
+    "earnings_per_share",
+    "book_value_per_share",
+    "free_cash_flow_per_share",
+)
+
+
+def _ordered_metrics_record(record: JsonObject) -> JsonObject:
+    """Re-key a metrics record into Financial Datasets property order."""
+    ordered: JsonObject = {}
+    for key in _METRICS_KEY_ORDER:
+        if key in record:
+            ordered[key] = record[key]
+    for key, value in record.items():
+        if key not in ordered:
+            ordered[key] = value
+    return ordered
 
 
 def _statement_record(

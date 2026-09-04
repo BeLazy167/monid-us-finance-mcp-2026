@@ -120,7 +120,7 @@ async def test_stock_prices_input_contract() -> None:
 async def test_stub_tools_answer_not_implemented_at_zero_cost() -> None:
     server = create_server(FinanceService(full_client()))
 
-    result = await server.call_tool("get_earnings", {"ticker": "AAPL", "limit": 5})
+    result = await server.call_tool("get_index_fund", {"ticker": "SPY"})
     payload = _payload(result)
     assert payload == {
         "error": "not_implemented",
@@ -129,8 +129,8 @@ async def test_stub_tools_answer_not_implemented_at_zero_cost() -> None:
             "server yet; the call was free and no data was fabricated."
         ),
     }
-    filters = await server.call_tool("list_stock_screener_filters", {})
-    assert _payload(filters)["error"] == "not_implemented"
+    ownership = await server.call_tool("get_beneficial_ownership", {"ticker": "AAPL"})
+    assert _payload(ownership)["error"] == "not_implemented"
 
 
 @pytest.mark.asyncio

@@ -62,7 +62,29 @@ async def main() -> None:
             ticker="AAPL", filing_type="10-K", year=2024, item="Item-1A"
         ),
     )
-
+    show(
+        "get_earnings",
+        await service.get_earnings(ticker="AAPL", limit=2),
+    )
+    show(
+        "get_financial_metrics(annual)",
+        await service.get_financial_metrics(ticker="AAPL", period="annual", limit=2),
+    )
+    show(
+        "get_insider_trades",
+        await service.get_insider_trades(ticker="AAPL", limit=3),
+    )
+    show(
+        "screen_stocks",
+        await service.screen_stocks(
+            filters=[{"field": "exchange", "operator": "eq", "value": "NASDAQ"}],
+            limit=5,
+        ),
+    )
+    show(
+        "list_stock_screener_filters",
+        await service.list_stock_screener_filters(),
+    )
 
     summary = summarize_ledger(ledger.path)
     print("\n=== receipts summary ===")
