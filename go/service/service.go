@@ -435,11 +435,26 @@ func (c *callCtx) getBalanceSheet(args map[string]any) (Result, error) {
 	return c.statementResponse("balance", args)
 }
 
+// getCashFlowStatement sources this statement from marketbeat, not from
+// the normalized feed the income statement and balance sheet use. That
+// feed's cash flow subtotals disagree with SEC on three of four lines
+// (see marketbeatcashflow.go for the measurements).
+//
+// ttm is still composed from the normalized feed's quarters: marketbeat
+// reports filed periods only, and a trailing-twelve-month window is not
+// one. Those rows carry the caveat the whole TTM path already carries.
 func (c *callCtx) getCashFlowStatement(args map[string]any) (Result, error) {
 	if err := checkAsReported(args); err != nil {
 		return Result{}, err
 	}
-	return c.statementResponse("cash", args)
+	parsed, err := parseStatementArgs(args, "ttm", 4, 100)
+	if err != nil {
+		return Result{}, err
+	}
+	if parsed.period == "ttm" {
+		return c.statementResponse("cash", args)
+	}
+	return c.marketbeatCashFlowResponse(parsed)
 }
 
 // statementResponse mirrors service._statement_response. The FD JSON

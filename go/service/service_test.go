@@ -164,6 +164,35 @@ var testNews = map[string]any{
 	},
 }
 
+// testMarketbeatStatements mirrors marketbeat's real table shape: one row
+// per metric, one column per fiscal year label, values in millions as
+// comma-formatted strings, with capex and dividends signed negative.
+// Figures are Apple's FY2025 as filed, which is what makes the sign and
+// scale normalization checkable.
+var testMarketbeatStatements = map[string]any{
+	"status": "success",
+	"data": map[string]any{
+		"statements": map[string]any{
+			"Annual Cash Flow Statements for Apple": []any{
+				map[string]any{"Metric": "Period end date", "2025": "9/27/2025", "2024": "9/28/2024"},
+				map[string]any{"Metric": "Net Cash From Operating Activities", "2025": "111,482", "2024": "118,254"},
+				map[string]any{"Metric": "Net Cash From Investing Activities", "2025": "15,195", "2024": "2,935"},
+				map[string]any{"Metric": "Net Cash From Financing Activities", "2025": "-120,686", "2024": "-121,983"},
+				map[string]any{"Metric": "Net Change in Cash & Equivalents", "2025": "5,991", "2024": "-794"},
+				map[string]any{"Metric": "Purchase of Property, Plant & Equipment", "2025": "-12,715", "2024": "-9,447"},
+				map[string]any{"Metric": "Payment of Dividends", "2025": "-15,421", "2024": "-15,234"},
+				map[string]any{"Metric": "Net Income / (Loss) Continuing Operations", "2025": "112,010", "2024": "93,736"},
+				map[string]any{"Metric": "Depreciation Expense", "2025": "11,698", "2024": "11,445"},
+			},
+			"Quarterly Cash Flow Statements for Apple": []any{
+				map[string]any{"Metric": "Period end date", "2025": "12/27/2025"},
+				map[string]any{"Metric": "Net Cash From Operating Activities", "2025": "30,000"},
+				map[string]any{"Metric": "Net Cash From Investing Activities", "2025": "-4,000"},
+			},
+		},
+	},
+}
+
 func fullOutcomes() map[string]fakeOutcome {
 	return map[string]fakeOutcome{
 		"defillama /equities/v1/companies-list": {output: testCatalog},
@@ -172,6 +201,7 @@ func fullOutcomes() map[string]fakeOutcome {
 		"defillama /equities/v1/filings":        {output: testFilings},
 		"defillama /equities/v1/ohlcv":          {output: testOHLCV},
 		"context.dev /news/search":              {output: testNews},
+		"marketbeat /get_financial_statements":  {output: testMarketbeatStatements},
 	}
 }
 
@@ -464,10 +494,42 @@ func TestFDShape_BalanceSheetAndCashFlow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+	// The cash flow statement comes from marketbeat, not the normalized
+	// feed the other two use, because that feed's investing and
+	// net-change subtotals disagree with SEC (see marketbeatcashflow.go).
+	// These are Apple's FY2025 figures as filed, scaled from millions.
 	records = asRecords(t, cash.Value)
 	newest = jsonRoundTrip(t, records[0])
-	if newest["net_cash_flow_from_operations"] != 70.0 || newest["free_cash_flow"] != 60.0 || newest["ending_cash_balance"] != 33.0 {
-		t.Fatalf("unexpected cash flow record: %#v", newest)
+	if newest["report_period"] != "2025-09-27" {
+		t.Fatalf("report_period = %v, want the filing's own close, not a month end", newest["report_period"])
+	}
+	if newest["net_cash_flow_from_operations"] != 111482000000.0 {
+		t.Fatalf("operations = %v, want 111482000000", newest["net_cash_flow_from_operations"])
+	}
+	if newest["net_cash_flow_from_investing"] != 15195000000.0 {
+		t.Fatalf("investing = %v, want the 10-K's 15195000000 (the normalized feed says 27910000000)",
+			newest["net_cash_flow_from_investing"])
+	}
+	if newest["change_in_cash_and_equivalents"] != 5991000000.0 {
+		t.Fatalf("change_in_cash = %v, want 5991000000", newest["change_in_cash_and_equivalents"])
+	}
+	// Financial Datasets reports these two as positive magnitudes where
+	// marketbeat signs them as the outflows they are.
+	if newest["capital_expenditure"] != 12715000000.0 {
+		t.Fatalf("capital_expenditure = %v, want a positive 12715000000", newest["capital_expenditure"])
+	}
+	if newest["dividends_and_other_cash_distributions"] != 15421000000.0 {
+		t.Fatalf("dividends = %v, want a positive 15421000000", newest["dividends_and_other_cash_distributions"])
+	}
+	// free_cash_flow is operations minus that positive capex, which is
+	// how Financial Datasets derives it too.
+	if newest["free_cash_flow"] != 98767000000.0 {
+		t.Fatalf("free_cash_flow = %v, want 98767000000", newest["free_cash_flow"])
+	}
+	// marketbeat carries neither of these, so they are omitted rather
+	// than carried over from a feed proven wrong on its subtotals.
+	if _, present := newest["ending_cash_balance"]; present {
+		t.Fatalf("ending_cash_balance should be omitted, marketbeat does not report it: %#v", newest)
 	}
 }
 
