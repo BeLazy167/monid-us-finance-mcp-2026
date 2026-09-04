@@ -1,36 +1,37 @@
-# fly.toml — Fly.io app config for monid-finance-api.
-# One machine runs both processes: entrypoint.sh starts uvicorn on
-# 127.0.0.1:8000 internally, then execs the Go gateway which listens on
-# internal_port and is the only publicly reachable process.
+# Fly configuration for the Monid-backed Financial Datasets-compatible API.
 app = "monid-finance-api"
 primary_region = "iad"
 
 [build]
+  dockerfile = "Dockerfile"
 
 [env]
   PORT = "8080"
-  UPSTREAM = "http://127.0.0.1:8000"
-  WEBSITE_ROOT = "/app/website"
-  MONID_ALLOWLIST_PATH = "/app/docs/monid_finance_discovery.json"
-  # Set real values as secrets, not here: MONID_API_KEY, GATEWAY_API_KEYS,
-  # UPSTREAM_API_KEY, CORS_ALLOWED_ORIGINS. See docs/deploy.md.
+  STATIC_DIR = "/app/website"
+  ALLOWLIST_PATH = "/app/docs/monid_finance_discovery.json"
+  RATE_LIMIT_PER_MINUTE = "60"
 
 [http_service]
   internal_port = 8080
   force_https = true
-  auto_stop_machines = false
+  # Callers supply their own Monid API key, so there is no shared upstream
+  # budget to protect. Keep one machine warm to avoid cold starts in the demo.
+  auto_stop_machines = "suspend"
   auto_start_machines = true
   min_machines_running = 1
-  processes = ["app"]
 
-  [[http_service.checks]]
-    grace_period = "10s"
-    interval = "15s"
-    method = "GET"
-    path = "/healthz"
-    protocol = "http"
-    timeout = "5s"
+  [http_service.concurrency]
+    type = "requests"
+    hard_limit = 250
+    soft_limit = 200
+
+[[http_service.checks]]
+  grace_period = "5s"
+  interval = "30s"
+  method = "GET"
+  timeout = "5s"
+  path = "/healthz"
 
 [[vm]]
   size = "shared-cpu-1x"
-  memory = "512mb"
+  memory = "256mb"
