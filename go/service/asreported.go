@@ -2,13 +2,17 @@
 // own rendered statement files, the R{n}.htm pages EDGAR generates from a
 // filing's XBRL presentation linkbase.
 //
-// Why a direct sec.gov fetch, only the second one in this package (see
-// secciks.go for the first): no allowlisted Monid provider carries as-filed
-// XBRL, and SEC publishes the rendered statements free and without
-// authentication. Routing them through a paid provider would bill the
-// caller for data SEC gives away, so this capability costs the caller one
-// filings run (shared with get_filings and the normalized statement routes
-// through callCtx.run's cache) and nothing more.
+// Why EDGAR at all: no allowlisted Monid provider carries as-filed XBRL,
+// and Financial Datasets' as-reported routes are the filing's own
+// hierarchy, not a normalized one. EDGAR is where that hierarchy exists.
+// The documents are fetched through Monid's context.dev scraper the same
+// way secciks.go fetches SEC's ticker file, so every read is billed to the
+// caller, ledgered, and allowlist-checked (see fetchSECDocument).
+//
+// What one request costs: one filings run, which shares a cache entry with
+// get_filings and the normalized statement routes, plus one scrape per
+// EDGAR document. The combined route reads four documents per period (the
+// filing index and three statements); a per-statement route reads two.
 //
 // What "parity" means here, and what it does not. This route reproduces
 // Financial Datasets' as-reported STRUCTURE: the same recursive
@@ -44,11 +48,9 @@
 package service
 
 import (
+	"encoding/json"
 	"encoding/xml"
-	"fmt"
 	"html"
-	"io"
-	"net/http"
 	"regexp"
 	"sort"
 	"strconv"
@@ -59,21 +61,18 @@ import (
 	"github.com/belazy/monid-finance/providers"
 )
 
-// secArchivesBase is a var, not a const, so tests can point the whole
-// EDGAR archive fetch at an httptest server, the same way
-// secCompanyTickersURL does for the ticker file.
+// secArchivesBase is the EDGAR archive root every filing directory hangs
+// off. It is a var, not a const, for the same reason
+// secCompanyTickersURL is: a test points it somewhere else.
 var secArchivesBase = "https://www.sec.gov/Archives/edgar/data"
 
 const (
 	// asReportedMaxLimit bounds how many periods one request may ask for.
-	// Each period costs two sec.gov fetches per statement (the filing's
-	// FilingSummary.xml plus one R file), so this is a politeness bound on
-	// SEC, not a data bound. It matches Financial Datasets' own page size.
+	// Each period costs one scrape of the filing's FilingSummary.xml plus
+	// one per statement read, and every scrape is billed, so this bounds
+	// what a single request can spend. It matches Financial Datasets' own
+	// page size.
 	asReportedMaxLimit = 10
-	// asReportedMaxBody caps one EDGAR document read. Rendered statement
-	// files run around 100KB; the cap leaves room for a filer with many
-	// segment rows without letting a pathological document exhaust memory.
-	asReportedMaxBody = 8 << 20
 )
 
 // asReportedVariant selects which statement(s) one request builds. The four
@@ -353,11 +352,11 @@ func (c *callCtx) buildAsReportedRecord(
 		if file == "" {
 			continue
 		}
-		body, ferr := c.fetchSECBody(dir + file)
+		body, ferr := c.fetchSECDocument(dir + file)
 		if ferr != nil {
 			return nil, ferr
 		}
-		table, perr := parseRenderedStatement(string(body))
+		table, perr := parseRenderedStatement(body)
 		if perr != nil {
 			return nil, perr
 		}
@@ -419,7 +418,7 @@ func fiscalPeriodLabel(reportDate, period string, fiscalEndMonth int) string {
 	if err != nil {
 		return ""
 	}
-	elapsed := ((int(day.Month()) - fiscalEndMonth)%12 + 12) % 12
+	elapsed := ((int(day.Month())-fiscalEndMonth)%12 + 12) % 12
 	if elapsed == 0 {
 		return "FY"
 	}
@@ -431,38 +430,33 @@ func fiscalPeriodLabel(reportDate, period string, fiscalEndMonth int) string {
 
 // --- EDGAR fetch ---
 
-// fetchSECBody reads one EDGAR archive document, following secciks.go's
-// fetchSECCatalog exactly: SEC's access policy requires a User-Agent
-// carrying a real contact address and answers 403 without one, so the
-// operator-declared SEC_USER_AGENT is required here too.
-func (c *callCtx) fetchSECBody(url string) ([]byte, error) {
-	req, err := http.NewRequestWithContext(c.ctx, http.MethodGet, url, nil)
+// fetchSECDocument reads one EDGAR archive document through Monid's
+// context.dev scraper, the same route secciks.go's fetchSECCatalog takes
+// and for the same reasons: the request is billed to the caller's own
+// wallet, writes a receipts-ledger entry, and is checked against the
+// discovery allowlist, none of which a direct HTTP call would do. It also
+// spares the operator declaring a contact User-Agent, which sec.gov
+// otherwise answers 403 without.
+//
+// The scraper returns raw content rather than rendered markdown, so both
+// documents this route asks for - a filing's FilingSummary.xml and one
+// R{n}.htm - arrive as the bytes SEC serves.
+func (c *callCtx) fetchSECDocument(url string) (string, error) {
+	run, err := c.run(contextDev, scrapeHTMLEndpoint, nil, map[string]any{"url": url})
 	if err != nil {
-		return nil, fmt.Errorf("could not build the SEC filing-archive request")
+		return "", err
 	}
-	userAgent, err := secUserAgent()
-	if err != nil {
-		return nil, err
+	var envelope struct {
+		Success bool   `json:"success"`
+		HTML    string `json:"html"`
 	}
-	req.Header.Set("User-Agent", userAgent)
-
-	client := c.svc.http
-	if client == nil {
-		client = &http.Client{Timeout: 60 * time.Second}
+	if err := json.Unmarshal(run.Output, &envelope); err != nil {
+		return "", &providers.SchemaDriftError{Msg: "context.dev scrape payload must be an object"}
 	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("SEC filing archive could not be fetched: %w", err)
+	if !envelope.Success || envelope.HTML == "" {
+		return "", &providers.SchemaDriftError{Msg: "context.dev returned no content for " + url}
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("SEC filing archive returned HTTP %d for %s", resp.StatusCode, url)
-	}
-	body, err := io.ReadAll(io.LimitReader(resp.Body, asReportedMaxBody))
-	if err != nil {
-		return nil, fmt.Errorf("SEC filing archive document could not be read")
-	}
-	return body, nil
+	return envelope.HTML, nil
 }
 
 // filingSummary is the subset of a filing's FilingSummary.xml this route
@@ -479,12 +473,12 @@ type filingSummaryReport struct {
 }
 
 func (c *callCtx) fetchFilingSummary(url string) (filingSummary, error) {
-	body, err := c.fetchSECBody(url)
+	body, err := c.fetchSECDocument(url)
 	if err != nil {
 		return filingSummary{}, err
 	}
 	var summary filingSummary
-	if err := xml.Unmarshal(body, &summary); err != nil {
+	if err := xml.Unmarshal([]byte(body), &summary); err != nil {
 		return filingSummary{}, &providers.SchemaDriftError{
 			Msg: "SEC FilingSummary.xml is not the expected report index"}
 	}
@@ -615,12 +609,12 @@ func parseStatementHeader(body string) (currency string, moneyScale, shareScale 
 
 // statementRow is one parsed data row of a rendered statement.
 type statementRow struct {
-	element   string
-	label     string
-	value     *float64
-	hasValue  bool
+	element    string
+	label      string
+	value      *float64
+	hasValue   bool
 	isAbstract bool
-	isMember  bool
+	isMember   bool
 }
 
 // parseStatementRow reads one <tr>. The first numeric-or-text cell is the

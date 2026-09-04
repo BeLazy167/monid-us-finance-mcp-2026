@@ -1,0 +1,107 @@
+---
+title: "Measured against Financial Datasets"
+description: "The same request sent to both gateways, with latency, cost and the provider route each one took."
+---
+
+Every number here was measured on 2026-09-04 by sending the same request to both
+APIs back to back from the same machine. Our cost comes from the receipts ledger,
+so it is the amount actually billed, not an estimate. Regenerate with
+`bench.py` and `gen_comparison_mdx.py`.
+
+<CardGroup cols={4}>
+  <Card title="Routes returning 200" icon="check">
+    25 of 26 here, 25 of 26 on Financial Datasets
+  </Card>
+  <Card title="Median latency, cold" icon="timer">
+    2219 ms here, 110 ms theirs
+  </Card>
+  <Card title="Measured spend" icon="receipt">
+    $0.0876 across 21 provider calls
+  </Card>
+  <Card title="Their equivalent" icon="scale-balanced">
+    $0.0500 at $0.002 per request
+  </Card>
+</CardGroup>
+
+## Read the latency honestly
+
+Financial Datasets is faster, and by a wide margin on most routes. They serve
+pre-ingested data from their own store. We compose each response live across
+upstream providers on every request, so on raw speed they should win, and they do.
+
+What that column cannot show is which sources a request touched, or what it cost
+to serve. That is the trade: you give up latency and get the provenance and the
+per-call price. If your workload needs sub-200ms reads, theirs is the better
+product and we would rather say so here than have you discover it in production.
+
+Several routes below show single-digit milliseconds and no provider call. Those
+are either a static catalog compiled into the binary, or a shared cache an
+earlier request in the same run had already populated. Both are genuinely free.
+Neither means data is missing.
+
+## Route by route
+
+| Route | Ours, cold | Financial Datasets | Our measured cost | Provider route taken |
+|---|---|---|---|---|
+| `/filings` | 2484 ms | 387 ms | $0.0006 | `defillama/equities/v1/filings` |
+| `/filings/types` | 3 ms | 152 ms | $0.0000 | _no new call_ |
+| `/filings/ciks` | 3229 ms | 160 ms | $0.0009 | `context.dev/web/scrape/html` |
+| `/financials/income-statements` | 1975 ms | 164 ms | $0.0006 | `defillama/equities/v1/statements` |
+| `/financials/balance-sheets` | 15 ms | 125 ms | $0.0000 | _no new call_ |
+| `/financials/cash-flow-statements` | 8 ms | 108 ms | $0.0000 | _no new call_ |
+| `/financial-metrics/snapshot` | 2216 ms | 111 ms | $0.0006 | `defillama/equities/v1/summary` |
+| `/prices` | 2801 ms | 103 ms | $0.0006 | `defillama/equities/v1/ohlcv` |
+| `/prices/snapshot` | 3 ms | 88 ms | $0.0000 | _no new call_ |
+| `/prices/snapshot/market` | 4535 ms | 229 ms | $0.0100 | `nasdaq/get_market_movers` |
+| `/company/facts` | 2342 ms | 80 ms | $0.0006 | `defillama/equities/v1/companies-list` |
+| `/earnings` | 21 ms | 113 ms | $0.0000 | _no new call_ |
+| `/news` | 2222 ms | 108 ms | $0.0009 | `context.dev/news/search` |
+| `/insider-trades` | 10546 ms | 106 ms | $0.0100 | `secform4/search` |
+| `/insider-ownership` | 7137 ms | 140 ms | $0.0100 | `secform4/get_company_insider_trading` |
+| `/beneficial-ownership` | 10598 ms | 108 ms | $0.0200 | `secform4/get_13g_filings` → `secform4/get_13d_filings` |
+| `/institutional-holdings` | 6848 ms | 92 ms | $0.0100 | `secform4/get_institution_holders` |
+| `/institutional-holdings/investors` | 3 ms | 87 ms | $0.0000 | _no new call_ |
+| `/macro/interest-rates/snapshot` | 2654 ms | 124 ms | $0.0036 | `context.dev/web/scrape/markdown` → `context.dev/web/scrape/markdown` → `context.dev/web/scrape/markdown` → `context.dev/web/scrape/markdown` |
+| `/macro/interest-rates/banks` | 2 ms | 99 ms | $0.0000 | _no new call_ |
+| `/financials/segments` | 3132 ms | 146 ms | $0.0090 | `context.dev/web/extract` |
+| `/kpi/metrics` | 5238 ms | 102 ms | $0.0096 | `defillama/equities/v1/filings` → `context.dev/web/extract` |
+| `/ipos` | 1916 ms | 82 ms | $0.0006 | `defillama/equities/v1/filings` |
+| `/company/facts/ciks` | 7 ms | 275 ms | $0.0000 | _no new call_ |
+| `/financials/income-statements/segments` | 6 ms | 83 ms | $0.0000 | _no new call_ |
+| `/financials/search/screener/filters` | 4 ms | 106 ms | $0.0000 | _no new call_ |
+
+## What the provider route column means
+
+Every upstream call is written to a receipts ledger with its provider, endpoint,
+Monid run id and measured cost. The chain above is read straight from that
+ledger, so a response's whole path is reconstructable after the fact.
+
+`/institutional-holdings` is the clearest example. It resolves the issuer's SEC
+CIK first, then reads the 13F feed:
+
+```
+get_institutional_holdings
+  1. defillama /equities/v1/filings        $0.0006   resolve ticker to CIK
+  2. secform4  /get_institution_holders    $0.0100   the holdings themselves
+                                  total    $0.0106
+```
+
+Financial Datasets publishes neither the sources a request touched nor what it
+cost them to serve.
+
+## Cost, stated fairly
+
+Financial Datasets bills by request count, not per dataset. Build is $200/month
+with 100,000 requests included and $10 per additional 1,000; Scale is
+$2,000/month with 1,000,000 included and $5 per additional 1,000. Both work out
+to $0.002 per included request.
+
+Our costs above are per call and vary by route, from $0.0006 to $0.0100. The
+expensive routes are the extraction and scrape-backed ones. A workload made
+mostly of those costs more per call than their included rate, and for
+high-volume use of them a subscription is genuinely cheaper.
+
+Where we win is the floor. Their $200 is due before the first request. The whole
+run above cost $0.0876.
+
+_Generated 2026-09-04 from 26 routes._
