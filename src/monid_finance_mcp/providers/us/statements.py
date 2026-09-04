@@ -64,7 +64,7 @@ def fiscal_period_label(
     if row.report_period.month > year_end_month:
         year += 1
     quarter = ((row.report_period.month - 1) // 3) + 1
-    return f"Q{quarter} FY{year}"
+    return f"{year}-Q{quarter}"
 
 
 def derive_ttm_rows(

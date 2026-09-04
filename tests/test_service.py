@@ -376,8 +376,8 @@ async def test_income_statement_quarterly_fiscal_labels(tmp_path: Path) -> None:
     assert isinstance(records, list) and len(records) == 4
     newest = records[0]
     assert newest["report_period"] == "2026-03-31"
-    assert newest["fiscal_period"] == "Q1 FY2026"
-    assert records[1]["fiscal_period"] == "Q4 FY2025"
+    assert newest["fiscal_period"] == "2026-Q1"
+    assert records[1]["fiscal_period"] == "2025-Q4"
 
 
 @pytest.mark.asyncio

@@ -413,7 +413,7 @@ async def test_get_earnings_composes_required_fields(tmp_path: Path) -> None:
     newest = records[0]
     assert newest["ticker"] == "AAPL"
     assert newest["report_period"] == "2025-12-31"
-    assert newest["fiscal_period"] == "Q4 FY2025"
+    assert newest["fiscal_period"] == "2025-Q4"
     assert newest["source_type"] == "10-Q"
     assert newest["filing_date"] == "2026-01-20"
     filing_url = newest["filing_url"]
@@ -428,8 +428,8 @@ async def test_get_earnings_composes_required_fields(tmp_path: Path) -> None:
     assert required <= set(newest)
     quarterly = as_object(newest["quarterly"])
     assert quarterly["revenue"] == 80
-    assert quarterly["revenue_chg"] == 20  # 80 - 60 (previous quarter)
-    assert quarterly["revenue_yoy_chg"] == 40  # 80 - 40 (same quarter prior year)
+    assert quarterly["revenue_chg"] == pytest.approx((80 - 60) / 60)  # decimal ratio qoq
+    assert quarterly["revenue_yoy_chg"] == pytest.approx((80 - 40) / 40)  # decimal ratio yoy
     assert quarterly["earnings_per_share"] == pytest.approx(0.8)
     assert quarterly["gross_margin"] == pytest.approx(0.4)
     assert "gross_margin_chg_bps" in quarterly
@@ -454,12 +454,13 @@ async def test_get_earnings_10k_includes_annual_block(tmp_path: Path) -> None:
     assert annual_ten_k["filing_date"] == "2026-01-10"
     annual = as_object(annual_ten_k["annual"])
     assert annual["revenue"] == 200
-    assert annual["revenue_chg"] == 100  # 200 - 100 prior year
-    assert annual["revenue_yoy_chg"] == 100
+    assert annual["revenue_chg"] == pytest.approx((200 - 100) / 100)  # yoy ratio in annual payload
+    assert "revenue_yoy_chg" not in annual  # yoy fields are quarterly-only
     quarterly = as_object(annual_ten_k["quarterly"])
     assert quarterly["revenue"] == 80
-    assert quarterly["revenue_chg"] == 20  # 80 - 60 previous quarter
-    assert quarterly["revenue_yoy_chg"] == 40  # 80 - 40 same quarter prior year
+    assert quarterly["revenue_chg"] == pytest.approx((80 - 60) / 60)
+    assert quarterly["revenue_yoy_chg"] == pytest.approx((80 - 40) / 40)
+
 
 
 @pytest.mark.asyncio

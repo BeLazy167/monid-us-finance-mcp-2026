@@ -104,6 +104,7 @@ def normalize_earnings(
             quarter_values,
             previous=_previous_quarter(quarterly, filing.report_period),
             year_over_year=_year_over_year_quarter(quarterly, filing.report_period),
+            quarterly=True,
         )
         if filing.form == "10-K":
             annual_values = annual.get(filing.report_period)
@@ -111,7 +112,8 @@ def normalize_earnings(
                 record["annual"] = _time_dimension(
                     annual_values,
                     previous=_previous_year(annual, filing.report_period),
-                    year_over_year=_previous_year(annual, filing.report_period),
+                    year_over_year=None,
+                    quarterly=False,
                 )
         records.append(record)
         if len(records) >= limit:
@@ -168,16 +170,22 @@ def _time_dimension(
     *,
     previous: dict[str, JsonValue] | None,
     year_over_year: dict[str, JsonValue] | None,
+    quarterly: bool,
 ) -> JsonObject:
     """One Financial Datasets EarningsTimeDimension block."""
     block: JsonObject = {}
-    _put_change(block, "revenue", values, previous, year_over_year)
-    _put_change(block, "earnings_per_share", values, previous, year_over_year)
-    _put_change(block, "gross_profit", values, previous, year_over_year)
+    _put_change(block, "revenue", values, previous, year_over_year, quarterly=quarterly)
+    _put_change(
+        block, "earnings_per_share", values, previous, year_over_year, quarterly=quarterly
+    )
+    _put_change(block, "gross_profit", values, previous, year_over_year, quarterly=quarterly)
     for margin_name, base_label in _MARGIN_BASES:
-        _put_margin(block, margin_name, values, previous, year_over_year, base_label)
-    _put_change(block, "operating_income", values, previous, year_over_year)
-    _put_change(block, "net_income", values, previous, year_over_year)
+        _put_margin(
+            block, margin_name, values, previous, year_over_year, base_label,
+            quarterly=quarterly,
+        )
+    _put_change(block, "operating_income", values, previous, year_over_year, quarterly=quarterly)
+    _put_change(block, "net_income", values, previous, year_over_year, quarterly=quarterly)
     _put_value(block, "weighted_average_shares", values, "Shares Outstanding (Basic)")
     _put_value(
         block, "weighted_average_shares_diluted", values, "Shares Outstanding (Diluted)"
@@ -194,16 +202,19 @@ def _time_dimension(
     _put_value(block, "total_liabilities", values, "Total Liabilities")
     _put_value(block, "shareholders_equity", values, "Total Shareholders Equity")
     _put_change(
-        block, "net_cash_flow_from_operations", values, previous, year_over_year
+        block, "net_cash_flow_from_operations", values, previous, year_over_year,
+        quarterly=quarterly,
     )
     _put_change(
-        block, "net_cash_flow_from_investing", values, previous, year_over_year
+        block, "net_cash_flow_from_investing", values, previous, year_over_year,
+        quarterly=quarterly,
     )
     _put_change(
-        block, "net_cash_flow_from_financing", values, previous, year_over_year
+        block, "net_cash_flow_from_financing", values, previous, year_over_year,
+        quarterly=quarterly,
     )
-    _put_change(block, "capital_expenditure", values, previous, year_over_year)
-    _put_change(block, "free_cash_flow", values, previous, year_over_year)
+    _put_change(block, "capital_expenditure", values, previous, year_over_year, quarterly=quarterly)
+    _put_change(block, "free_cash_flow", values, previous, year_over_year, quarterly=quarterly)
     return block
 
 
@@ -213,18 +224,22 @@ def _put_change(
     values: dict[str, JsonValue],
     previous: dict[str, JsonValue] | None,
     year_over_year: dict[str, JsonValue] | None,
+    *,
+    quarterly: bool,
 ) -> None:
+    """Set a value plus Financial Datasets change fields (decimal ratios)."""
     label = _LABEL_BY_FIELD[name]
     current = _num(values.get(label))
     if current is None:
         return
     block[name] = current
     prior = _num(previous.get(label)) if previous is not None else None
-    if prior is not None:
-        block[f"{name}_chg"] = current - prior
-    yoy = _num(year_over_year.get(label)) if year_over_year is not None else None
-    if yoy is not None:
-        block[f"{name}_yoy_chg"] = current - yoy
+    if prior is not None and prior != 0:
+        block[f"{name}_chg"] = (current - prior) / abs(prior)
+    if quarterly:
+        yoy = _num(year_over_year.get(label)) if year_over_year is not None else None
+        if yoy is not None and yoy != 0:
+            block[f"{name}_yoy_chg"] = (current - yoy) / abs(yoy)
 
 
 def _put_margin(
@@ -234,6 +249,8 @@ def _put_margin(
     previous: dict[str, JsonValue] | None,
     year_over_year: dict[str, JsonValue] | None,
     base_label: str,
+    *,
+    quarterly: bool,
 ) -> None:
     revenue = _num(values.get("Revenue"))
     base = _num(values.get(base_label))
@@ -245,12 +262,15 @@ def _put_margin(
     if prior_margin is not None:
         block[f"{name}_chg_bps"] = (margin - prior_margin) * 10_000
         if prior_margin != 0:
-            block[f"{name}_chg_pct"] = (margin - prior_margin) / prior_margin * 100
-    yoy_margin = _margin_of(year_over_year, base_label) if year_over_year is not None else None
-    if yoy_margin is not None:
-        block[f"{name}_yoy_chg_bps"] = (margin - yoy_margin) * 10_000
-        if yoy_margin != 0:
-            block[f"{name}_yoy_chg_pct"] = (margin - yoy_margin) / yoy_margin * 100
+            block[f"{name}_chg_pct"] = (margin - prior_margin) / abs(prior_margin)
+    if quarterly:
+        yoy_margin = (
+            _margin_of(year_over_year, base_label) if year_over_year is not None else None
+        )
+        if yoy_margin is not None:
+            block[f"{name}_yoy_chg_bps"] = (margin - yoy_margin) * 10_000
+            if yoy_margin != 0:
+                block[f"{name}_yoy_chg_pct"] = (margin - yoy_margin) / abs(yoy_margin)
 
 
 def _margin_of(values: dict[str, JsonValue] | None, base_label: str) -> float | None:
@@ -312,7 +332,7 @@ def _fiscal_period_label(day: date, year_end_month: int | None) -> str | None:
     if day.month > year_end_month:
         year += 1
     quarter = ((day.month - 1) // 3) + 1
-    return f"Q{quarter} FY{year}"
+    return f"{year}-Q{quarter}"
 
 
 def _num(value: JsonValue) -> float | None:
