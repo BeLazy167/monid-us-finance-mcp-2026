@@ -1,76 +1,63 @@
 # Deploy
 
-This repo ships as one Fly.io container (Go gateway + Python API) plus a
-static Vercel deployment for `website/`.
+This repo ships as one Go binary (Fly.io) plus a static Vercel deployment
+for `website/`.
 
 ## Architecture
 
-- The Go gateway (`gateway/`) listens on `$PORT` (default `8080`), is the
-  only publicly reachable process, and does auth, rate limiting, CORS,
-  response caching, `/healthz`, and serving `website/`.
-- It reverse-proxies API and MCP paths to the Python FD-compatible service
-  (`uvicorn`), which listens on `127.0.0.1:8000` only.
-- `entrypoint.sh` starts uvicorn in the background, waits for it to answer,
-  then `exec`s the gateway in the foreground so container signals
-  (`SIGTERM`) reach it directly.
-- The Python service shells out to the `monid` CLI for every live call
-  (see `src/monid_finance_mcp/client.py`).
-
-## The monid CLI has no verified public package
-
-`npm view monid version` returns 404 as of this writing, and no other
-public package name was found. The Dockerfile does **not** guess a package
-name. Instead, supply one of these at build time:
-
-- `--build-arg MONID_CLI_NPM_PACKAGE=<https URL to a single linux/amd64 executable>`
-  (e.g. a GitHub Releases asset), downloaded with `curl` and chmod +x'd to
-  `/usr/local/bin/monid`.
-- `--build-arg MONID_CLI_NPM_PACKAGE=<real npm package name>`, once known,
-  installed with `npm i -g`.
-
-If neither is set, the image builds successfully but ships without a
-working `monid` binary. `entrypoint.sh` detects this at container start:
-if `MONID_API_KEY` is set but `monid` is missing, it exits immediately with
-a clear error instead of serving an API that cannot make live calls. Update
-this file with the real install command once the CLI's distribution
-channel is confirmed.
+- `go/cmd/server` builds a single static binary that is the only publicly
+  reachable process: it serves the Financial Datasets-identical REST
+  routes, the MCP transport (mounted at both `/mcp` and `/api`), `/healthz`,
+  and the static site — all in-process, with no reverse-proxy hop to a
+  separate backend.
+- Every call runs on the **caller's own Monid API key** (`X-API-KEY`),
+  forwarded straight to `monid.Client.Run`: the caller's Monid wallet pays
+  for the caller's own usage. The server holds no funded Monid key of its
+  own (except the optional keyless demo key, below) and never logs or
+  stores a caller's key.
+- `go/service` implements the 27 Financial Datasets tools once and shares
+  them between REST and MCP; `go/httpapi` owns routing, auth, response
+  caching, rate limiting, CORS, and the static site.
 
 ## Fly.io
 
-### 1. Build with the real monid CLI source
+### 1. Build and deploy
 
 ```bash
 fly launch --no-deploy   # first time only; creates the app, keep fly.toml as-is
-fly deploy --build-arg MONID_CLI_NPM_PACKAGE="https://example.com/path/to/monid-linux-amd64"
-# or, once published:
-fly deploy --build-arg MONID_CLI_NPM_PACKAGE="@monid/cli"
+fly deploy
 ```
 
-### 2. Set secrets (never commit real values)
+The Dockerfile builds `go/cmd/server` with `CGO_ENABLED=0` into a
+distroless image; there is no separate runtime dependency (no Python, no
+external CLI) to install.
+
+### 2. Configure (optional — sane defaults ship in `fly.toml`)
 
 ```bash
 fly secrets set \
-  MONID_API_KEY="monid_live_..." \
-  GATEWAY_API_KEYS="key1,key2" \
-  UPSTREAM_API_KEY="a-shared-secret-between-gateway-and-uvicorn" \
+  API_KEYS="key1,key2" \
+  DEMO_MONID_API_KEY="monid_live_..." \
   CORS_ALLOWED_ORIGINS="https://your-project.vercel.app"
 ```
 
-- `MONID_API_KEY`: registered with the `monid` CLI by `entrypoint.sh` on
-  every boot (tolerates "already registered").
-- `GATEWAY_API_KEYS`: comma-separated keys the gateway accepts on
-  `X-API-KEY`. Leave unset to accept any non-empty key (demo mode).
-- `UPSTREAM_API_KEY`: the key the gateway presents to uvicorn on behalf of
-  callers, including keyless demo traffic. Must match what
-  `_api_keys_from_env()` in `rest_api.py` allows (or leave both default to
-  `gateway`).
-- `CORS_ALLOWED_ORIGINS`: set to your Vercel domain(s) once known (see
-  below). Leave unset during initial testing to reflect any origin.
+- `API_KEYS`: optional comma-separated restriction on which caller-supplied
+  `X-API-KEY` values may call this server at all. This is **not** a shared
+  backend key — every accepted key is still the caller's own Monid key,
+  used to bill that caller's wallet. Leave unset to accept any well-formed,
+  non-empty key (the normal bring-your-own-key mode).
+- `DEMO_MONID_API_KEY`: optional. When set, keyless `GET` requests for the
+  instant-tryout tickers (`AAPL`, `MSFT`, `NVDA`) are served using this
+  operator-funded key, under a separate, stricter rate-limit bucket. Leave
+  unset to require a key for every request (keyless requests get 401).
+- `CORS_ALLOWED_ORIGINS`: set to your Vercel domain(s) once known. Leave
+  unset during initial testing to reflect any origin.
+- `PORT` (default `8080`), `STATIC_DIR` (default `website`),
+  `ALLOWLIST_PATH` (default `docs/monid_finance_discovery.json`), and
+  `RATE_LIMIT_PER_MINUTE` (default `60`) are already set in `fly.toml`.
 
-Re-run `fly deploy` (with the same `--build-arg` as before, since build
-args are not remembered across deploys) after changing secrets that affect
-the image, or `fly deploy` alone if only runtime secrets changed — Fly
-restarts machines to pick up new secrets.
+`fly deploy` restarts machines to pick up new secrets; no build args are
+needed since there is nothing to inject at build time anymore.
 
 ### 3. Verify
 
@@ -79,16 +66,18 @@ fly status
 curl -s https://monid-finance-api.fly.dev/healthz
 # {"status":"ok"}
 
-# Keyless demo route (DEMO_TICKERS defaults to AAPL,MSFT,NVDA):
-curl -s "https://monid-finance-api.fly.dev/prices?ticker=AAPL"
-
-# Keyed route:
-curl -s -H "X-API-KEY: key1" \
+# Bring your own Monid API key — get one at https://monid.ai:
+curl -s -H "X-API-KEY: <your-monid-api-key>" \
   "https://monid-finance-api.fly.dev/financials/income-statements?ticker=AAPL"
+
+# Keyless demo route (only answers if DEMO_MONID_API_KEY is set; demo
+# tickers are AAPL, MSFT, NVDA):
+curl -s "https://monid-finance-api.fly.dev/prices?ticker=AAPL"
 
 # MCP JSON-RPC initialize:
 curl -s -X POST https://monid-finance-api.fly.dev/mcp \
   -H "Content-Type: application/json" \
+  -H "X-API-KEY: <your-monid-api-key>" \
   -H "Accept: application/json, text/event-stream" \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"curl","version":"0"}}}'
 ```
@@ -112,7 +101,7 @@ are allowed, and re-run `fly deploy` or `fly secrets set` to apply it.
 ## Local equivalents
 
 ```bash
-sh -n entrypoint.sh                 # shell syntax check
-(cd gateway && go build ./...)      # gateway compiles
-docker build -t monid-finance-api . # full image (needs a running daemon)
+cd go && go build ./... && go vet ./... && go test ./...   # everything compiles and passes
+go run ./cmd/server                                          # serve locally on :8080
+docker build -t monid-finance-api .                          # full image (needs a running daemon)
 ```

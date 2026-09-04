@@ -1,4 +1,4 @@
-package main
+package httpapi
 
 import (
 	"sync"
@@ -13,14 +13,13 @@ type bucket struct {
 }
 
 // allow consumes one token if a full token is available, refilling toward
-// the capacity at the per-minute rate. It is safe for concurrent use.
+// capacity at the per-minute rate. Safe for concurrent use.
 func (b *bucket) allow(ratePerMinute int) bool {
 	now := time.Now()
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
 	capacity := float64(ratePerMinute)
-	// Refill the bucket at capacity/minute based on elapsed time.
 	refill := now.Sub(b.last).Seconds() * capacity / 60.0
 	b.tokens += refill
 	if b.tokens > capacity {
@@ -35,7 +34,8 @@ func (b *bucket) allow(ratePerMinute int) bool {
 	return false
 }
 
-// rateLimiter holds one token bucket per rate-limit key.
+// rateLimiter holds one token bucket per rate-limit key. Ported unchanged
+// from the former gateway/ratelimit.go.
 type rateLimiter struct {
 	mu      sync.Mutex
 	buckets map[string]*bucket

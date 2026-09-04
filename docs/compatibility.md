@@ -2,6 +2,23 @@
 
 This server mirrors the Financial Datasets API **public interface**: the same 27 MCP tool names, the same input parameters, and response objects whose keys and key order match the Financial Datasets OpenAPI schemas in `docs/fd-contract-reference.json`. It is an independent, Monid-backed implementation; it is not affiliated with or endorsed by Financial Datasets, and no Financial Datasets data or outputs are used.
 
+## Authentication: bring your own Monid API key
+
+Every request (REST and MCP) carries the caller's own Monid API key in the
+`X-API-KEY` header. This is not a shared server key: it is passed straight
+through to Monid, so **usage bills the caller's own Monid wallet**, not the
+operator's. The server never logs or stores a caller's key. Get a key at
+[monid.ai](https://monid.ai).
+
+- Missing, empty, or malformed `X-API-KEY` answers `401 {"error": "unauthorized", ...}`.
+- An operator may optionally set `API_KEYS` to further restrict which
+  caller-supplied keys may reach the server at all; every accepted key is
+  still the caller's own Monid key, never a shared backend credential.
+- An operator may optionally enable a keyless demo mode (`DEMO_MONID_API_KEY`):
+  keyless `GET` requests for the instant-tryout tickers (`AAPL`, `MSFT`,
+  `NVDA`) run on the operator's own funded key, under a separate, stricter
+  rate limit. Without that env var, keyless requests always get 401.
+
 ## Response contract
 
 - Success responses contain only Financial Datasets schema keys, in schema property order. Unsourced optional fields are omitted rather than nulled or fabricated.
