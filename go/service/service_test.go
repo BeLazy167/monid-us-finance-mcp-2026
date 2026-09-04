@@ -857,7 +857,15 @@ func TestFDShape_InstitutionalHoldings(t *testing.T) {
 			},
 		},
 	}
-	outcomes := map[string]fakeOutcome{"secform4 /get_institution_holders": {output: payload}}
+	// The institution-holders route is keyed on CIK, so this tool first
+	// resolves the ticker's CIK from the filings lookup. Both upstream
+	// calls have to be stubbed here.
+	outcomes := map[string]fakeOutcome{
+		"secform4 /get_institution_holders": {output: payload},
+		"defillama /equities/v1/filings": {output: map[string]any{"filings": []any{
+			map[string]any{"form": "10-K", "primaryDocumentUrl": "https://www.sec.gov/Archives/edgar/data/320193/000032019325000079/aapl.htm"},
+		}}},
+	}
 	svc, _ := newTestService(t, outcomes)
 	result, err := svc.Call(context.Background(), "key", "get_institutional_holdings", map[string]any{"ticker": "AAPL"})
 	if err != nil {

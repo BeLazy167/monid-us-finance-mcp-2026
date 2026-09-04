@@ -5,15 +5,81 @@ package service
 
 import (
 	"encoding/json"
+	"html"
+	"math"
+	"regexp"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/belazy/monid-finance/fd"
 	"github.com/belazy/monid-finance/providers"
 )
 
-// institutionalHoldingsRowKeys mirrors institutional_holdings._ROW_KEYS.
-var institutionalHoldingsRowKeys = []string{"results", "holders", "rows", "data", "table", "institutionHolders"}
+// institutionalHoldingsRowKeys names every key the holder table has been
+// seen under. "tableData" is the one SECForm4 actually uses, verified live
+// 2026-09-04 against cik=320193; the rest are retained as tolerated
+// aliases so a shape change degrades to a different key rather than a
+// hard failure.
+var institutionalHoldingsRowKeys = []string{"tableData", "results", "holders", "rows", "data", "table", "institutionHolders"}
+
+// holderAnchorText pulls the display text out of SECForm4's HTML "holder"
+// cell, whose live value looks like:
+//
+//	<a href="/portfolio-holdings/1364742.html">BlackRock, Inc.</a><BR><a ...>
+//
+// The first anchor's text is the filer name. Anything unparseable yields
+// no name rather than a mangled one.
+var holderAnchorText = regexp.MustCompile(`<a[^>]*>([^<]+)</a>`)
+
+// holderCIKHref pulls the filer's CIK out of that same cell's portfolio
+// link (/portfolio-holdings/<cik>.html), which is the only place this feed
+// reports it.
+var holderCIKHref = regexp.MustCompile(`/portfolio-holdings/(\d+)`)
+
+// holderName extracts the filer name from either a plain string or the
+// HTML cell SECForm4 sends.
+func holderName(raw string) *string {
+	if !strings.Contains(raw, "<") {
+		trimmed := strings.TrimSpace(raw)
+		if trimmed == "" {
+			return nil
+		}
+		return &trimmed
+	}
+	if m := holderAnchorText.FindStringSubmatch(raw); m != nil {
+		name := strings.TrimSpace(html.UnescapeString(m[1]))
+		if name != "" {
+			return &name
+		}
+	}
+	return nil
+}
+
+// holderCIK extracts the filer CIK from the holder cell's portfolio link.
+func holderCIK(raw string) *string {
+	if m := holderCIKHref.FindStringSubmatch(raw); m != nil {
+		cik := m[1]
+		return &cik
+	}
+	return nil
+}
+
+// instHoldingsRoundedInt reads a money-like field that the feed reports as
+// a non-integer float (value came back as 336524794269.04004 live), which
+// instHoldingsFirstInt rejects outright. Dollar values are rounded to the
+// nearest unit rather than dropped.
+func instHoldingsRoundedInt(row map[string]any, keys ...string) *int64 {
+	for _, key := range keys {
+		f, ok := row[key].(float64)
+		if !ok {
+			continue
+		}
+		v := int64(math.Round(f))
+		return &v
+	}
+	return nil
+}
 
 // normalizeInstitutionalHoldings mirrors
 // institutional_holdings.normalize_institutional_holdings +
@@ -59,13 +125,23 @@ func normalizeInstitutionalHoldings(raw json.RawMessage, ticker string, limit in
 	}
 	var records []scored
 	for _, row := range rows {
-		reportDay := instHoldingsFirstDate(row, "report_period", "reportDate", "date", "as_of", "periodEnd")
+		reportDay := instHoldingsFirstDate(row, "report_period", "reportDate", "date", "as_of", "periodEnd", "report_date_time")
 		if !instHoldingsMatches(reportDay, reportPeriod) {
 			continue
 		}
-		filerName := firstStringGeneric(row, "filer_name", "institution", "holder", "manager", "name")
-		shares := instHoldingsFirstInt(row, "shares", "shares_held", "num_shares", "position_shares", "current_shares")
-		valueUSD := instHoldingsFirstInt(row, "value_usd", "market_value", "position_value", "current_value", "value")
+		// SECForm4 sends the filer as an HTML cell carrying both the name
+		// and, in its portfolio link, the filer CIK. Everything else in
+		// this feed is a plain value.
+		var filerName, filerCIK *string
+		if raw := firstStringGeneric(row, "filer_name", "institution", "holder", "manager", "name"); raw != nil {
+			filerName = holderName(*raw)
+			filerCIK = holderCIK(*raw)
+		}
+		shares := instHoldingsFirstInt(row, "shares", "shares_held", "num_shares", "position_shares", "current_shares", "newShares")
+		valueUSD := instHoldingsFirstInt(row, "value_usd", "market_value", "position_value", "current_value")
+		if valueUSD == nil {
+			valueUSD = instHoldingsRoundedInt(row, "value")
+		}
 		rowIssuer := firstStringGeneric(row, "name_of_issuer", "company", "issuer")
 		if filerName == nil && shares == nil && valueUSD == nil {
 			continue
@@ -84,6 +160,7 @@ func normalizeInstitutionalHoldings(raw json.RawMessage, ticker string, limit in
 		record.Shares = shares
 		record.ValueUSD = valueUSD
 		record.FilerName = filerName
+		record.FilerCIK = filerCIK
 		s := scored{record: record}
 		if valueUSD != nil {
 			s.hasValue = true

@@ -2329,7 +2329,23 @@ func (c *callCtx) getInstitutionalHoldings(args map[string]any) (Result, error) 
 	if err != nil {
 		return Result{}, err
 	}
-	run, err := c.run(secform4, institutionalEndpoint, nil, map[string]any{"ticker": symbol})
+	// SECForm4's institution-holders route is keyed on CIK, not ticker.
+	// This passed {"ticker": symbol} and the provider answered HTTP 422
+	// ("cik parameter is required") on every call, so this route was
+	// returning upstream_error in production. Verified live 2026-09-04:
+	// cik=320193 answers HTTP 200; symbol=AAPL completes with no output;
+	// no parameters at all is the 422. The CIK comes from the same
+	// filings-backed lookup get_insider_ownership uses, and reuses its
+	// cache entry.
+	cik, found, err := c.resolveIssuerCIK(symbol)
+	if err != nil {
+		return Result{}, err
+	}
+	if !found {
+		return Result{Value: fd.NewErrorResponse("not_found",
+			"No SEC CIK could be resolved for ticker "+symbol+".")}, nil
+	}
+	run, err := c.run(secform4, institutionalEndpoint, nil, map[string]any{"cik": cik})
 	if err != nil {
 		return Result{}, err
 	}
