@@ -179,13 +179,17 @@ func (a callerAdapter) Call(ctx context.Context, apiKey, tool string, args map[s
 
 // capabilityHandlers maps every httpapi.Caller.Capability name to the
 // go/service.Service exported method it runs. Every entry here is one of
-// the 13 capabilities go/service/capabilities.go exposes precisely
-// because it is NOT a Financial Datasets MCP tool name (so it is never a
-// valid Call argument, and none of these names appear in
+// the capabilities go/service/capabilities.go exposes precisely because
+// it is NOT a Financial Datasets MCP tool name (so it is never a valid
+// Call argument, and none of these names appear in
 // go/mcpserver/tool_schemas.json): the two are separate namespaces by
 // construction, not just by convention. Each method value's signature
 // already matches this map's value type exactly (method expressions on
 // *service.Service), so no per-capability adapter function is needed.
+//
+// A capability with no entry here is unreachable from every surface and
+// nothing fails at build time, so TestCapabilityNamesNeverCollideWithMCPToolNames
+// also pins this map's size as a deliberate ratchet.
 var capabilityHandlers = map[string]func(*service.Service, context.Context, string, map[string]any) (service.Result, error){
 	"list_company_facts_tickers":          (*service.Service).ListCompanyFactsTickers,
 	"list_earnings_tickers":               (*service.Service).ListEarningsTickers,
@@ -200,6 +204,7 @@ var capabilityHandlers = map[string]func(*service.Service, context.Context, stri
 	"list_interest_rate_banks":            (*service.Service).ListInterestRateBanks,
 	"get_all_financials":                  (*service.Service).GetAllFinancials,
 	"search_line_items":                   (*service.Service).SearchLineItems,
+	"get_market_snapshot":                 (*service.Service).GetMarketSnapshot,
 }
 
 // Capability satisfies httpapi.Caller's non-tool capability surface (see

@@ -78,6 +78,10 @@
       "description": "SEC Form 13F institutional-holdings rows."
     },
     {
+      "name": "Ownership",
+      "description": "Insider, beneficial (13D/13G) and activist ownership state."
+    },
+    {
       "name": "Not implemented",
       "description": "Routes registered for Financial Datasets route parity; always a zero-cost not_implemented stub today."
     }
@@ -1256,6 +1260,66 @@
                         "day_change_percent": -3.029,
                         "time": "2026-09-04T15:01:00Z"
                       }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "402": {
+            "$ref": "#/components/responses/PaymentRequired"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "504": {
+            "$ref": "#/components/responses/GatewayTimeout"
+          }
+        }
+      }
+    },
+    "/prices/snapshot/market": {
+      "get": {
+        "operationId": "get_market_snapshot",
+        "tags": [
+          "Prices"
+        ],
+        "summary": "Market Snapshot (Real-Time)",
+        "description": "Returns nasdaq's current most-active-by-share-volume list in the same PriceSnapshot record shape /prices/snapshot answers with (go/service/marketsnapshot.go). Financial Datasets publishes no parameters for this route and neither does this server. What differs from Financial Datasets is coverage, not shape: this snapshot carries nasdaq's most-active set, not the whole market. day_change_percent is derived from price and day_change against the implied previous close and is omitted when that previous close is zero; time and time_milliseconds both come from the feed's single trade timestamp, normalized to UTC. Unlike the ownership-state routes, this data IS current: the response carries the feed's own data_as_of label so a caller can confirm that directly.",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Illustrative shape (no captured live sample committed for this route); values are structural placeholders, not a claim about real reported figures.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PriceSnapshotMarketResponse"
+                },
+                "examples": {
+                  "example": {
+                    "value": {
+                      "data_as_of": "Sep 4, 2026 2:18 PM ET",
+                      "snapshots": [
+                        {
+                          "price": 1.8399,
+                          "ticker": "SNDL",
+                          "day_change": 0.05,
+                          "day_change_percent": 2.793452148164702,
+                          "time": "2026-09-04T18:18:00Z",
+                          "time_milliseconds": 1788545880000,
+                          "name": "Sundial Growers Inc.",
+                          "share_volume": 12345678
+                        }
+                      ]
                     }
                   }
                 }
@@ -3516,37 +3580,72 @@
     },
     "/institutional-holdings/investors": {
       "get": {
-        "operationId": "get_institutional_holdings_investors_not_implemented",
+        "operationId": "get_institutional_investors",
         "tags": [
-          "Not implemented"
+          "Institutional holdings"
         ],
-        "summary": "/institutional-holdings/investors (not implemented)",
-        "description": "Registered as a Financial Datasets-compatible route for parity, but not implemented by this deployment yet. Always answers HTTP 200 with a not_implemented ErrorResponse body, at zero cost and with no Monid call made — this is authenticated (X-API-KEY required) but otherwise free. See docs/compatibility.md for the phased implementation plan.",
-        "parameters": [],
+        "summary": "Find an investor's CIK by name (discovery)",
+        "description": "Returns the distinct SEC 13F filers appearing in an unscoped SECForm4 institution-holders call, deduplicated by name and sorted case-insensitively (go/service/institutionalinvestors.go). Use it to discover the filer_cik that /institutional-holdings accepts. This is a directory of whichever filers currently appear in that feed, not a guaranteed-complete or authoritative 13F filer registry. Financial Datasets names these fields cik/name on this route, while the same two values are filer_cik/filer_name on InstitutionalHolding; this server follows the endpoint being served. FRESHNESS: this feed has not been independently timestamped; treat its recency as unverified.",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Optional case-insensitive name prefix to filter the filer list, for example Berkshire."
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Opaque base64url pagination cursor from a previous response's next_page_url. Omit for the first page."
+          }
+        ],
         "responses": {
           "200": {
-            "description": "Zero-cost not_implemented stub.",
+            "description": "Illustrative shape (no captured live sample committed for this route); values are structural placeholders, not a claim about real reported figures.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/NotImplementedResponse"
+                  "$ref": "#/components/schemas/InstitutionalHoldingsInvestorsResponse"
                 },
                 "examples": {
                   "example": {
                     "value": {
-                      "error": "not_implemented",
-                      "message": "This Financial Datasets route is not implemented by the Monid-backed server yet; the call was free and no data was fabricated."
+                      "investors": [
+                        {
+                          "cik": "0001067983",
+                          "name": "Berkshire Hathaway Inc"
+                        }
+                      ]
                     }
                   }
                 }
               }
             }
           },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "402": {
+            "$ref": "#/components/responses/PaymentRequired"
+          },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "504": {
+            "$ref": "#/components/responses/GatewayTimeout"
           }
         }
       }
@@ -3633,111 +3732,492 @@
     },
     "/insider-ownership": {
       "get": {
-        "operationId": "get_insider_ownership_not_implemented",
+        "operationId": "get_insider_ownership",
         "tags": [
-          "Not implemented"
+          "Ownership"
         ],
-        "summary": "/insider-ownership (not implemented)",
-        "description": "Registered as a Financial Datasets-compatible route for parity, but not implemented by this deployment yet. Always answers HTTP 200 with a not_implemented ErrorResponse body, at zero cost and with no Monid call made — this is authenticated (X-API-KEY required) but otherwise free. See docs/compatibility.md for the phased implementation plan.",
-        "parameters": [],
+        "summary": "Get insider ownership",
+        "description": "Returns each insider's current holding in one company: the most recent post-transaction share count SECForm4's per-company insider-trading history reports for that person (go/service/insiderownership.go). ticker is required; the issuer's SEC CIK is resolved first via the same filings lookup get_filings uses, reusing that call's cache. Insiders are keyed on the stable id in their profile URL rather than their displayed name, because the feed's name carries a job title and titles change between filings; one person therefore yields one row at their latest holding. form_type is accepted for Financial Datasets parameter parity but every call that sets it answers HTTP 200 with a bad_request ErrorResponse body: this feed carries no Form 3/5 classification to filter on. FRESHNESS: measured live on 2026-09-04, this feed tracked filings within days (a 2026-09-01 transaction reported 2026-09-03). The six-month lag documented on the beneficial-ownership routes applies to the 13D/13G feeds, not to this one.",
+        "parameters": [
+          {
+            "name": "ticker",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Ticker of the issuer whose insiders to list, for example AAPL. Required; an omitted ticker answers a bad_request ErrorResponse body at zero cost."
+          },
+          {
+            "name": "name",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Optional case-insensitive filter on the insider's reported name."
+          },
+          {
+            "name": "form_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "3",
+                "3/A",
+                "5",
+                "5/A"
+              ]
+            },
+            "description": "Accepted for Financial Datasets parameter parity, but every call that sets it answers HTTP 200 with a bad_request ErrorResponse body; the underlying feed carries no Form 3/5 classification."
+          },
+          {
+            "name": "filing_date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Restricts to holdings whose filing_date exactly equals this date (YYYY-MM-DD)."
+          },
+          {
+            "name": "filing_date_gte",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Restricts to holdings filed on or after this date (YYYY-MM-DD)."
+          },
+          {
+            "name": "filing_date_lte",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Restricts to holdings filed on or before this date (YYYY-MM-DD)."
+          },
+          {
+            "name": "filing_date_gt",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Restricts to holdings filed strictly after this date (YYYY-MM-DD)."
+          },
+          {
+            "name": "filing_date_lt",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Restricts to holdings filed strictly before this date (YYYY-MM-DD)."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000,
+              "default": 10
+            },
+            "description": "Number of records to retrieve (default: 10, max: 1000)."
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Opaque base64url pagination cursor from a previous response's next_page_url. Omit for the first page."
+          }
+        ],
         "responses": {
           "200": {
-            "description": "Zero-cost not_implemented stub.",
+            "description": "Illustrative shape (no captured live sample committed for this route); values are structural placeholders, not a claim about real reported figures.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/NotImplementedResponse"
+                  "$ref": "#/components/schemas/InsiderOwnershipResponse"
                 },
                 "examples": {
                   "example": {
                     "value": {
-                      "error": "not_implemented",
-                      "message": "This Financial Datasets route is not implemented by the Monid-backed server yet; the call was free and no data was fabricated."
+                      "insider_ownership": [
+                        {
+                          "ticker": "AAPL",
+                          "issuer": "Apple Inc.",
+                          "name": "Example Officer",
+                          "filing_date": "2026-09-03",
+                          "as_of_date": "2026-09-01",
+                          "shares_owned": 3280000,
+                          "direct_or_indirect": "D"
+                        }
+                      ]
                     }
                   }
                 }
               }
             }
           },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "402": {
+            "$ref": "#/components/responses/PaymentRequired"
+          },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "504": {
+            "$ref": "#/components/responses/GatewayTimeout"
           }
         }
       }
     },
     "/beneficial-ownership": {
       "get": {
-        "operationId": "get_beneficial_ownership_not_implemented",
+        "operationId": "get_beneficial_ownership",
         "tags": [
-          "Not implemented"
+          "Ownership"
         ],
-        "summary": "/beneficial-ownership (not implemented)",
-        "description": "Registered as a Financial Datasets-compatible route for parity, but not implemented by this deployment yet. Always answers HTTP 200 with a not_implemented ErrorResponse body, at zero cost and with no Monid call made — this is authenticated (X-API-KEY required) but otherwise free. See docs/compatibility.md for the phased implementation plan.",
-        "parameters": [],
+        "summary": "Get beneficial ownership",
+        "description": "Returns Schedule 13D and 13G beneficial-ownership stakes (holdings above 5%) from SECForm4's 13D and 13G feeds (go/service/beneficialownership.go). Without type, both feeds are scanned and merged, newest filing first; type narrows to one. Exactly one of ticker or filer_cik is required; passing both, or neither, answers a bad_request ErrorResponse body at zero cost. filer_cik is matched only against whichever CIK-like alias a feed row happens to carry, and the verified 13D/13G item shape carries none, so a filer_cik query legitimately returns an empty list rather than a guess. history is accepted for parity but history=true answers a bad_request ErrorResponse body: these feeds carry only each stake's latest reported state, never a full amendment chain. FRESHNESS: measured live on 2026-09-04, the newest 13D record was filed 2026-03-06, roughly six months behind. This is not a real-time feed; read each row's own filing_date/event_date to judge recency.",
+        "parameters": [
+          {
+            "name": "ticker",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Ticker of the issuer whose stakes to list, for example AAPL."
+          },
+          {
+            "name": "filer_cik",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "SEC CIK of a reporting person. See the route description: the verified feed shape carries no CIK, so this legitimately returns an empty list."
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "activist",
+                "passive"
+              ]
+            },
+            "description": "Narrows to activist (Schedule 13D) or passive (Schedule 13G) stakes. Omit to scan both feeds."
+          },
+          {
+            "name": "history",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false
+            },
+            "description": "Accepted for Financial Datasets parameter parity. history=true answers a bad_request ErrorResponse body; only each stake's current reported state is available."
+          },
+          {
+            "name": "filing_date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Restricts to stakes whose filing_date exactly equals this date (YYYY-MM-DD)."
+          },
+          {
+            "name": "filing_date_gte",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Restricts to stakes filed on or after this date (YYYY-MM-DD)."
+          },
+          {
+            "name": "filing_date_lte",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Restricts to stakes filed on or before this date (YYYY-MM-DD)."
+          },
+          {
+            "name": "filing_date_gt",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Restricts to stakes filed strictly after this date (YYYY-MM-DD)."
+          },
+          {
+            "name": "filing_date_lt",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Restricts to stakes filed strictly before this date (YYYY-MM-DD)."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000,
+              "default": 10
+            },
+            "description": "Number of records to retrieve (default: 10, max: 1000)."
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Opaque base64url pagination cursor from a previous response's next_page_url. Omit for the first page."
+          }
+        ],
         "responses": {
           "200": {
-            "description": "Zero-cost not_implemented stub.",
+            "description": "Illustrative shape (no captured live sample committed for this route); values are structural placeholders, not a claim about real reported figures.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/NotImplementedResponse"
+                  "$ref": "#/components/schemas/BeneficialOwnershipResponse"
                 },
                 "examples": {
                   "example": {
                     "value": {
-                      "error": "not_implemented",
-                      "message": "This Financial Datasets route is not implemented by the Monid-backed server yet; the call was free and no data was fabricated."
+                      "beneficial_owners": [
+                        {
+                          "ticker": "AAPL",
+                          "reporting_person_name": "Example Capital Management LLC",
+                          "form_type": "SCHEDULE 13G",
+                          "type": "passive",
+                          "filing_date": "2026-03-06",
+                          "aggregate_amount_beneficially_owned": 1171112,
+                          "percent_of_class": 16.07
+                        }
+                      ]
                     }
                   }
                 }
               }
             }
           },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "402": {
+            "$ref": "#/components/responses/PaymentRequired"
+          },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "504": {
+            "$ref": "#/components/responses/GatewayTimeout"
           }
         }
       }
     },
     "/activist-ownership": {
       "get": {
-        "operationId": "get_activist_ownership_not_implemented",
+        "operationId": "get_activist_ownership",
         "tags": [
-          "Not implemented"
+          "Ownership"
         ],
-        "summary": "/activist-ownership (not implemented)",
-        "description": "Registered as a Financial Datasets-compatible route for parity, but not implemented by this deployment yet. Always answers HTTP 200 with a not_implemented ErrorResponse body, at zero cost and with no Monid call made — this is authenticated (X-API-KEY required) but otherwise free. See docs/compatibility.md for the phased implementation plan.",
-        "parameters": [],
+        "summary": "Get activist stakes",
+        "description": "Returns only the activist (Schedule 13D) subset of beneficial ownership, which is how Financial Datasets defines this route: it publishes no type parameter of its own, and this server pins type=activist regardless of any type a caller sends, so the route can never be inverted into its passive opposite. Records are the same BeneficialOwner shape /beneficial-ownership returns, but the envelope key is activist_owners, matching Financial Datasets' ActivistOwnershipResponse. Exactly one of ticker or filer_cik is required; passing both, or neither, answers a bad_request ErrorResponse body at zero cost. filer_cik is matched only against whichever CIK-like alias a feed row happens to carry, and the verified 13D/13G item shape carries none, so a filer_cik query legitimately returns an empty list rather than a guess. history is accepted for parity but history=true answers a bad_request ErrorResponse body: these feeds carry only each stake's latest reported state, never a full amendment chain. FRESHNESS: measured live on 2026-09-04, the newest 13D record was filed 2026-03-06, roughly six months behind. This is not a real-time feed; read each row's own filing_date/event_date to judge recency.",
+        "parameters": [
+          {
+            "name": "ticker",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Ticker of the issuer whose activist stakes to list, for example AAPL."
+          },
+          {
+            "name": "filer_cik",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "SEC CIK of a reporting person. See the route description: the verified feed shape carries no CIK, so this legitimately returns an empty list."
+          },
+          {
+            "name": "history",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false
+            },
+            "description": "Accepted for Financial Datasets parameter parity. history=true answers a bad_request ErrorResponse body; only each stake's current reported state is available."
+          },
+          {
+            "name": "filing_date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Restricts to stakes whose filing_date exactly equals this date (YYYY-MM-DD)."
+          },
+          {
+            "name": "filing_date_gte",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Restricts to stakes filed on or after this date (YYYY-MM-DD)."
+          },
+          {
+            "name": "filing_date_lte",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Restricts to stakes filed on or before this date (YYYY-MM-DD)."
+          },
+          {
+            "name": "filing_date_gt",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Restricts to stakes filed strictly after this date (YYYY-MM-DD)."
+          },
+          {
+            "name": "filing_date_lt",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Restricts to stakes filed strictly before this date (YYYY-MM-DD)."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000,
+              "default": 10
+            },
+            "description": "Number of records to retrieve (default: 10, max: 1000)."
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Opaque base64url pagination cursor from a previous response's next_page_url. Omit for the first page."
+          }
+        ],
         "responses": {
           "200": {
-            "description": "Zero-cost not_implemented stub.",
+            "description": "Illustrative shape (no captured live sample committed for this route); values are structural placeholders, not a claim about real reported figures.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/NotImplementedResponse"
+                  "$ref": "#/components/schemas/ActivistOwnershipResponse"
                 },
                 "examples": {
                   "example": {
                     "value": {
-                      "error": "not_implemented",
-                      "message": "This Financial Datasets route is not implemented by the Monid-backed server yet; the call was free and no data was fabricated."
+                      "activist_owners": [
+                        {
+                          "ticker": "AAPL",
+                          "reporting_person_name": "Example Activist Partners LP",
+                          "form_type": "SCHEDULE 13D",
+                          "type": "activist",
+                          "filing_date": "2026-03-06",
+                          "aggregate_amount_beneficially_owned": 52000000,
+                          "percent_of_class": 6.4
+                        }
+                      ]
                     }
                   }
                 }
               }
             }
           },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "402": {
+            "$ref": "#/components/responses/PaymentRequired"
+          },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "504": {
+            "$ref": "#/components/responses/GatewayTimeout"
           }
         }
       }
@@ -7320,6 +7800,263 @@
         },
         "required": [
           "search_results"
+        ]
+      },
+      "InsiderOwnership": {
+        "type": "object",
+        "title": "InsiderOwnership",
+        "description": "One insider's current holding in a company. Derived by aggregating SECForm4's per-company insider-trading history down to each insider's most recent post-transaction share count, which is the same figure a Form 3/5 ownership statement reports. Every field is a pointer with omitempty in the Go source: unsourced values are omitted, never nulled or fabricated. The Financial Datasets InsiderOwnership contract also declares title, is_board_director, is_officer, is_ten_percent_owner, holding_type, security_title, nature_of_ownership and the derivative-security fields (conversion_or_exercise_price, exercise_date, expiration_date, underlying_security_title, underlying_security_shares); the insider-trading feed this server reads never carries them, so they are absent from every response rather than present-and-null.",
+        "properties": {
+          "ticker": {
+            "type": "string",
+            "description": "Uppercase ticker symbol of the issuer."
+          },
+          "issuer": {
+            "type": "string",
+            "description": "Issuer company name as the feed reports it."
+          },
+          "name": {
+            "type": "string",
+            "description": "The insider's reported name."
+          },
+          "form_type": {
+            "type": "string",
+            "description": "SEC form type of the underlying filing, when the feed reports one."
+          },
+          "filing_date": {
+            "type": "string",
+            "format": "date",
+            "description": "Date component of the filing's reported_datetime (YYYY-MM-DD)."
+          },
+          "as_of_date": {
+            "type": "string",
+            "format": "date",
+            "description": "Date the reported holding is as of, from the underlying transaction_date (YYYY-MM-DD)."
+          },
+          "accession_number": {
+            "type": "string",
+            "description": "SEC accession number of the underlying filing, when the feed reports one."
+          },
+          "shares_owned": {
+            "type": "number",
+            "description": "Shares beneficially owned after the most recent reported transaction."
+          },
+          "direct_or_indirect": {
+            "type": "string",
+            "description": "Whether the holding is direct or indirect, when the feed reports it."
+          }
+        }
+      },
+      "InsiderOwnershipResponse": {
+        "type": "object",
+        "title": "InsiderOwnershipResponse",
+        "description": "List envelope: {\"insider_ownership\": [...]}, with next_page_url present only when more records remain.",
+        "properties": {
+          "insider_ownership": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InsiderOwnership"
+            }
+          },
+          "next_page_url": {
+            "type": "string",
+            "description": "Absolute URL of the next page. Present only when more records remain."
+          }
+        },
+        "required": [
+          "insider_ownership"
+        ]
+      },
+      "BeneficialOwner": {
+        "type": "object",
+        "title": "BeneficialOwner",
+        "description": "One Schedule 13D/13G beneficial-ownership stake. Sourced from SECForm4's 13D and 13G feeds. Every field is a pointer with omitempty in the Go source: unsourced values are omitted, never nulled or fabricated. The Financial Datasets BeneficialOwner contract also declares issuer_name, issuer_cik, issuer_cusip, security_class_title, reporting_person_cik, type_of_reporting_person, citizenship_or_place_of_organization, is_amendment, amendment_number, accession_number, the four voting/dispositive power fields, purpose_of_transaction, rule_filed_under and is_latest; these feeds never carry them, so they are absent from every response rather than present-and-null. FRESHNESS: measured live on 2026-09-04, the newest record in the 13D feed was filed 2026-03-06, roughly six months behind. This is not a real-time feed; read each row's own filing_date/event_date to judge recency.",
+        "properties": {
+          "ticker": {
+            "type": "string",
+            "description": "Uppercase ticker symbol of the issuer whose stake is reported."
+          },
+          "filer_cik": {
+            "type": "string",
+            "description": "SEC CIK of the reporting person, when the feed row carries a CIK-like value."
+          },
+          "reporting_person_name": {
+            "type": "string",
+            "description": "Name of the reporting person (the filer) as the feed reports it."
+          },
+          "form_type": {
+            "type": "string",
+            "description": "SCHEDULE 13D for activist stakes, SCHEDULE 13G for passive ones."
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "activist",
+              "passive"
+            ],
+            "description": "activist for 13D rows, passive for 13G rows."
+          },
+          "filing_date": {
+            "type": "string",
+            "format": "date",
+            "description": "Date the schedule was filed (YYYY-MM-DD)."
+          },
+          "event_date": {
+            "type": "string",
+            "format": "date",
+            "description": "Date of the event that triggered the filing (YYYY-MM-DD)."
+          },
+          "aggregate_amount_beneficially_owned": {
+            "type": "number",
+            "description": "Shares beneficially owned, parsed from the feed's compound shares/percent field."
+          },
+          "percent_of_class": {
+            "type": "number",
+            "description": "Percent of the class beneficially owned, parsed from the same compound field."
+          },
+          "share_change": {
+            "type": "number",
+            "description": "Change in shares versus the filer's previous report. Not part of the Financial Datasets BeneficialOwner contract; kept because SECForm4 genuinely reports it."
+          },
+          "share_change_percent": {
+            "type": "number",
+            "description": "The same change expressed as a percent. Not part of the Financial Datasets contract; see share_change."
+          }
+        }
+      },
+      "BeneficialOwnershipResponse": {
+        "type": "object",
+        "title": "BeneficialOwnershipResponse",
+        "description": "List envelope: {\"beneficial_owners\": [...]}, with next_page_url present only when more records remain.",
+        "properties": {
+          "beneficial_owners": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BeneficialOwner"
+            }
+          },
+          "next_page_url": {
+            "type": "string",
+            "description": "Absolute URL of the next page. Present only when more records remain."
+          }
+        },
+        "required": [
+          "beneficial_owners"
+        ]
+      },
+      "ActivistOwnershipResponse": {
+        "type": "object",
+        "title": "ActivistOwnershipResponse",
+        "description": "List envelope for /activist-ownership: {\"activist_owners\": [...]}. Financial Datasets keys this route differently from /beneficial-ownership even though both carry the same BeneficialOwner record, so this server does too.",
+        "properties": {
+          "activist_owners": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BeneficialOwner"
+            }
+          },
+          "next_page_url": {
+            "type": "string",
+            "description": "Absolute URL of the next page. Present only when more records remain."
+          }
+        },
+        "required": [
+          "activist_owners"
+        ]
+      },
+      "InstitutionalInvestor": {
+        "type": "object",
+        "title": "InstitutionalInvestor",
+        "description": "One distinct SEC 13F filer, for discovering the filer_cik that /institutional-holdings accepts. Note the field names: Financial Datasets calls these cik/name on this route, while the same two values are filer_cik/filer_name on InstitutionalHolding; this server follows whichever spelling belongs to the endpoint being served.",
+        "properties": {
+          "cik": {
+            "type": "string",
+            "description": "SEC CIK of the institutional filer, when the feed row carries one."
+          },
+          "name": {
+            "type": "string",
+            "description": "The filer's name as most recently reported."
+          }
+        }
+      },
+      "InstitutionalHoldingsInvestorsResponse": {
+        "type": "object",
+        "title": "InstitutionalHoldingsInvestorsResponse",
+        "description": "List envelope: {\"investors\": [...]}, with next_page_url present only when more records remain.",
+        "properties": {
+          "investors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InstitutionalInvestor"
+            }
+          },
+          "next_page_url": {
+            "type": "string",
+            "description": "Absolute URL of the next page. Present only when more records remain."
+          }
+        },
+        "required": [
+          "investors"
+        ]
+      },
+      "MarketPriceSnapshot": {
+        "type": "object",
+        "title": "MarketPriceSnapshot",
+        "description": "One row of the market snapshot, in the same PriceSnapshot contract shape /prices/snapshot answers with, plus the two figures nasdaq genuinely reports that the contract has no field for. day_change_percent is derived from price and day_change against the implied previous close, and is omitted when that previous close is zero. time and time_milliseconds both come from the feed's single trade timestamp, normalized to UTC.",
+        "properties": {
+          "price": {
+            "type": "number",
+            "description": "Last sale price."
+          },
+          "ticker": {
+            "type": "string",
+            "description": "Uppercase ticker symbol."
+          },
+          "day_change": {
+            "type": "number",
+            "description": "Absolute change versus the prior close."
+          },
+          "day_change_percent": {
+            "type": "number",
+            "description": "Percent change versus the implied prior close (price minus day_change). Derived, not sourced."
+          },
+          "time": {
+            "type": "string",
+            "format": "date-time",
+            "description": "The feed's trade timestamp, normalized to UTC."
+          },
+          "time_milliseconds": {
+            "type": "number",
+            "description": "The same instant in epoch milliseconds."
+          },
+          "name": {
+            "type": "string",
+            "description": "Company name as nasdaq reports it. Not part of the Financial Datasets PriceSnapshot contract; kept because it is genuinely sourced."
+          },
+          "share_volume": {
+            "type": "integer",
+            "description": "Shares traded, the figure this most-active feed ranks by. Not part of the Financial Datasets contract; kept for the same reason as name."
+          }
+        }
+      },
+      "PriceSnapshotMarketResponse": {
+        "type": "object",
+        "title": "PriceSnapshotMarketResponse",
+        "description": "Market snapshot envelope: {\"snapshots\": [...]}, matching Financial Datasets' own PriceSnapshotMarketResponse, plus data_as_of. snapshots is always present, empty when the feed reports no movers.",
+        "properties": {
+          "data_as_of": {
+            "type": "string",
+            "description": "The feed's own human-readable as-of label, for example \"Sep 4, 2026 2:18 PM ET\". Not part of the Financial Datasets contract; carried so a caller can see how current the snapshot is without parsing a record."
+          },
+          "snapshots": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MarketPriceSnapshot"
+            }
+          }
+        },
+        "required": [
+          "snapshots"
         ]
       }
     },

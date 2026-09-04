@@ -25,7 +25,7 @@ operator's. The server never logs or stores a caller's key. Get a key at
 - All failures return the Financial Datasets `ErrorResponse` shape `{"error": <code>, "message": <detail>}`.
 - Error codes in use: `bad_request`, `not_found`, `invalid_cursor`, `upstream_error`, `timeout`, `schema_drift`, `not_implemented`.
 - Pagination matches the Financial Datasets style: `limit` is the total record budget across pages, `cursor` is an opaque base64url token, and `next_page_url` is present only when more records remain. Pages hold 10 records (100 for prices). `next_page_url` targets the documented facade base `https://api.monid-finance-mcp.example`; MCP clients should pass `cursor` back instead.
-- Provenance, measured cost, and warnings never appear inside responses. They are committed to `receipts/ledger.jsonl` per Monid call (success or failure); `scripts/receipts_summary.py` and `summarize_ledger()` aggregate them.
+- Provenance, measured cost, and warnings never appear inside responses. They are appended to the ledger at `RECEIPTS_PATH` (conventionally `receipts/ledger.jsonl`) per Monid call, success or failure, by `fd.ReceiptsLedger` (`go/fd/receipts.go`); `ReceiptsLedger.SpentUSD()` totals it. Recording is best-effort observability: an unset or unwritable path disables it and never blocks a response.
 
 ## Tool status
 
@@ -36,6 +36,27 @@ tools (`get_beneficial_owners`, `get_beneficial_ownership`,
 `get_insider_ownership`, `get_institutional_investors`) were the last to
 land; see "Ownership-state data freshness" below for what they actually
 source and how current that data is.
+
+## REST route status
+
+44 routes are implemented and 2 answer a zero-cost `not_implemented` stub
+(`/kpi/metrics/sectors`, `/index-funds/tickers`), for the reasons noted
+beside each in `notImplementedPaths` (`go/httpapi/rest.go`). Eight
+Financial Datasets routes are not registered at all: the four
+`as-reported` statement routes (no XBRL/as-filed source exists in the
+allowlisted Monid registry), `/ipos` (no SEC S-1 filings feed),
+`/company/facts/ciks` and `/filings/ciks` (no CIK enumeration), and
+`/filings/items/requests/{request_id}` (no async request store).
+
+Two envelope-key details are worth naming, because both are places where
+reusing one implementation across two routes would have been wrong.
+Financial Datasets keys `/activist-ownership` as `activist_owners` and
+`/beneficial-ownership` as `beneficial_owners` despite both carrying the
+same record, so the activist route re-keys the shared tool's envelope.
+And `/institutional-holdings/investors` names its two fields `cik`/`name`,
+while the same values are `filer_cik`/`filer_name` on
+`InstitutionalHolding`; this server follows whichever spelling belongs to
+the endpoint being served.
 
 ## Ownership-state data freshness
 

@@ -46,7 +46,7 @@ Each `datasets/*.mdx` page carries `openapi:` frontmatter bound to its primary R
 
 ## The OpenAPI spec
 
-`docs.json` wires the **API Reference** tab to `api-reference/openapi.json`, and every `datasets/*.mdx` page references the same file by relative path in its frontmatter. The copy in this directory came from `docs/openapi.json` with one change: the `info.license` object had both `identifier` and `url` set, which OpenAPI 3.1 does not allow (a license object takes one or the other). This copy drops `url` and keeps `identifier: "MIT"`. If `docs/openapi.json` is regenerated upstream, re-copy it and re-apply that one-line fix, or fix it upstream once and copy verbatim.
+`docs.json` wires the **API Reference** tab to `api-reference/openapi.json`, and every `datasets/*.mdx` page references the same file by relative path in its frontmatter. The copy in this directory is a verbatim copy of `docs/openapi.json`. It once differed by one line: `info.license` carried both `identifier` and `url`, which OpenAPI 3.1 forbids (a license object takes one or the other). That was fixed upstream, so the two files are now byte-identical and re-copying needs no follow-up edit. Verify with `shasum docs/openapi.json docs-site/api-reference/openapi.json` after copying.
 
 To refresh the copy:
 

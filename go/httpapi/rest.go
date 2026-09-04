@@ -39,8 +39,12 @@ const notImplementedMessage = "This Financial Datasets route is not implemented 
 // they are now wired to the shared accept-universe coverage list instead
 // (Service.ListKPITickers/ListInstitutionalHoldingsTickers - see
 // go/service/coverage.go's doc comment), worded as the tickers the route
-// ACCEPTS, not a coverage claim. The six paths left here have no such
-// answer, for the reason noted beside each. Each answers 200
+// ACCEPTS, not a coverage claim. The four ownership-state paths
+// (/insider-ownership, /beneficial-ownership, /activist-ownership,
+// /institutional-holdings/investors) also used to stub here, on the
+// then-true grounds that their tools had no working service handler;
+// all four now have one and are wired below. The paths left here have no
+// such answer, for the reason noted beside each. Each answers 200
 // {"error": "not_implemented", "message": ...} once authorized, at zero
 // cost, and never reaches Caller.
 var notImplementedPaths = []string{
@@ -58,19 +62,6 @@ var notImplementedPaths = []string{
 	// so publishing it as a coverage catalog would overstate what this
 	// server actually supports.
 	"/index-funds/tickers",
-	// get_institutional_holdings/tickers now answers the accept-universe
-	// (see above). /institutional-holdings/investors has no such
-	// fallback: this server holds no local list of investors (filer
-	// CIKs) to enumerate at all, accept-universe or otherwise.
-	"/institutional-holdings/investors",
-	// The four ownership-state tools these paths would call
-	// (get_insider_ownership, get_beneficial_ownership,
-	// get_beneficial_owners, get_institutional_investors) are themselves
-	// notImplementedHandler in go/service/tools.go: there is no working
-	// service method to wire yet.
-	"/insider-ownership",
-	"/beneficial-ownership",
-	"/activist-ownership",
 }
 
 // restRoutes builds the full REST route table, ported route-for-route from
@@ -155,6 +146,15 @@ func restRoutes(rt *restAPI) []restRoute {
 
 		// ---- 13F institutional holdings (get_institutional_holdings) ----
 		{http.MethodGet, "/institutional-holdings", rt.institutionalHoldings},
+		{http.MethodGet, "/institutional-holdings/investors", rt.institutionalInvestors},
+
+		// ---- Ownership state (get_insider_ownership / get_beneficial_ownership) ----
+		{http.MethodGet, "/insider-ownership", rt.insiderOwnership},
+		{http.MethodGet, "/beneficial-ownership", rt.beneficialOwnershipRoute("", beneficialOwnersWrapperKey)},
+		{http.MethodGet, "/activist-ownership", rt.beneficialOwnershipRoute("activist", activistOwnersWrapperKey)},
+
+		// ---- Market-wide price snapshot (get_market_snapshot) ----
+		{http.MethodGet, "/prices/snapshot/market", rt.marketSnapshot},
 	}
 	for _, path := range notImplementedPaths {
 		routes = append(routes, restRoute{http.MethodGet, path, notImplemented})
@@ -687,6 +687,126 @@ func (rt *restAPI) institutionalHoldings(w http.ResponseWriter, r *http.Request,
 	putQueryString(args, q, "report_period_gte")
 	putQueryString(args, q, "report_period_lte")
 	rt.callAndRespond(w, r, id, "get_institutional_holdings", args, nil)
+}
+
+// ---- Ownership state (get_insider_ownership / get_beneficial_ownership) ----
+
+// filingDateFilterNames is the five-way filing_date filter group the
+// ownership routes forward verbatim, mirroring statementDateFilterNames'
+// role for the report_period group. /insider-trades forwards only three of
+// these because get_insider_trades' own schema defines only three.
+var filingDateFilterNames = []string{
+	"filing_date", "filing_date_gte", "filing_date_lte", "filing_date_gt", "filing_date_lt",
+}
+
+// insiderOwnership answers /insider-ownership via get_insider_ownership:
+// each insider's latest post-transaction shares_owned figure for one
+// ticker (go/service/insiderownership.go). ticker is required by the tool
+// itself, so an omitted ticker becomes that tool's own zero-cost
+// bad_request rather than a check duplicated here. form_type is forwarded
+// rather than rejected here for the same reason: the tool rejects it with
+// a message naming the underlying feed's actual limitation.
+func (rt *restAPI) insiderOwnership(w http.ResponseWriter, r *http.Request, id callerIdentity) {
+	q := r.URL.Query()
+	limit, err := queryInt(q, "limit", 10)
+	if err != nil {
+		writeFDError(w, http.StatusBadRequest, "bad_request", err.Error())
+		return
+	}
+	args := map[string]any{"limit": float64(limit)}
+	putQueryString(args, q, "ticker")
+	putQueryString(args, q, "name")
+	putQueryString(args, q, "form_type")
+	for _, name := range filingDateFilterNames {
+		putQueryString(args, q, name)
+	}
+	rt.callAndRespond(w, r, id, "get_insider_ownership", args, nil)
+}
+
+// beneficialOwnersWrapperKey is the envelope key get_beneficial_ownership
+// itself sets, and the one /beneficial-ownership answers with.
+const beneficialOwnersWrapperKey = "beneficial_owners"
+
+// activistOwnersWrapperKey is the envelope key Financial Datasets uses on
+// /activist-ownership (ActivistOwnershipResponse), which differs from
+// /beneficial-ownership's despite both carrying the same record type.
+const activistOwnersWrapperKey = "activist_owners"
+
+// beneficialOwnershipRoute builds the handler both 13D/13G stake routes
+// share. Financial Datasets defines /activist-ownership as exactly the
+// activist (Schedule 13D) subset of /beneficial-ownership, which is why it
+// publishes no `type` parameter of its own; pinnedType carries that, and
+// is "" for /beneficial-ownership, where `type` is the caller's to set.
+// A pinned route ignores any caller-supplied type rather than letting a
+// ?type=passive turn /activist-ownership into its own opposite.
+//
+// wrapperKey exists because Financial Datasets does NOT reuse one envelope
+// across the two routes: /beneficial-ownership answers "beneficial_owners"
+// and /activist-ownership answers "activist_owners", even though both
+// carry the same record. The shared tool sets the former, so the activist
+// route rewrites it here.
+func (rt *restAPI) beneficialOwnershipRoute(pinnedType, wrapperKey string) routeHandler {
+	return func(w http.ResponseWriter, r *http.Request, id callerIdentity) {
+		q := r.URL.Query()
+		limit, err := queryInt(q, "limit", 10)
+		if err != nil {
+			writeFDError(w, http.StatusBadRequest, "bad_request", err.Error())
+			return
+		}
+		history, err := queryBool(q, "history", false)
+		if err != nil {
+			writeFDError(w, http.StatusBadRequest, "bad_request", err.Error())
+			return
+		}
+		args := map[string]any{
+			"limit":   float64(limit),
+			"history": history,
+		}
+		putQueryString(args, q, "ticker")
+		putQueryString(args, q, "filer_cik")
+		if pinnedType != "" {
+			args["type"] = pinnedType
+		} else {
+			putQueryString(args, q, "type")
+		}
+		for _, name := range filingDateFilterNames {
+			putQueryString(args, q, name)
+		}
+		result, err := rt.caller.Call(r.Context(), id.monidAPIKey, "get_beneficial_ownership", args)
+		if err != nil {
+			writeServiceError(w, err)
+			return
+		}
+		// Only the success list shape gets re-keyed; the tool's own
+		// bad_request body (WrapperKey == "") passes through unchanged,
+		// exactly as segmentedFinancialsRoute guards its reshape.
+		if result.WrapperKey == beneficialOwnersWrapperKey {
+			result.WrapperKey = wrapperKey
+		}
+		respond(w, r, result, nil)
+	}
+}
+
+// institutionalInvestors answers /institutional-holdings/investors via
+// get_institutional_investors: the directory of distinct 13F filers, used
+// to discover the filer_cik /institutional-holdings takes. name is an
+// optional case-insensitive prefix filter.
+func (rt *restAPI) institutionalInvestors(w http.ResponseWriter, r *http.Request, id callerIdentity) {
+	args := map[string]any{}
+	putQueryString(args, r.URL.Query(), "name")
+	rt.callAndRespond(w, r, id, "get_institutional_investors", args, nil)
+}
+
+// ---- Market-wide price snapshot (get_market_snapshot) ----
+
+// marketSnapshot answers /prices/snapshot/market via
+// Service.GetMarketSnapshot (Caller.Capability, not Call - it is not one
+// of the 27 FD MCP tools). The capability already emits Financial
+// Datasets' PriceSnapshotMarketResponse shape, so this route forwards it
+// unchanged. Financial Datasets publishes no parameters for this route,
+// so there is nothing to read off the query string.
+func (rt *restAPI) marketSnapshot(w http.ResponseWriter, r *http.Request, id callerIdentity) {
+	rt.callCapabilityAndRespond(w, r, id, "get_market_snapshot", map[string]any{}, nil)
 }
 
 // ---- All financials (get_all_financials) ----

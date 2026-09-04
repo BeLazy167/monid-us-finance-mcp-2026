@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"math"
 	"testing"
 )
 
@@ -355,9 +356,15 @@ func TestGetInstitutionalInvestors_DirectoryAndNameFilter(t *testing.T) {
 	if len(filteredRecords) != 1 {
 		t.Fatalf("expected 1 investor matching 'berk', got %d", len(filteredRecords))
 	}
+	// The upstream feed spells these filer_name/filer_cik; the response
+	// must carry the Financial Datasets InstitutionalInvestor contract's
+	// own name/cik pair for this route.
 	row := jsonRoundTrip(t, filteredRecords[0])
-	if row["filer_name"] != "Berkshire Hathaway Inc" || row["filer_cik"] != "0001067983" {
+	if row["name"] != "Berkshire Hathaway Inc" || row["cik"] != "0001067983" {
 		t.Fatalf("unexpected investor: %#v", row)
+	}
+	if _, present := row["filer_name"]; present {
+		t.Fatalf("expected the upstream filer_name spelling not to leak into the response: %#v", row)
 	}
 }
 
@@ -487,19 +494,80 @@ func TestGetMarketSnapshot_ParsesRowsAndKeepsAsOf(t *testing.T) {
 	if body["data_as_of"] != "Sep 4, 2026 2:18 PM ET" {
 		t.Fatalf("expected data_as_of carried through, got %#v", body["data_as_of"])
 	}
-	rows, ok := body["most_active_by_share_volume"].([]any)
+	rows, ok := body["snapshots"].([]any)
 	if !ok || len(rows) != 2 {
-		t.Fatalf("expected 2 rows, got %#v", body["most_active_by_share_volume"])
+		t.Fatalf("expected 2 rows under the Financial Datasets \"snapshots\" key, got %#v", body["snapshots"])
 	}
 	first := rows[0].(map[string]any)
-	if first["symbol"] != "SNDL" || first["last_sale_price"] != 1.8399 {
+	if first["ticker"] != "SNDL" || first["price"] != 1.8399 {
 		t.Fatalf("unexpected first row: %#v", first)
+	}
+	if first["day_change"] != 0.05 {
+		t.Fatalf("expected day_change parsed from lastSaleChange, got %#v", first["day_change"])
+	}
+	// day_change_percent is derived from the two reported figures against
+	// the implied previous close (1.8399 - 0.05), not sourced directly.
+	if pct, _ := first["day_change_percent"].(float64); math.Abs(pct-2.793452148164702) > 1e-9 {
+		t.Fatalf("expected day_change_percent derived from the implied previous close, got %#v", first["day_change_percent"])
+	}
+	if first["time"] != "2026-09-04T18:18:00Z" {
+		t.Fatalf("expected the feed's trade timestamp normalized to UTC, got %#v", first["time"])
+	}
+	if first["time_milliseconds"] != 1788545880000.0 {
+		t.Fatalf("expected time_milliseconds for the same instant, got %#v", first["time_milliseconds"])
 	}
 	if first["share_volume"] != 12345678.0 {
 		t.Fatalf("expected share_volume parsed from the misleadingly named 'change' field, got %#v", first["share_volume"])
 	}
+	if first["name"] != "Sundial Growers Inc." {
+		t.Fatalf("expected the nasdaq company name kept alongside the contract fields, got %#v", first["name"])
+	}
 	second := rows[1].(map[string]any)
-	if _, present := second["last_sale_price"]; present {
-		t.Fatalf("expected last_sale_price omitted for an unparseable value, got %#v", second["last_sale_price"])
+	if _, present := second["price"]; present {
+		t.Fatalf("expected price omitted for an unparseable value, got %#v", second["price"])
+	}
+	// With no price and no change there is no defined percentage; it must
+	// be omitted rather than reported as zero.
+	if _, present := second["day_change_percent"]; present {
+		t.Fatalf("expected day_change_percent omitted when the row has no price, got %#v", second["day_change_percent"])
+	}
+}
+
+// TestGetMarketSnapshot_OmitsPercentOnZeroPreviousClose pins the one
+// arithmetic edge in dayChangePercent: a day change equal to the price
+// implies a previous close of zero, which has no defined percentage.
+func TestGetMarketSnapshot_OmitsPercentOnZeroPreviousClose(t *testing.T) {
+	payload := map[string]any{
+		"status": "success",
+		"data": map[string]any{
+			"data": map[string]any{
+				"STOCKS": map[string]any{
+					"MostActiveByShareVolume": map[string]any{
+						"lastTradeTimestamp": "2026-09-04T14:18:00-04:00",
+						"table": map[string]any{
+							"rows": []any{
+								map[string]any{
+									"symbol": "ZERO", "lastSalePrice": "$2.00", "lastSaleChange": "+2.00",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	svc, _ := newTestService(t, map[string]fakeOutcome{
+		"nasdaq /get_market_movers": {output: payload},
+	})
+	cc := svc.newCallCtx(context.Background(), "key", "test")
+	result, err := cc.getMarketSnapshot(map[string]any{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	body := jsonRoundTrip(t, result.Value)
+	rows := body["snapshots"].([]any)
+	row := rows[0].(map[string]any)
+	if _, present := row["day_change_percent"]; present {
+		t.Fatalf("expected day_change_percent omitted for a zero previous close, got %#v", row["day_change_percent"])
 	}
 }

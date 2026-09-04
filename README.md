@@ -25,23 +25,28 @@ It replaces the paid research layer of **Financial Datasets API** (financialdata
 
 ## Quickstart
 
+The server is a single Go binary. There is no Python, Node, CLI, or proxy hop.
+
 ```bash
-# Clone and sync dependencies
 git clone https://github.com/belazy/monid-us-finance-mcp-2026.git
-cd monid-us-finance-mcp-2026
-uv sync
+cd monid-us-finance-mcp-2026/go
 
-# Run tests (100% pass, pyright strict, ruff compliant)
-uv run pytest
-uv run pyright
-uv run ruff check .
-
-# Run the live smoke workflow
-uv run python scripts/live_smoke.py
-
-# Inspect the cost comparison receipt
-uv run python scripts/receipts_summary.py
+go build ./...
+go vet ./...
+go test ./... -race
 ```
+
+Run it locally, then call it with your own Monid key:
+
+```bash
+go run ./cmd/server            # listens on :8080, serves REST, /mcp and the static site
+
+curl -H "X-API-KEY: monid_live_..." \
+  "http://localhost:8080/financials/income-statements?ticker=AAPL&period=annual&limit=1"
+```
+
+Every Monid call is appended to a receipts ledger when `RECEIPTS_PATH` is set; the
+ledger is best-effort observability and never a response dependency.
 
 ## The Kill: Before vs. After
 
@@ -53,23 +58,42 @@ uv run python scripts/receipts_summary.py
 | **Savings** | Base | **96.9% cheaper** |
 | **Failed Runs Handling** | Often billed / opaque | Auditable receipt in `receipts/ledger.jsonl` |
 
-## Tool Coverage (27 Tools)
+## Coverage
 
-### Live Working Tools (11)
-- `get_company_facts`: Basic company profile and name.
-- `get_income_statement`: Annual, quarterly, and derived TTM income statements.
-- `get_balance_sheet`: Annual, quarterly, and point-in-time balance sheets.
-- `get_cash_flow_statement`: Annual, quarterly, and derived TTM cash flows.
-- `get_financial_metrics_snapshot`: Valuation multiples, margins, and ratios.
-- `get_filings`: SEC filings index with form-type filtering.
-- `get_filing_items`: Deterministic section extraction (e.g. Item 1A Risk Factors).
-- `list_filing_item_types`: SEC catalog item descriptions.
-- `get_stock_price`: Latest quote snapshot with 1-day change.
-- `get_stock_prices`: Historical OHLCV with daily, weekly, monthly aggregation.
-- `get_news`: Entity-matched news articles with dates and URLs.
+### MCP tools: 27 of 27 implemented
 
-### Honest Stubs (16)
-The remaining 16 tools (`get_earnings`, `get_financial_metrics`, `get_insider_trades`, `screen_stocks`, etc.) are fully registered with their Financial Datasets parameters and return a clean, typed `{"error": "not_implemented", ...}` response at **zero cost**.
+Every tool in `go/mcpserver/tool_schemas.json` runs against a live Monid route and is
+contract-tested; see the `toolHandlers` table in `go/service/tools.go`. The advertised
+tool names, descriptions and input schemas are diffed against the captured Financial
+Datasets surface by test, so the two cannot silently drift.
+
+### REST routes: 44 implemented, 2 zero-cost stubs
+
+Two routes are registered for parity but answer `{"error": "not_implemented"}` at HTTP
+200, with no Monid call and no charge:
+
+- `/kpi/metrics/sectors` — sector is not a dimension the shared ticker catalog carries,
+  so there is nothing honest to enumerate.
+- `/index-funds/tickers` — `get_index_fund` resolves holdings by live web search per
+  ticker; publishing the search-ranking hint list as a coverage catalog would overstate
+  what this server supports.
+
+Eight Financial Datasets routes are not registered at all. The four `as-reported`
+statement routes need an XBRL/as-filed source that no allowlisted Monid provider
+offers; `/ipos` needs an SEC S-1 filings feed, `/company/facts/ciks` and `/filings/ciks`
+need CIK enumeration, and `/filings/items/requests/{request_id}` needs an async request
+store. None are faked.
+
+Route-by-route parameter and field notes, including every deliberate deviation, are in
+[docs/openapi-notes.md](docs/openapi-notes.md) and [docs/compatibility.md](docs/compatibility.md).
+
+### Data freshness is measured, not assumed
+
+Feeds age differently and the docs say so per route. Measured live on 2026-09-04: the
+13D/13G beneficial-ownership feeds ran roughly six months behind, insider trading
+tracked filings within days, and the nasdaq market snapshot carried its own as-of
+timestamp. Every row carries its own sourced dates; nothing stale is described as
+current.
 
 ## Honest Scope & Limitations
 

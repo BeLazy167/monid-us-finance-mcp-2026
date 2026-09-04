@@ -20,12 +20,21 @@
 // the row's "change" key is the confusingly-named share-volume figure
 // (comma-grouped), not a price change - this file renames it
 // share_volume in the output so that confusion does not propagate.
+//
+// Rows are emitted in the Financial Datasets PriceSnapshot contract shape
+// (fd.PriceSnapshot), the same record /prices/snapshot already answers
+// with, so /prices/snapshot/market matches Financial Datasets' own
+// PriceSnapshotMarketResponse field-for-field. What differs from
+// Financial Datasets is coverage, not shape: this snapshot carries
+// nasdaq's most-active-by-share-volume set, not the whole market.
 package service
 
 import (
 	"encoding/json"
 	"strings"
+	"time"
 
+	"github.com/belazy/monid-finance/fd"
 	"github.com/belazy/monid-finance/providers"
 )
 
@@ -33,20 +42,28 @@ const (
 	nasdaqMarketMoversEndpoint = "/get_market_movers"
 )
 
-// marketMoverRow is one row of nasdaq's most-active-by-share-volume table.
+// marketMoverRow is one most-active row in the Financial Datasets
+// PriceSnapshot contract shape, followed by the two figures nasdaq
+// genuinely reports that the contract has no field for: the company name,
+// and the share volume this feed actually ranks by. Both are appended
+// after the contract fields rather than discarded, the same way ipoRecord
+// appends expected_date/bucket and beneficialOwnershipRow appends
+// share_change.
 type marketMoverRow struct {
-	Symbol         *string  `json:"symbol,omitempty"`
-	Name           *string  `json:"name,omitempty"`
-	LastSalePrice  *float64 `json:"last_sale_price,omitempty"`
-	LastSaleChange *float64 `json:"last_sale_change,omitempty"`
-	ShareVolume    *int64   `json:"share_volume,omitempty"`
+	fd.PriceSnapshot
+	Name        *string `json:"name,omitempty"`
+	ShareVolume *int64  `json:"share_volume,omitempty"`
 }
 
-// marketSnapshot is getMarketSnapshot's response shape.
+// marketSnapshot is getMarketSnapshot's response shape: Financial
+// Datasets' PriceSnapshotMarketResponse ({"snapshots": [...]}), plus
+// data_as_of - the feed's own human-readable as-of label, kept so a
+// caller can see exactly how current the snapshot is without parsing a
+// record. Snapshots is not omitempty: a market with no movers must answer
+// an empty list, never a missing key.
 type marketSnapshot struct {
-	DataAsOf                *string          `json:"data_as_of,omitempty"`
-	LastTradeTimestamp      *string          `json:"last_trade_timestamp,omitempty"`
-	MostActiveByShareVolume []marketMoverRow `json:"most_active_by_share_volume,omitempty"`
+	DataAsOf  *string          `json:"data_as_of,omitempty"`
+	Snapshots []marketMoverRow `json:"snapshots"`
 }
 
 // getMarketSnapshot answers getMarketSnapshot: nasdaq's current
@@ -75,7 +92,10 @@ func (c *callCtx) getMarketSnapshot(args map[string]any) (Result, error) {
 
 	snapshot := marketSnapshot{}
 	snapshot.DataAsOf = firstStringGeneric(mostActive, "dataAsOf")
-	snapshot.LastTradeTimestamp = firstStringGeneric(mostActive, "lastTradeTimestamp")
+	// Every row in one payload shares the feed's single trade timestamp,
+	// so it is parsed once here and copied onto each record, where the
+	// PriceSnapshot contract puts it.
+	snapTime, snapMillis := parseSnapshotTime(firstStringGeneric(mostActive, "lastTradeTimestamp"))
 
 	table, ok := mostActive["table"].(map[string]any)
 	if !ok {
@@ -93,19 +113,22 @@ func (c *callCtx) getMarketSnapshot(args map[string]any) (Result, error) {
 			return Result{}, &providers.SchemaDriftError{Msg: "nasdaq market movers row must be an object"}
 		}
 		out := marketMoverRow{}
-		out.Symbol = firstStringGeneric(row, "symbol")
+		out.Ticker = firstStringGeneric(row, "symbol")
 		out.Name = firstStringGeneric(row, "name")
+		out.Time = snapTime
+		out.TimeMilliseconds = snapMillis
 		if priceRaw := firstStringGeneric(row, "lastSalePrice"); priceRaw != nil {
 			if v, ok := parseCommaFloat(stripLeadingDollar(*priceRaw)); ok {
-				out.LastSalePrice = &v
+				out.Price = &v
 			}
 		}
 		if changeRaw := firstStringGeneric(row, "lastSaleChange"); changeRaw != nil {
 			cleaned := strings.TrimPrefix(stripLeadingDollar(*changeRaw), "+")
 			if v, ok := parseCommaFloat(cleaned); ok {
-				out.LastSaleChange = &v
+				out.DayChange = &v
 			}
 		}
+		out.DayChangePercent = dayChangePercent(out.Price, out.DayChange)
 		// The header map names this field "change"; it is share volume,
 		// not a price change (see the file doc comment).
 		if volumeRaw := firstStringGeneric(row, "change"); volumeRaw != nil {
@@ -116,9 +139,44 @@ func (c *callCtx) getMarketSnapshot(args map[string]any) (Result, error) {
 		}
 		rows = append(rows, out)
 	}
-	snapshot.MostActiveByShareVolume = rows
+	snapshot.Snapshots = rows
 
 	return Result{Value: snapshot}, nil
+}
+
+// parseSnapshotTime renders the feed's own trade timestamp as the
+// PriceSnapshot contract's pair: time as an RFC3339 UTC instant (matching
+// what /prices/snapshot already answers with) and time_milliseconds as
+// the same instant in epoch milliseconds. The live-measured value is
+// RFC3339 with an offset ("2026-09-04T14:18:00-04:00"); a value in any
+// other format yields two omitted fields rather than a guessed instant.
+func parseSnapshotTime(raw *string) (*string, *float64) {
+	if raw == nil {
+		return nil, nil
+	}
+	parsed, err := time.Parse(time.RFC3339, *raw)
+	if err != nil {
+		return nil, nil
+	}
+	formatted := parsed.UTC().Format(time.RFC3339)
+	millis := float64(parsed.UnixMilli())
+	return &formatted, &millis
+}
+
+// dayChangePercent derives the PriceSnapshot contract's day_change_percent
+// from the two figures nasdaq does report. The previous close is price
+// minus the day's change; a zero previous close has no defined percentage,
+// so the field is omitted rather than reported as an infinity.
+func dayChangePercent(price, dayChange *float64) *float64 {
+	if price == nil || dayChange == nil {
+		return nil
+	}
+	previousClose := *price - *dayChange
+	if previousClose == 0 {
+		return nil
+	}
+	pct := *dayChange / previousClose * 100
+	return &pct
 }
 
 // navigateMostActive walks root.data.STOCKS.MostActiveByShareVolume,

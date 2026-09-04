@@ -2,9 +2,14 @@
 // SEC 13F filers (institutional investors), discovered by scanning
 // SECForm4's /get_institution_holders route unscoped (no ticker), the
 // same way get_beneficial_owners scans the 13D/13G feed for distinct
-// filers. Field names mirror fd.InstitutionalHolding's own filer_cik/
-// filer_name pair (go/fd/types.go), since get_institutional_holdings
-// already sources those two fields from this same route.
+// filers. Field names follow the Financial Datasets InstitutionalInvestor
+// contract for this route (cik/name - docs/fd-contract-reference.json),
+// NOT fd.InstitutionalHolding's filer_cik/filer_name pair, even though
+// get_institutional_holdings sources the same two values from this same
+// route: Financial Datasets names them differently on the two endpoints,
+// and parity follows the endpoint being served. The provider aliases read
+// below still include the filer_* spellings, because those are what the
+// upstream feed itself uses.
 package service
 
 import (
@@ -18,8 +23,8 @@ import (
 // institutionalInvestor is one distinct filer entry for
 // get_institutional_investors.
 type institutionalInvestor struct {
-	FilerCIK  *string `json:"filer_cik,omitempty"`
-	FilerName *string `json:"filer_name,omitempty"`
+	CIK  *string `json:"cik,omitempty"`
+	Name *string `json:"name,omitempty"`
 }
 
 // getInstitutionalInvestors answers get_institutional_investors: the
@@ -78,21 +83,21 @@ func (c *callCtx) getInstitutionalInvestors(args map[string]any) (Result, error)
 		}
 		seen[key] = true
 		cik := firstStringGeneric(row, "filer_cik", "institution_cik", "manager_cik", "cik")
-		investors = append(investors, institutionalInvestor{FilerCIK: cik, FilerName: filerName})
+		investors = append(investors, institutionalInvestor{CIK: cik, Name: filerName})
 	}
 
 	if nameArg != nil && strings.TrimSpace(*nameArg) != "" {
 		prefix := strings.ToLower(strings.TrimSpace(*nameArg))
 		filtered := make([]institutionalInvestor, 0, len(investors))
 		for _, inv := range investors {
-			if strings.HasPrefix(strings.ToLower(*inv.FilerName), prefix) {
+			if strings.HasPrefix(strings.ToLower(*inv.Name), prefix) {
 				filtered = append(filtered, inv)
 			}
 		}
 		investors = filtered
 	}
 	sort.SliceStable(investors, func(i, j int) bool {
-		return strings.ToLower(*investors[i].FilerName) < strings.ToLower(*investors[j].FilerName)
+		return strings.ToLower(*investors[i].Name) < strings.ToLower(*investors[j].Name)
 	})
 
 	out := make([]any, len(investors))

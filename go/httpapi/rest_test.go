@@ -953,6 +953,211 @@ func TestInstitutionalHoldings_LimitValidatedBeforeCall(t *testing.T) {
 	}
 }
 
+// ---- Ownership state routes (formerly not_implemented stubs) ----
+
+func TestInsiderOwnership_ForwardsFullFilingDateGroup(t *testing.T) {
+	caller := newFakeCaller()
+	caller.results["get_insider_ownership"] = Result{
+		Value:      []map[string]any{{"ticker": "AAPL", "name": "COOK TIMOTHY D", "shares_owned": 3280000.0}},
+		WrapperKey: "insider_ownership",
+		Paginate:   true,
+	}
+	rt := newTestRouter(caller, nil)
+	rec := doGet(t, rt, "/insider-ownership?ticker=AAPL&name=COOK&filing_date_gte=2025-01-01&filing_date_lt=2026-01-01",
+		map[string]string{apiKeyHeader: testAPIKey})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	body := decodeBody(t, rec)
+	if _, ok := body["insider_ownership"].([]any); !ok {
+		t.Fatalf("insider_ownership missing/not a list: %#v", body)
+	}
+	args := caller.lastCall().args
+	if args["limit"] != float64(10) {
+		t.Fatalf("limit default = %v, want 10", args["limit"])
+	}
+	if args["ticker"] != "AAPL" || args["name"] != "COOK" {
+		t.Fatalf("ticker/name not forwarded: %#v", args)
+	}
+	// Financial Datasets publishes all five filing_date comparators on
+	// this route; /insider-trades forwards only three because its own
+	// tool schema defines only three.
+	if args["filing_date_gte"] != "2025-01-01" || args["filing_date_lt"] != "2026-01-01" {
+		t.Fatalf("filing_date group not forwarded: %#v", args)
+	}
+	if _, present := args["filing_date_gt"]; present {
+		t.Fatalf("an absent comparator must not be sent at all: %#v", args)
+	}
+}
+
+func TestInsiderOwnership_FormTypeReachesTheToolsOwnRejection(t *testing.T) {
+	caller := newFakeCaller()
+	caller.results["get_insider_ownership"] = Result{
+		Value: map[string]any{"error": "bad_request", "message": "form_type is not supported"},
+	}
+	rt := newTestRouter(caller, nil)
+	rec := doGet(t, rt, "/insider-ownership?ticker=AAPL&form_type=3", map[string]string{apiKeyHeader: testAPIKey})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (the tool's own honest body): %s", rec.Code, rec.Body.String())
+	}
+	if args := caller.lastCall().args["form_type"]; args != "3" {
+		t.Fatalf("form_type must reach the tool that owns the rejection message, got %v", args)
+	}
+}
+
+func TestBeneficialOwnership_ForwardsCallerType(t *testing.T) {
+	caller := newFakeCaller()
+	caller.results["get_beneficial_ownership"] = Result{
+		Value:      []map[string]any{{"ticker": "AAPL", "type": "passive"}},
+		WrapperKey: "beneficial_owners",
+		Paginate:   true,
+	}
+	rt := newTestRouter(caller, nil)
+	rec := doGet(t, rt, "/beneficial-ownership?ticker=AAPL&type=passive", map[string]string{apiKeyHeader: testAPIKey})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	body := decodeBody(t, rec)
+	if _, ok := body["beneficial_owners"].([]any); !ok {
+		t.Fatalf("beneficial_owners missing/not a list: %#v", body)
+	}
+	args := caller.lastCall().args
+	if args["type"] != "passive" {
+		t.Fatalf("type = %v, want the caller's own passive", args["type"])
+	}
+	if args["history"] != false {
+		t.Fatalf("history default = %v, want false", args["history"])
+	}
+}
+
+// TestActivistOwnership_PinsActivistTypeOverCaller guards the one thing
+// that separates the two routes: Financial Datasets defines
+// /activist-ownership as the 13D subset and gives it no type parameter,
+// so a caller-supplied ?type must never be able to invert it.
+func TestActivistOwnership_PinsActivistTypeOverCaller(t *testing.T) {
+	caller := newFakeCaller()
+	caller.results["get_beneficial_ownership"] = Result{
+		Value:      []map[string]any{{"ticker": "AAPL", "type": "activist"}},
+		WrapperKey: "beneficial_owners",
+		Paginate:   true,
+	}
+	rt := newTestRouter(caller, nil)
+	rec := doGet(t, rt, "/activist-ownership?ticker=AAPL&type=passive", map[string]string{apiKeyHeader: testAPIKey})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	if args := caller.lastCall().args["type"]; args != "activist" {
+		t.Fatalf("type = %v, want activist pinned regardless of the caller's own ?type", args)
+	}
+	if caller.lastCall().tool != "get_beneficial_ownership" {
+		t.Fatalf("tool = %q, want get_beneficial_ownership", caller.lastCall().tool)
+	}
+	// Financial Datasets envelopes this route as activist_owners, not the
+	// shared tool's own beneficial_owners.
+	body := decodeBody(t, rec)
+	if _, ok := body["activist_owners"].([]any); !ok {
+		t.Fatalf("activist_owners missing/not a list: %#v", body)
+	}
+	if _, present := body["beneficial_owners"]; present {
+		t.Fatalf("the shared tool's beneficial_owners key must not leak onto this route: %#v", body)
+	}
+}
+
+// TestActivistOwnership_LeavesToolErrorBodyUnwrapped guards the re-key
+// guard: an error body carries no wrapper key and must not gain one.
+func TestActivistOwnership_LeavesToolErrorBodyUnwrapped(t *testing.T) {
+	caller := newFakeCaller()
+	caller.results["get_beneficial_ownership"] = Result{
+		Value: map[string]any{"error": "bad_request", "message": "history=true is not supported"},
+	}
+	rt := newTestRouter(caller, nil)
+	rec := doGet(t, rt, "/activist-ownership?ticker=AAPL&history=true", map[string]string{apiKeyHeader: testAPIKey})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	body := decodeBody(t, rec)
+	if body["error"] != "bad_request" {
+		t.Fatalf("error = %v, want the tool's own bad_request passed through: %#v", body["error"], body)
+	}
+	if _, present := body["activist_owners"]; present {
+		t.Fatalf("an error body must not be wrapped in the list envelope: %#v", body)
+	}
+	if caller.lastCall().args["history"] != true {
+		t.Fatalf("history must reach the tool that owns the rejection message")
+	}
+}
+
+func TestInstitutionalInvestors_NameFilterOnly(t *testing.T) {
+	caller := newFakeCaller()
+	caller.results["get_institutional_investors"] = Result{
+		Value:      []map[string]any{{"cik": "0001067983", "name": "Berkshire Hathaway Inc"}},
+		WrapperKey: "investors",
+		Paginate:   true,
+	}
+	rt := newTestRouter(caller, nil)
+	rec := doGet(t, rt, "/institutional-holdings/investors?name=berk", map[string]string{apiKeyHeader: testAPIKey})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	body := decodeBody(t, rec)
+	investors, ok := body["investors"].([]any)
+	if !ok || len(investors) != 1 {
+		t.Fatalf("investors missing/not a one-item list: %#v", body)
+	}
+	// The Financial Datasets InstitutionalInvestor contract for this
+	// route is {cik, name}, not the feed's own filer_* spelling.
+	first := investors[0].(map[string]any)
+	if first["cik"] != "0001067983" || first["name"] != "Berkshire Hathaway Inc" {
+		t.Fatalf("unexpected investor shape: %#v", first)
+	}
+	args := caller.lastCall().args
+	if args["name"] != "berk" {
+		t.Fatalf("name = %v, want berk", args["name"])
+	}
+	// This route publishes no other parameter; nothing else may be sent.
+	if len(args) != 1 {
+		t.Fatalf("expected only the name argument, got %#v", args)
+	}
+}
+
+// ---- Market-wide price snapshot ----
+
+// TestMarketSnapshot_UsesCapabilitySurfaceAndTakesNoParameters pins that
+// /prices/snapshot/market reaches Capability (get_market_snapshot is not
+// one of the 27 MCP tools) and never Call.
+func TestMarketSnapshot_UsesCapabilitySurfaceAndTakesNoParameters(t *testing.T) {
+	caller := newFakeCaller()
+	caller.capabilityResult["get_market_snapshot"] = Result{
+		Value: map[string]any{
+			"data_as_of": "Sep 4, 2026 2:18 PM ET",
+			"snapshots": []any{
+				map[string]any{"ticker": "SNDL", "price": 1.8399, "day_change": 0.05},
+			},
+		},
+	}
+	rt := newTestRouter(caller, nil)
+	rec := doGet(t, rt, "/prices/snapshot/market?ticker=AAPL", map[string]string{apiKeyHeader: testAPIKey})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	body := decodeBody(t, rec)
+	if _, ok := body["snapshots"].([]any); !ok {
+		t.Fatalf("snapshots missing/not a list: %#v", body)
+	}
+	if len(caller.calls) != 0 {
+		t.Fatalf("market snapshot must never reach the Call surface, got %d calls", len(caller.calls))
+	}
+	last := caller.lastCapabilityCall()
+	if last.tool != "get_market_snapshot" {
+		t.Fatalf("capability = %q, want get_market_snapshot", last.tool)
+	}
+	// Financial Datasets publishes no parameters for this route, so a
+	// stray query parameter must not be forwarded as one.
+	if len(last.args) != 0 {
+		t.Fatalf("expected no arguments, got %#v", last.args)
+	}
+}
+
 // ---- Coverage lists: tickers each route ACCEPTS (list*Tickers capabilities) ----
 
 // coverageRouteCases pairs every list*Tickers REST route with the

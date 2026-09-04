@@ -1,4 +1,4 @@
-// Package main tests: cmd/server wires httpapi.Caller.Capability's 13
+// Package main tests: cmd/server wires httpapi.Caller.Capability's
 // non-tool names (go/service/capabilities.go) to Service methods directly,
 // deliberately outside Service.Call/toolHandlers' 27 MCP tool names
 // (go/mcpserver/tool_schemas.json). This guards that separation: a
@@ -51,7 +51,13 @@ func TestCapabilityNamesNeverCollideWithMCPToolNames(t *testing.T) {
 			t.Fatalf("capability name %q collides with a real MCP tool name in tool_schemas.json", name)
 		}
 	}
-	if len(capabilityHandlers) != 13 {
-		t.Fatalf("capabilityHandlers has %d entries, want 13 (go/service/capabilities.go's brief)", len(capabilityHandlers))
+	// A ratchet, not a specification: a capability missing from this map
+	// is unreachable from every surface, and that failure is silent at
+	// build time. Bump this deliberately when wiring a new capability;
+	// never to make a red test green.
+	const wiredCapabilities = 14
+	if len(capabilityHandlers) != wiredCapabilities {
+		t.Fatalf("capabilityHandlers has %d entries, want %d; if you added a capability, confirm a route reaches it and bump this count",
+			len(capabilityHandlers), wiredCapabilities)
 	}
 }
