@@ -5,9 +5,10 @@ import (
 	"testing"
 )
 
-// Excerpts of the three pages as Context.dev returned them on 2026-09-04:
-// the Fed and ECB publish tables, the BOE a rate under a heading. A page
-// that carries no rate (a "Network Busy" block page) must parse as nothing.
+// Excerpts of the four pages as Context.dev returned them on 2026-09-04.
+// The Fed and ECB publish tables, the BOE prose under a heading, and the
+// BOJ page answered "Network Busy" that day, which must parse as nothing
+// rather than as a rate.
 func TestParsePolicyRate(t *testing.T) {
 	for _, tc := range []struct {
 		bank, file, date string
@@ -17,7 +18,7 @@ func TestParsePolicyRate(t *testing.T) {
 		{bank: "FED", file: "fed.md", rate: 3.625, date: "2025-12-11", found: true},
 		{bank: "ECB", file: "ecb.md", rate: 2.25, date: "2026-06-17", found: true},
 		{bank: "BOE", file: "boe.md", rate: 3.75, date: "2026-07-30", found: true},
-		{bank: "BOE", file: "busy.md"},
+		{bank: "BOJ", file: "boj_busy.md"},
 	} {
 		t.Run(tc.bank, func(t *testing.T) {
 			raw, err := os.ReadFile("testdata/rates/" + tc.file)

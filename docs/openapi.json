@@ -2826,7 +2826,7 @@
           "Macroeconomics"
         ],
         "summary": "Interest Rates (Historical)",
-        "description": "Returns each major central bank's current policy interest rate (Federal Reserve, European Central Bank, Bank of England), scraped live from each bank's own site and parsed on the fly by go/service/interestrates.go - not a historical time series database. This server has no historical rate storage, so both /macro/interest-rates (Financial Datasets' historical route) and /macro/interest-rates/snapshot (its real-time route) call the exact same tool and answer with today's scraped rate per bank; neither accepts a bank, start_date, or end_date parameter, since the underlying get_interest_rates tool takes no parameters at all (it always fetches every bank it can reach). A bank whose page cannot be scraped or parsed in a given call is left out of the response rather than failing the whole request. Query parameters: bank narrows the list. start_date and end_date answer 400 bad_request: only each bank's current rate is sourced, never a history. Rates come from each bank's own page: the Fed target-range midpoint, the ECB deposit facility rate, the BOE Bank Rate; date is the decision date. A bank whose page cannot be read is omitted; if none can be, the call answers 502 upstream_error. The Bank of Japan is not covered: it publishes decisions only as PDF statements, which the markdown scraper cannot read.",
+        "description": "Returns each major central bank's current policy interest rate (Federal Reserve, European Central Bank, Bank of England, Bank of Japan), scraped live from each bank's own site and parsed on the fly by go/service/interestrates.go - not a historical time series database. This server has no historical rate storage, so both /macro/interest-rates (Financial Datasets' historical route) and /macro/interest-rates/snapshot (its real-time route) call the exact same tool and answer with today's scraped rate per bank; neither accepts a bank, start_date, or end_date parameter, since the underlying get_interest_rates tool takes no parameters at all (it always fetches every bank it can reach). A bank whose page cannot be scraped or parsed in a given call is left out of the response rather than failing the whole request. Query parameters: bank narrows the list. start_date and end_date answer 400 bad_request: only each bank's current rate is sourced, never a history. Rates come from each bank's own page: the Fed target-range midpoint, the ECB deposit facility rate, the BOE Bank Rate, the BOJ policy rate; date is the decision date. A bank whose page cannot be read is omitted; if none can be, the call answers 502 upstream_error.",
         "parameters": [
           {
             "name": "bank",
@@ -2837,7 +2837,8 @@
               "enum": [
                 "FED",
                 "ECB",
-                "BOE"
+                "BOE",
+                "BOJ"
               ]
             },
             "description": "Keep only this central bank's row. Case-insensitive. Omit for every bank the server could read."
@@ -2858,20 +2859,26 @@
                         {
                           "bank": "FED",
                           "name": "Federal Reserve",
-                          "rate": 3.625,
-                          "date": "2025-12-11"
+                          "rate": 4.0,
+                          "date": "2025-09-17"
                         },
                         {
                           "bank": "ECB",
                           "name": "European Central Bank",
-                          "rate": 2.25,
-                          "date": "2026-06-17"
+                          "rate": 2.15,
+                          "date": "2025-09-11"
                         },
                         {
                           "bank": "BOE",
                           "name": "Bank of England",
-                          "rate": 3.75,
-                          "date": "2026-07-30"
+                          "rate": 4.0,
+                          "date": "2025-08-07"
+                        },
+                        {
+                          "bank": "BOJ",
+                          "name": "Bank of Japan",
+                          "rate": 0.5,
+                          "date": "2025-07-31"
                         }
                       ]
                     }
@@ -2908,7 +2915,7 @@
           "Macroeconomics"
         ],
         "summary": "Interest Rates (Real-Time)",
-        "description": "Returns each major central bank's current policy interest rate (Federal Reserve, European Central Bank, Bank of England), scraped live from each bank's own site and parsed on the fly by go/service/interestrates.go - not a historical time series database. This server has no historical rate storage, so both /macro/interest-rates (Financial Datasets' historical route) and /macro/interest-rates/snapshot (its real-time route) call the exact same tool and answer with today's scraped rate per bank; neither accepts a bank, start_date, or end_date parameter, since the underlying get_interest_rates tool takes no parameters at all (it always fetches every bank it can reach). A bank whose page cannot be scraped or parsed in a given call is left out of the response rather than failing the whole request. Query parameters: bank narrows the list. start_date and end_date answer 400 bad_request: only each bank's current rate is sourced, never a history. Rates come from each bank's own page: the Fed target-range midpoint, the ECB deposit facility rate, the BOE Bank Rate; date is the decision date. A bank whose page cannot be read is omitted; if none can be, the call answers 502 upstream_error. The Bank of Japan is not covered: it publishes decisions only as PDF statements, which the markdown scraper cannot read.",
+        "description": "Returns each major central bank's current policy interest rate (Federal Reserve, European Central Bank, Bank of England, Bank of Japan), scraped live from each bank's own site and parsed on the fly by go/service/interestrates.go - not a historical time series database. This server has no historical rate storage, so both /macro/interest-rates (Financial Datasets' historical route) and /macro/interest-rates/snapshot (its real-time route) call the exact same tool and answer with today's scraped rate per bank; neither accepts a bank, start_date, or end_date parameter, since the underlying get_interest_rates tool takes no parameters at all (it always fetches every bank it can reach). A bank whose page cannot be scraped or parsed in a given call is left out of the response rather than failing the whole request. Query parameters: bank narrows the list. start_date and end_date answer 400 bad_request: only each bank's current rate is sourced, never a history. Rates come from each bank's own page: the Fed target-range midpoint, the ECB deposit facility rate, the BOE Bank Rate, the BOJ policy rate; date is the decision date. A bank whose page cannot be read is omitted; if none can be, the call answers 502 upstream_error.",
         "parameters": [
           {
             "name": "bank",
@@ -2919,7 +2926,8 @@
               "enum": [
                 "FED",
                 "ECB",
-                "BOE"
+                "BOE",
+                "BOJ"
               ]
             },
             "description": "Keep only this central bank's row. Case-insensitive. Omit for every bank the server could read."
@@ -2940,20 +2948,26 @@
                         {
                           "bank": "FED",
                           "name": "Federal Reserve",
-                          "rate": 3.625,
-                          "date": "2025-12-11"
+                          "rate": 4.0,
+                          "date": "2025-09-17"
                         },
                         {
                           "bank": "ECB",
                           "name": "European Central Bank",
-                          "rate": 2.25,
-                          "date": "2026-06-17"
+                          "rate": 2.15,
+                          "date": "2025-09-11"
                         },
                         {
                           "bank": "BOE",
                           "name": "Bank of England",
-                          "rate": 3.75,
-                          "date": "2026-07-30"
+                          "rate": 4.0,
+                          "date": "2025-08-07"
+                        },
+                        {
+                          "bank": "BOJ",
+                          "name": "Bank of Japan",
+                          "rate": 0.5,
+                          "date": "2025-07-31"
                         }
                       ]
                     }
@@ -2994,7 +3008,7 @@
         "parameters": [],
         "responses": {
           "200": {
-            "description": "The three central banks this server currently scrapes.",
+            "description": "The four central banks this server currently scrapes.",
             "content": {
               "application/json": {
                 "schema": {
@@ -8126,7 +8140,7 @@
         "properties": {
           "bank": {
             "type": "string",
-            "description": "Central bank code: FED, ECB, or BOE."
+            "description": "Central bank code: FED, ECB, BOE, or BOJ."
           },
           "name": {
             "type": "string",
@@ -8151,7 +8165,7 @@
       "InterestRatesResponse": {
         "type": "object",
         "title": "InterestRatesResponse",
-        "description": "Unpaginated envelope: {\"interest_rates\": [...]}. Every bank whose page was scraped and parsed successfully in this call, in go/service/interestrates.go's bankSpecs order (FED, ECB, BOE); a bank that failed to scrape or parse is left out entirely, not nulled.",
+        "description": "Unpaginated envelope: {\"interest_rates\": [...]}. Every bank whose page was scraped and parsed successfully in this call, in go/service/interestrates.go's bankSpecs order (FED, ECB, BOE, BOJ); a bank that failed to scrape or parse is left out entirely, not nulled.",
         "properties": {
           "interest_rates": {
             "type": "array",

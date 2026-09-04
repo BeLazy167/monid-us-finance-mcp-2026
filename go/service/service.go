@@ -2193,7 +2193,7 @@ func (c *callCtx) getKPINonGAAP(args map[string]any) (Result, error) {
 // --- get_interest_rates ---
 
 // getInterestRates mirrors service.get_interest_rates. Per this port's
-// brief, the central-bank scrapes fan out over goroutines. A bank
+// brief, the four central-bank scrapes fan out over goroutines. A bank
 // whose page cannot be fetched or parsed is omitted from the list, but
 // when every bank fails the call fails too: an empty list would read as
 // "no rates exist", which is never true.
