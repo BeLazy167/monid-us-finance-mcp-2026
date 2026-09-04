@@ -575,10 +575,27 @@ func TestFDShape_FilingsFilterAndReject(t *testing.T) {
 		t.Fatalf("unexpected filing record: %#v", record)
 	}
 
-	_, err = svc.Call(context.Background(), "key", "get_filings", map[string]any{"ticker": "AAPL", "filing_type": []any{"40-F"}})
+	// A real SEC form type outside the old five-entry enum must now be
+	// accepted rather than rejected. 40-F and S-1 are both genuine EDGAR
+	// form types; an earlier enum 400'd them, which broke any caller
+	// filtering on a filing SEC actually publishes.
+	for _, realType := range []string{"40-F", "S-1", "DEF 14A", "SC 13D/A"} {
+		if _, err := svc.Call(context.Background(), "key", "get_filings",
+			map[string]any{"ticker": "AAPL", "filing_type": []any{realType}}); err != nil {
+			var inputErr *providers.InputError
+			if errors.As(err, &inputErr) {
+				t.Fatalf("filing_type %q is a real SEC form type and must be accepted, got: %v", realType, err)
+			}
+		}
+	}
+
+	// Something that is not a form type at all must still be rejected, so
+	// a typo fails loudly instead of silently returning an empty list.
+	_, err = svc.Call(context.Background(), "key", "get_filings",
+		map[string]any{"ticker": "AAPL", "filing_type": []any{"NOT-A-REAL-FORM"}})
 	var inputErr *providers.InputError
 	if !errors.As(err, &inputErr) {
-		t.Fatalf("expected InputError for invalid filing_type, got %v", err)
+		t.Fatalf("expected InputError for an invented filing_type, got %v", err)
 	}
 }
 

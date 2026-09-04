@@ -15,7 +15,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
-	"sort"
 	"strings"
 	"time"
 
@@ -29,7 +28,23 @@ var tickerPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9.-]{0,19}$`)
 var validPeriods = map[string]bool{"annual": true, "quarterly": true, "ttm": true}
 var validKPIPeriods = map[string]bool{"annual": true, "quarterly": true}
 var validIntervals = map[string]bool{"day": true, "week": true, "month": true, "year": true}
-var validFilingTypeEnum = map[string]bool{"10-K": true, "10-Q": true, "8-K": true, "20-F": true, "6-K": true}
+
+// validFilingTypeEnum is the set every filing_type argument is checked
+// against, built once from edgarFormTypes (filingtypes_gen.go), which is
+// generated from SEC EDGAR's own quarterly form indexes.
+//
+// This used to be a hand-typed five-entry set (10-K, 10-Q, 8-K, 20-F,
+// 6-K), which rejected every other real form type: a caller filtering on
+// S-1 or DEF 14A got a bad_request for a filing SEC genuinely publishes.
+// Financial Datasets accepts 500 form types (measured live 2026-09-04);
+// this set covers all of them and 215 more.
+var validFilingTypeEnum = func() map[string]bool {
+	set := make(map[string]bool, len(edgarFormTypes))
+	for _, t := range edgarFormTypes {
+		set[t] = true
+	}
+	return set
+}()
 
 // validateTicker mirrors normalize.validate_ticker.
 func validateTicker(value string) (string, error) {
@@ -124,13 +139,14 @@ func validateFilingTypes(values []string) (map[string]bool, error) {
 	return normalized, nil
 }
 
+// badFilingTypeError names the catalog route rather than inlining it.
+// The enum holds hundreds of SEC form types, so listing them in an error
+// message would bury the actual problem in kilobytes of noise.
 func badFilingTypeError() error {
-	allowed := make([]string, 0, len(validFilingTypeEnum))
-	for k := range validFilingTypeEnum {
-		allowed = append(allowed, k)
-	}
-	sort.Strings(allowed)
-	return &providers.InputError{Msg: "filing_type values must be one of: " + strings.Join(allowed, ", ")}
+	return &providers.InputError{Msg: fmt.Sprintf(
+		"filing_type must be a recognized SEC EDGAR form type; this server accepts %d of them. "+
+			"Fetch the full list from /filings/types (it costs nothing and makes no upstream call).",
+		len(validFilingTypeEnum))}
 }
 
 // dateFilters mirrors service._date_filters's returned dict: the five

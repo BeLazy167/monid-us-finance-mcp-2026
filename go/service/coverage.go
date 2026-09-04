@@ -181,7 +181,17 @@ func (c *callCtx) listKPITickers(args map[string]any) (Result, error) {
 // set get_filings/get_filing_items validate filing_type against), in
 // Financial Datasets' own documented enum order, so this list can never
 // silently drift from what this server actually accepts.
-var filingTypeOrder = []string{"10-K", "10-Q", "8-K", "20-F", "6-K"}
+// filingTypeOrder is the published catalog: every form type
+// validFilingTypeEnum accepts, sorted, sourced from SEC EDGAR's own
+// quarterly form indexes (filingtypes_gen.go). It is derived from
+// edgarFormTypes rather than hand-typed, so what this route advertises
+// and what get_filings actually accepts cannot drift apart.
+var filingTypeOrder = func() []string {
+	out := make([]string, len(edgarFormTypes))
+	copy(out, edgarFormTypes)
+	sort.Strings(out)
+	return out
+}()
 
 func (c *callCtx) listFilingTypes(args map[string]any) (Result, error) {
 	types := make([]any, len(filingTypeOrder))

@@ -121,8 +121,34 @@ func TestCoverage_StaticListsAreZeroCost(t *testing.T) {
 	}
 	ftBody := jsonRoundTrip(t, filingTypes.Value)
 	ft, _ := ftBody["filing_types"].([]any)
-	if len(ft) != 5 {
-		t.Fatalf("expected the 5 validated filing types, got %v", ft)
+	// The catalog is generated from SEC EDGAR's quarterly form indexes,
+	// so this asserts its contract rather than a fixed count: it must be
+	// sorted, must exactly match what get_filings accepts, and must carry
+	// the common forms a caller will actually filter on.
+	if len(ft) != len(validFilingTypeEnum) {
+		t.Fatalf("published catalog has %d entries but get_filings accepts %d; the two must not drift",
+			len(ft), len(validFilingTypeEnum))
+	}
+	prevType := ""
+	published := make(map[string]bool, len(ft))
+	for _, item := range ft {
+		code, ok := item.(string)
+		if !ok {
+			t.Fatalf("expected a form-type string, got %#v", item)
+		}
+		if !validFilingTypeEnum[code] {
+			t.Fatalf("catalog advertises %q but get_filings would reject it", code)
+		}
+		if code < prevType {
+			t.Fatalf("filing types must be sorted, got %q after %q", code, prevType)
+		}
+		prevType = code
+		published[code] = true
+	}
+	for _, want := range []string{"10-K", "10-Q", "8-K", "20-F", "6-K", "S-1", "DEF 14A", "SC 13D/A", "424B4"} {
+		if !published[want] {
+			t.Fatalf("catalog is missing %q, a form type callers filter on in practice", want)
+		}
 	}
 
 	banks, err := svc.ListInterestRateBanks(context.Background(), "key", map[string]any{})

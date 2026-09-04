@@ -4792,7 +4792,7 @@
           "Filings"
         ],
         "summary": "Available filing types",
-        "description": "Returns the static filing_type enum get_filings/get_filing_items validate against (go/service/coverage.go's filingTypeOrder, Financial Datasets' own documented enum order: 10-K, 10-Q, 8-K, 20-F, 6-K). This is a fixed, hardcoded catalog derived from the same enum this server's own validation uses, not a live query, so it never calls Monid and is served at zero cost.",
+        "description": "Every SEC EDGAR form type this server accepts as a filing_type filter value, sorted. Generated from SEC EDGAR's own quarterly form.idx indexes across 53 quarters spanning 1995-2025 (regenerate with tools/genformtypes.sh), so no entry is invented: each one is a form type EDGAR has actually carried. 715 entries, covering all 500 Financial Datasets published on 2026-09-04 plus 215 more. The catalog derives from the same set get_filings validates against, so what this route advertises and what get_filings accepts cannot drift apart. An earlier version advertised only five types and rejected every other real form, which broke callers filtering on S-1 or DEF 14A. Static: no Monid call, no cost.",
         "parameters": [],
         "responses": {
           "200": {
@@ -4807,11 +4807,16 @@
                     "value": {
                       "resource": "filing_types",
                       "filing_types": [
+                        "1",
+                        "1-A",
                         "10-K",
                         "10-Q",
-                        "8-K",
                         "20-F",
-                        "6-K"
+                        "424B4",
+                        "8-K",
+                        "DEF 14A",
+                        "S-1",
+                        "SC 13D/A"
                       ]
                     }
                   }
