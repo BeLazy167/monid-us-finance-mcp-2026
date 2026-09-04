@@ -104,7 +104,20 @@ func fiscalPeriodLabel(reportPeriod time.Time, yearEndMonth *int, isAnnual bool)
 	if int(reportPeriod.Month()) > *yearEndMonth {
 		year++
 	}
-	quarter := (int(reportPeriod.Month())-1)/3 + 1
+	// Count quarters from the company's fiscal year end, not from
+	// January. This used to compute the CALENDAR quarter, which is only
+	// right for a December fiscal year: Apple closes in September, so its
+	// quarter ending 2026-06-27 is fiscal Q3, and the calendar formula
+	// called it Q2. Financial Datasets labels that period 2026-Q3
+	// (captured live 2026-09-04), and so does the filing.
+	elapsed := ((int(reportPeriod.Month())-*yearEndMonth)%12 + 12) % 12
+	if elapsed%3 != 0 {
+		return nil
+	}
+	quarter := elapsed / 3
+	if quarter == 0 {
+		quarter = 4
+	}
 	label := fmt.Sprintf("%d-Q%d", year, quarter)
 	return &label
 }

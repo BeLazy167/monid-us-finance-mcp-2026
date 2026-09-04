@@ -426,14 +426,22 @@ func fiscalPeriodLabel(reportDate, period string, fiscalEndMonth int) string {
 	if fiscalEndMonth == 0 {
 		return ""
 	}
+	// The year is the FISCAL year, not the calendar year. Apple's fiscal
+	// Q1 of FY2026 ends 2025-12-27, and Financial Datasets labels that
+	// 2026-Q1 (captured live 2026-09-04). Using the calendar year read it
+	// as 2025-Q1, which named a period that does not exist.
+	year := day.Year()
+	if int(day.Month()) > fiscalEndMonth {
+		year++
+	}
 	elapsed := ((int(day.Month())-fiscalEndMonth)%12 + 12) % 12
 	if elapsed == 0 {
-		return "FY" + strconv.Itoa(day.Year())
+		return "FY" + strconv.Itoa(year)
 	}
 	if elapsed%3 != 0 {
 		return ""
 	}
-	return strconv.Itoa(day.Year()) + "-Q" + strconv.Itoa(elapsed/3)
+	return strconv.Itoa(year) + "-Q" + strconv.Itoa(elapsed/3)
 }
 
 // --- EDGAR fetch ---

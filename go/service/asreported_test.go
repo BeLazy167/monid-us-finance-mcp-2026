@@ -431,10 +431,12 @@ func TestAsReported_QuarterlyDerivesTheQuarterFromTheFiscalYearEnd(t *testing.T)
 		t.Fatalf("unexpected error: %v", err)
 	}
 	record := jsonRoundTrip(t, asRecords(t, result.Value)[0])
-	// The label carries the year, matching Financial Datasets: a bare
-	// "Q1" would not say which year the caller is reading.
-	if record["fiscal_period"] != "2025-Q1" {
-		t.Fatalf("fiscal_period = %v, want 2025-Q1", record["fiscal_period"])
+	// The label carries the FISCAL year, matching Financial Datasets. The
+	// period ending 2025-12-27 is Apple's fiscal Q1 of FY2026, so it reads
+	// 2026-Q1. Labelling it by the calendar year named a period that does
+	// not exist.
+	if record["fiscal_period"] != "2026-Q1" {
+		t.Fatalf("fiscal_period = %v, want 2026-Q1", record["fiscal_period"])
 	}
 	if record["report_period"] != "2025-12-27" {
 		t.Fatalf("report_period = %v, want the 10-Q's own period", record["report_period"])
