@@ -40,12 +40,12 @@
 <h1>MCP Server</h1>
 <p class="lead">A streamable-HTTP MCP server exposing all 27 Financial Datasets tool names with matching parameters.</p>
 <h2>Connection details</h2>
-<table><tr><th>Field</th><th>Type</th><th>Notes</th></tr><tr><td><code>URL</code></td><td>https://api.monid-finance-mcp.example/mcp</td><td>Streamable HTTP MCP endpoint.</td></tr><tr><td><code>Auth</code></td><td>X-API-KEY header</td><td>Send your Monid API key on every request.</td></tr><tr><td><code>Transport</code></td><td>streamable HTTP</td><td>Standard MCP streamable HTTP transport.</td></tr></table>
+<table><tr><th>Field</th><th>Type</th><th>Notes</th></tr><tr><td><code>URL</code></td><td>https://monid-finance-api.fly.dev/mcp</td><td>Streamable HTTP MCP endpoint.</td></tr><tr><td><code>Auth</code></td><td>X-API-KEY header</td><td>Send your Monid API key on every request.</td></tr><tr><td><code>Transport</code></td><td>streamable HTTP</td><td>Standard MCP streamable HTTP transport.</td></tr></table>
 <h2>Connect from Claude</h2>
 <div class="code-caption">claude_desktop_config.json</div><pre><code>{
   "mcpServers": {
     "monid-finance": {
-      "url": "https://api.monid-finance-mcp.example/mcp",
+      "url": "https://monid-finance-api.fly.dev/mcp",
       "headers": { "X-API-KEY": "&lt;your-api-key&gt;" }
     }
   }
@@ -55,13 +55,13 @@
 <div class="code-caption">.cursor/mcp.json (or global)</div><pre><code>{
   "mcpServers": {
     "monid-finance": {
-      "url": "https://api.monid-finance-mcp.example/mcp",
+      "url": "https://monid-finance-api.fly.dev/mcp",
       "headers": { "X-API-KEY": "&lt;your-api-key&gt;" }
     }
   }
 }</code></pre>
 <h2>Connect from Claude Code</h2>
-<div class="code-caption">Terminal</div><pre><code>claude mcp add monid-finance --transport http https://api.monid-finance-mcp.example/mcp --header "X-API-KEY: &lt;your-api-key&gt;"</code></pre>
+<div class="code-caption">Terminal</div><pre><code>claude mcp add monid-finance --transport http https://monid-finance-api.fly.dev/mcp --header "X-API-KEY: &lt;your-api-key&gt;"</code></pre>
 <div class="note">All three clients speak streamable HTTP. The header carries your key; keep it out of command logs and shell history (use a credential file or env var where possible).</div>
 <h2>Tool catalog</h2>
 <p>16 tools are Live and Monid-backed; 4 are Partial (work with honest limits); 11 answer <code>{"error":"not_implemented"}</code> at zero cost until their routes land. Params below match the Financial Datasets MCP definitions; <code>(req)</code> marks required parameters.</p>

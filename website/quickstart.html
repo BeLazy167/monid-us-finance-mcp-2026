@@ -43,12 +43,12 @@
 <p>Create an account and grab your API key from your <a href="https://monid.ai">monid.ai</a> dashboard. This is your own key, not ours: authenticate every request by sending it in the <code>X-API-KEY</code> header, and every call bills your own Monid wallet directly. We never store or log it.</p>
 <div class="code-caption">Terminal</div><pre><code>export MONID_API_KEY=&lt;your-api-key&gt;</code></pre>
 <h2>2. Choose a base URL</h2>
-<div class="code-caption">Terminal</div><pre><code>export BASE_URL=https://api.monid-finance-mcp.example</code></pre>
-<p class="small">This is the documented facade base. The live MCP server is served from <code>https://api.monid-finance-mcp.example/mcp</code>.</p>
+<div class="code-caption">Terminal</div><pre><code>export BASE_URL=https://monid-finance-api.fly.dev</code></pre>
+<p class="small">This is the documented facade base. The live MCP server is served from <code>https://monid-finance-api.fly.dev/mcp</code>.</p>
 <h2>3. Your first REST request</h2>
 <p>Pull AAPL&rsquo;s FY2025 income statement. Route:</p>
 <div class="endpoint"><span class="method">GET</span><span class="path">/financials/income-statements</span></div>
-<div class="code-caption">Request</div><pre><code>curl -s 'https://api.monid-finance-mcp.example/financials/income-statements?ticker=AAPL&amp;period=annual&amp;limit=1' \
+<div class="code-caption">Request</div><pre><code>curl -s 'https://monid-finance-api.fly.dev/financials/income-statements?ticker=AAPL&amp;period=annual&amp;limit=1' \
   -H 'X-API-KEY: &lt;your-api-key&gt;'</code></pre>
 <div class="code-caption">Response</div><pre><code>{
   "income_statements": [
@@ -91,23 +91,23 @@
 }</code></pre>
 <div class="note">A live AAPL FY2025 income-statement call measured $0.0006 on Monid — vs $0.04/request on Financial Datasets, and far below the $200/month commitment.</div>
 <h2>4. Connect the MCP server</h2>
-<p><code>https://api.monid-finance-mcp.example/mcp</code> is a streamable-HTTP MCP endpoint. Set the <code>X-API-KEY</code> header so the server can authenticate you.</p>
+<p><code>https://monid-finance-api.fly.dev/mcp</code> is a streamable-HTTP MCP endpoint. Set the <code>X-API-KEY</code> header so the server can authenticate you.</p>
 <h3>Claude Desktop</h3>
 <div class="code-caption">claude_desktop_config.json</div><pre><code>{
   "mcpServers": {
     "monid-finance": {
-      "url": "https://api.monid-finance-mcp.example/mcp",
+      "url": "https://monid-finance-api.fly.dev/mcp",
       "headers": { "X-API-KEY": "&lt;your-api-key&gt;" }
     }
   }
 }</code></pre>
 <h3>Claude Code</h3>
-<div class="code-caption">Terminal</div><pre><code>claude mcp add monid-finance --transport http https://api.monid-finance-mcp.example/mcp --header "X-API-KEY: &lt;your-api-key&gt;"</code></pre>
+<div class="code-caption">Terminal</div><pre><code>claude mcp add monid-finance --transport http https://monid-finance-api.fly.dev/mcp --header "X-API-KEY: &lt;your-api-key&gt;"</code></pre>
 <h3>Cursor</h3>
 <div class="code-caption">.cursor/mcp.json</div><pre><code>{
   "mcpServers": {
     "monid-finance": {
-      "url": "https://api.monid-finance-mcp.example/mcp",
+      "url": "https://monid-finance-api.fly.dev/mcp",
       "headers": { "X-API-KEY": "&lt;your-api-key&gt;" }
     }
   }
@@ -116,7 +116,7 @@
 <h2>5. Python example</h2>
 <div class="code-caption">Python</div><pre><code>import requests
 
-BASE_URL = "https://api.monid-finance-mcp.example"
+BASE_URL = "https://monid-finance-api.fly.dev"
 API_KEY = "&lt;your-api-key&gt;"
 
 headers = {"X-API-KEY": API_KEY}

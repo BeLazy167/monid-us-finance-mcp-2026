@@ -50,7 +50,7 @@
 <table><tr><th>Field</th><th>Type</th><th>Notes</th></tr><tr><td><code>news</code></td><td>array&lt;News&gt;</td><td>Each: ticker, title, source, date, url.</td></tr><tr><td><code>next_page_url</code></td><td>string|null</td><td>Present only when more records remain.</td></tr></table>
 <p class="small">Unsuccessful calls return the Financial Datasets <code>{&#34;error&#34;, &#34;message&#34;}</code> shape (e.g. <code>bad_request</code>, <code>not_found</code>, <code>upstream_error</code>). Fields the backing sources cannot honestly provide are omitted, never fabricated.</p>
 <h2>Examples</h2>
-<div class="code-caption">Request</div><pre><code>curl -s 'https://api.monid-finance-mcp.example/news?ticker=AAPL&amp;limit=2' \
+<div class="code-caption">Request</div><pre><code>curl -s 'https://monid-finance-api.fly.dev/news?ticker=AAPL&amp;limit=2' \
   -H 'X-API-KEY: &lt;your-api-key&gt;'</code></pre>
 <div class="code-caption">Response (record shape; headline values illustrative — live titles change per request)</div><pre><code>{
   "news": [

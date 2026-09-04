@@ -50,7 +50,7 @@
 <table><tr><th>Field</th><th>Type</th><th>Notes</th></tr><tr><td><code>search_results</code></td><td>array&lt;FinancialsSearchResult&gt;</td><td>Each: ticker, exchange, market_cap, last_sale, net_change, percent_change.</td></tr></table>
 <p class="small">Unsuccessful calls return the Financial Datasets <code>{&#34;error&#34;, &#34;message&#34;}</code> shape (e.g. <code>bad_request</code>, <code>not_found</code>, <code>upstream_error</code>). Fields the backing sources cannot honestly provide are omitted, never fabricated.</p>
 <h2>Examples</h2>
-<div class="code-caption">Request</div><pre><code>curl -s 'https://api.monid-finance-mcp.example/financials/search/screener' \
+<div class="code-caption">Request</div><pre><code>curl -s 'https://monid-finance-api.fly.dev/financials/search/screener' \
   -H 'X-API-KEY: &lt;your-api-key&gt;' \
   -H 'Content-Type: application/json' \
   -d '{"filters": [{"field": "exchange", "operator": "eq", "value": "NASDAQ"}], "limit": 5}'</code></pre>

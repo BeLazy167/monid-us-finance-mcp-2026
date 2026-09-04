@@ -50,7 +50,7 @@
 <table><tr><th>Field</th><th>Type</th><th>Notes</th></tr><tr><td><code>snapshot</code></td><td>object</td><td>The metric snapshot object.</td></tr><tr><td><code>ticker/market_cap/enterprise_value</code></td><td>string/number</td><td>Identity and size.</td></tr><tr><td><code>price_to_earnings_ratio/price_to_book_ratio/price_to_sales_ratio/enterprise_value_to_ebitda_ratio</code></td><td>number</td><td>Valuation multiples.</td></tr><tr><td><code>gross_margin/operating_margin/net_margin</code></td><td>number</td><td>Margins (0–1 scale).</td></tr><tr><td><code>not yet sourced</code></td><td>—</td><td>return_on_equity, return_on_assets, inventory_turnover, days_sales_outstanding, growth fields, per-share fields, and other FinancialMetricSnapshot keys are omitted by this server.</td></tr></table>
 <p class="small">Unsuccessful calls return the Financial Datasets <code>{&#34;error&#34;, &#34;message&#34;}</code> shape (e.g. <code>bad_request</code>, <code>not_found</code>, <code>upstream_error</code>). Fields the backing sources cannot honestly provide are omitted, never fabricated.</p>
 <h2>Examples</h2>
-<div class="code-caption">Request</div><pre><code>curl -s 'https://api.monid-finance-mcp.example/financial-metrics/snapshot?ticker=AAPL' \
+<div class="code-caption">Request</div><pre><code>curl -s 'https://monid-finance-api.fly.dev/financial-metrics/snapshot?ticker=AAPL' \
   -H 'X-API-KEY: &lt;your-api-key&gt;'</code></pre>
 <div class="code-caption">Response (real measured values from the AAPL live smoke)</div><pre><code>{
   "snapshot": {

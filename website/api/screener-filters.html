@@ -50,7 +50,7 @@
 <table><tr><th>Field</th><th>Type</th><th>Notes</th></tr><tr><td><code>metrics.company</code></td><td>array&lt;{field,operators,values}&gt;</td><td>exchange (NASDAQ, NYSE, AMEX) and market_cap (mega … nano), each with operator eq.</td></tr><tr><td><code>operators</code></td><td>array&lt;string&gt;</td><td>["eq"]</td></tr></table>
 <p class="small">Unsuccessful calls return the Financial Datasets <code>{&#34;error&#34;, &#34;message&#34;}</code> shape (e.g. <code>bad_request</code>, <code>not_found</code>, <code>upstream_error</code>). Fields the backing sources cannot honestly provide are omitted, never fabricated.</p>
 <h2>Examples</h2>
-<div class="code-caption">Request</div><pre><code>curl -s 'https://api.monid-finance-mcp.example/financials/search/screener/filters' \
+<div class="code-caption">Request</div><pre><code>curl -s 'https://monid-finance-api.fly.dev/financials/search/screener/filters' \
   -H 'X-API-KEY: &lt;your-api-key&gt;'</code></pre>
 <div class="code-caption">Response (exact executable filter catalog)</div><pre><code>{
   "metrics": {

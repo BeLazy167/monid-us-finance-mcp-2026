@@ -50,7 +50,7 @@
 <table><tr><th>Field</th><th>Type</th><th>Notes</th></tr><tr><td><code>insider_trades</code></td><td>array&lt;InsiderTrade&gt;</td><td>Trades, newest by filing date.</td></tr><tr><td><code>next_page_url</code></td><td>string|null</td><td>Present only when more records remain.</td></tr><tr><td><code>ticker/issuer/name/filing_date/transaction_date</code></td><td>string</td><td>Identity and dates.</td></tr><tr><td><code>transaction_type/transaction_shares</code></td><td>string/integer</td><td>Direction and quantity.</td></tr><tr><td><code>transaction_price_per_share/transaction_value/shares_owned_after_transaction</code></td><td>number</td><td>Price, value, holdings after.</td></tr><tr><td><code>omitted fields</code></td><td>—</td><td>title, transaction_code, security_title, shares_owned_before_transaction: not reported by the feed.</td></tr></table>
 <p class="small">Unsuccessful calls return the Financial Datasets <code>{&#34;error&#34;, &#34;message&#34;}</code> shape (e.g. <code>bad_request</code>, <code>not_found</code>, <code>upstream_error</code>). Fields the backing sources cannot honestly provide are omitted, never fabricated.</p>
 <h2>Examples</h2>
-<div class="code-caption">Request</div><pre><code>curl -s 'https://api.monid-finance-mcp.example/insider-trades?ticker=AAPL&amp;limit=3' \
+<div class="code-caption">Request</div><pre><code>curl -s 'https://monid-finance-api.fly.dev/insider-trades?ticker=AAPL&amp;limit=3' \
   -H 'X-API-KEY: &lt;your-api-key&gt;'</code></pre>
 <div class="code-caption">Response (real Form 4 transactions from the live smoke — Newstead sales at $317.01)</div><pre><code>{
   "insider_trades": [

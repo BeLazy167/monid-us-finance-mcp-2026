@@ -50,7 +50,7 @@
 <table><tr><th>Field</th><th>Type</th><th>Notes</th></tr><tr><td><code>snapshot</code></td><td>object</td><td>The price snapshot object.</td></tr><tr><td><code>price</code></td><td>number</td><td>Latest price.</td></tr><tr><td><code>ticker</code></td><td>string</td><td>Requested ticker.</td></tr><tr><td><code>day_change/day_change_percent</code></td><td>number</td><td>1-day absolute and % change.</td></tr><tr><td><code>time</code></td><td>string</td><td>Snapshot timestamp.</td></tr><tr><td><code>time_milliseconds</code></td><td>integer</td><td>Not emitted by this server (schema-legal omission).</td></tr></table>
 <p class="small">Unsuccessful calls return the Financial Datasets <code>{&#34;error&#34;, &#34;message&#34;}</code> shape (e.g. <code>bad_request</code>, <code>not_found</code>, <code>upstream_error</code>). Fields the backing sources cannot honestly provide are omitted, never fabricated.</p>
 <h2>Examples</h2>
-<div class="code-caption">Request</div><pre><code>curl -s 'https://api.monid-finance-mcp.example/prices/snapshot?ticker=AAPL' \
+<div class="code-caption">Request</div><pre><code>curl -s 'https://monid-finance-api.fly.dev/prices/snapshot?ticker=AAPL' \
   -H 'X-API-KEY: &lt;your-api-key&gt;'</code></pre>
 <div class="code-caption">Response (AAPL observation of 2026-09-03 from the screener smoke; day_change consistent with net change)</div><pre><code>{
   "snapshot": {

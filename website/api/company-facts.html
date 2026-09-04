@@ -50,7 +50,7 @@
 <table><tr><th>Field</th><th>Type</th><th>Notes</th></tr><tr><td><code>company_facts</code></td><td>object</td><td>Company facts object.</td></tr><tr><td><code>ticker/name</code></td><td>string</td><td>Identity and legal name.</td></tr><tr><td><code>not yet sourced</code></td><td>—</td><td>cik, industry, sector, exchange, is_active, location, sec_filings_url, sic_*: omitted until the catalog provides them.</td></tr></table>
 <p class="small">Unsuccessful calls return the Financial Datasets <code>{&#34;error&#34;, &#34;message&#34;}</code> shape (e.g. <code>bad_request</code>, <code>not_found</code>, <code>upstream_error</code>). Fields the backing sources cannot honestly provide are omitted, never fabricated.</p>
 <h2>Examples</h2>
-<div class="code-caption">Request</div><pre><code>curl -s 'https://api.monid-finance-mcp.example/company/facts?ticker=AAPL' \
+<div class="code-caption">Request</div><pre><code>curl -s 'https://monid-finance-api.fly.dev/company/facts?ticker=AAPL' \
   -H 'X-API-KEY: &lt;your-api-key&gt;'</code></pre>
 <div class="code-caption">Response (real AAPL facts from the live smoke — ticker and name)</div><pre><code>{
   "company_facts": {

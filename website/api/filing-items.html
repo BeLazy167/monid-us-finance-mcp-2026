@@ -50,7 +50,7 @@
 <table><tr><th>Field</th><th>Type</th><th>Notes</th></tr><tr><td><code>resource/ticker/filing_type/accession_number/year/quarter</code></td><td>string/integer</td><td>Request identity.</td></tr><tr><td><code>items</code></td><td>array&lt;FilingItem&gt;</td><td>Each: number, name, text.</td></tr></table>
 <p class="small">Unsuccessful calls return the Financial Datasets <code>{&#34;error&#34;, &#34;message&#34;}</code> shape (e.g. <code>bad_request</code>, <code>not_found</code>, <code>upstream_error</code>). Fields the backing sources cannot honestly provide are omitted, never fabricated.</p>
 <h2>Examples</h2>
-<div class="code-caption">Request</div><pre><code>curl -s 'https://api.monid-finance-mcp.example/filings/items?ticker=AAPL&amp;filing_type=10-K&amp;year=2024&amp;item=Item-1A' \
+<div class="code-caption">Request</div><pre><code>curl -s 'https://monid-finance-api.fly.dev/filings/items?ticker=AAPL&amp;filing_type=10-K&amp;year=2024&amp;item=Item-1A' \
   -H 'X-API-KEY: &lt;your-api-key&gt;'</code></pre>
 <div class="code-caption">Response (accession 0000320193-24-000123, the FY2024 10-K used in the smoke)</div><pre><code>{
   "resource": "filing_item",

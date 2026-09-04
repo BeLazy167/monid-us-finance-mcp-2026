@@ -50,7 +50,7 @@
 <table><tr><th>Field</th><th>Type</th><th>Notes</th></tr><tr><td><code>earnings</code></td><td>array&lt;EarningsRecord&gt;</td><td>Composed records, newest first.</td></tr><tr><td><code>next_page_url</code></td><td>string|null</td><td>Present only when more records remain.</td></tr><tr><td><code>ticker/report_period/source_type/filing_date/filing_url/accession_number</code></td><td>string</td><td>Required identity fields.</td></tr><tr><td><code>fiscal_period/currency/filing_datetime/filing_window</code></td><td>string</td><td>Fiscal and filing metadata.</td></tr><tr><td><code>quarterly</code></td><td>object</td><td>Revenue, EPS, margins, changes, balance/cash context for the quarter.</td></tr><tr><td><code>annual</code></td><td>object</td><td>Present on 10-K records.</td></tr><tr><td><code>signals</code></td><td>array</td><td>Not produced by this server (no estimates/surprises sourced).</td></tr></table>
 <p class="small">Unsuccessful calls return the Financial Datasets <code>{&#34;error&#34;, &#34;message&#34;}</code> shape (e.g. <code>bad_request</code>, <code>not_found</code>, <code>upstream_error</code>). Fields the backing sources cannot honestly provide are omitted, never fabricated.</p>
 <h2>Examples</h2>
-<div class="code-caption">Request</div><pre><code>curl -s 'https://api.monid-finance-mcp.example/earnings?ticker=AAPL&amp;limit=1' \
+<div class="code-caption">Request</div><pre><code>curl -s 'https://monid-finance-api.fly.dev/earnings?ticker=AAPL&amp;limit=1' \
   -H 'X-API-KEY: &lt;your-api-key&gt;'</code></pre>
 <div class="code-caption">Response (FY2023 10-K record; revenue $89.498B and EPS 1.46 from the live smoke; accession real)</div><pre><code>{
   "earnings": [

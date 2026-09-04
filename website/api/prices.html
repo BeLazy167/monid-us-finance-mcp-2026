@@ -50,7 +50,7 @@
 <table><tr><th>Field</th><th>Type</th><th>Notes</th></tr><tr><td><code>ticker</code></td><td>string</td><td>Requested ticker.</td></tr><tr><td><code>prices</code></td><td>array&lt;Price&gt;</td><td>Ascending bars: open, close, high, low, volume, time.</td></tr><tr><td><code>next_page_url</code></td><td>string|null</td><td>Present only when more records remain.</td></tr></table>
 <p class="small">Unsuccessful calls return the Financial Datasets <code>{&#34;error&#34;, &#34;message&#34;}</code> shape (e.g. <code>bad_request</code>, <code>not_found</code>, <code>upstream_error</code>). Fields the backing sources cannot honestly provide are omitted, never fabricated.</p>
 <h2>Examples</h2>
-<div class="code-caption">Request</div><pre><code>curl -s 'https://api.monid-finance-mcp.example/prices?ticker=AAPL&amp;interval=day&amp;start_date=2026-08-25&amp;end_date=2026-08-28' \
+<div class="code-caption">Request</div><pre><code>curl -s 'https://monid-finance-api.fly.dev/prices?ticker=AAPL&amp;interval=day&amp;start_date=2026-08-25&amp;end_date=2026-08-28' \
   -H 'X-API-KEY: &lt;your-api-key&gt;'</code></pre>
 <div class="code-caption">Response (real AAPL daily bars from the live smoke; volumes are integers)</div><pre><code>{
   "ticker": "AAPL",
