@@ -282,6 +282,131 @@
         }
       }
     },
+    "/financials/income-statements/as-reported": {
+      "get": {
+        "operationId": "get_income_statement_as_reported",
+        "tags": [
+          "Financial statements"
+        ],
+        "summary": "Get income statement (as-reported)",
+        "description": "Returns the statement exactly as the filing presents it, read from the rendered statement files SEC EDGAR generates from that filing's own XBRL presentation linkbase (go/service/asreported.go). The line_items tree is the filing's real hierarchy: a heading row carries value null and its rows as children.\n\nStructural parity, not label parity. Financial Datasets normalizes some labels where this server prints what the filing prints: Apple's FY2025 income statement says \"Gross margin\" where they say \"Gross Profit\". full_label carries the row's XBRL element name on both, so it agrees either way. Verified against their own as-reported output for AAPL FY2025: balance-sheet values agree 19 of 19, cash flow 11 of 11.\n\nticker is required. Both EDGAR fetches route through Monid, so they bill the caller's wallet and write receipts like every other upstream call.",
+        "parameters": [
+          {
+            "name": "ticker",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Ticker of the issuer. Required."
+          },
+          {
+            "name": "period",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "annual",
+                "quarterly"
+              ],
+              "default": "annual"
+            },
+            "description": "annual reads the 10-K, quarterly the 10-Q."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 1
+            },
+            "description": "Number of filings to return (default: 1)."
+          },
+          {
+            "name": "cik",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "SEC CIK. Accepted for parity; this route resolves the CIK from the filing itself."
+          },
+          {
+            "name": "report_period",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Restricts to the period whose report_period equals this date (YYYY-MM-DD)."
+          },
+          {
+            "name": "report_period_gte",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Restricts to periods ending on or after this date."
+          },
+          {
+            "name": "report_period_lte",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Restricts to periods ending on or before this date."
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Opaque base64url pagination cursor."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "As-filed statement, nested as the filing presents it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AsReportedIncomeStatementsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "402": {
+            "$ref": "#/components/responses/PaymentRequired"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "504": {
+            "$ref": "#/components/responses/GatewayTimeout"
+          }
+        }
+      }
+    },
     "/financials/balance-sheets": {
       "get": {
         "operationId": "get_balance_sheet",
@@ -456,6 +581,131 @@
         }
       }
     },
+    "/financials/balance-sheets/as-reported": {
+      "get": {
+        "operationId": "get_balance_sheet_as_reported",
+        "tags": [
+          "Financial statements"
+        ],
+        "summary": "Get balance sheet (as-reported)",
+        "description": "Returns the statement exactly as the filing presents it, read from the rendered statement files SEC EDGAR generates from that filing's own XBRL presentation linkbase (go/service/asreported.go). The line_items tree is the filing's real hierarchy: a heading row carries value null and its rows as children.\n\nStructural parity, not label parity. Financial Datasets normalizes some labels where this server prints what the filing prints: Apple's FY2025 income statement says \"Gross margin\" where they say \"Gross Profit\". full_label carries the row's XBRL element name on both, so it agrees either way. Verified against their own as-reported output for AAPL FY2025: balance-sheet values agree 19 of 19, cash flow 11 of 11.\n\nticker is required. Both EDGAR fetches route through Monid, so they bill the caller's wallet and write receipts like every other upstream call.",
+        "parameters": [
+          {
+            "name": "ticker",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Ticker of the issuer. Required."
+          },
+          {
+            "name": "period",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "annual",
+                "quarterly"
+              ],
+              "default": "annual"
+            },
+            "description": "annual reads the 10-K, quarterly the 10-Q."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 1
+            },
+            "description": "Number of filings to return (default: 1)."
+          },
+          {
+            "name": "cik",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "SEC CIK. Accepted for parity; this route resolves the CIK from the filing itself."
+          },
+          {
+            "name": "report_period",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Restricts to the period whose report_period equals this date (YYYY-MM-DD)."
+          },
+          {
+            "name": "report_period_gte",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Restricts to periods ending on or after this date."
+          },
+          {
+            "name": "report_period_lte",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Restricts to periods ending on or before this date."
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Opaque base64url pagination cursor."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "As-filed statement, nested as the filing presents it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AsReportedBalanceSheetsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "402": {
+            "$ref": "#/components/responses/PaymentRequired"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "504": {
+            "$ref": "#/components/responses/GatewayTimeout"
+          }
+        }
+      }
+    },
     "/financials/cash-flow-statements": {
       "get": {
         "operationId": "get_cash_flow_statement",
@@ -599,6 +849,131 @@
                       ]
                     }
                   }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "402": {
+            "$ref": "#/components/responses/PaymentRequired"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "504": {
+            "$ref": "#/components/responses/GatewayTimeout"
+          }
+        }
+      }
+    },
+    "/financials/cash-flow-statements/as-reported": {
+      "get": {
+        "operationId": "get_cash_flow_statement_as_reported",
+        "tags": [
+          "Financial statements"
+        ],
+        "summary": "Get cash flow statement (as-reported)",
+        "description": "Returns the statement exactly as the filing presents it, read from the rendered statement files SEC EDGAR generates from that filing's own XBRL presentation linkbase (go/service/asreported.go). The line_items tree is the filing's real hierarchy: a heading row carries value null and its rows as children.\n\nStructural parity, not label parity. Financial Datasets normalizes some labels where this server prints what the filing prints: Apple's FY2025 income statement says \"Gross margin\" where they say \"Gross Profit\". full_label carries the row's XBRL element name on both, so it agrees either way. Verified against their own as-reported output for AAPL FY2025: balance-sheet values agree 19 of 19, cash flow 11 of 11.\n\nticker is required. Both EDGAR fetches route through Monid, so they bill the caller's wallet and write receipts like every other upstream call.",
+        "parameters": [
+          {
+            "name": "ticker",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Ticker of the issuer. Required."
+          },
+          {
+            "name": "period",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "annual",
+                "quarterly"
+              ],
+              "default": "annual"
+            },
+            "description": "annual reads the 10-K, quarterly the 10-Q."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 1
+            },
+            "description": "Number of filings to return (default: 1)."
+          },
+          {
+            "name": "cik",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "SEC CIK. Accepted for parity; this route resolves the CIK from the filing itself."
+          },
+          {
+            "name": "report_period",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Restricts to the period whose report_period equals this date (YYYY-MM-DD)."
+          },
+          {
+            "name": "report_period_gte",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Restricts to periods ending on or after this date."
+          },
+          {
+            "name": "report_period_lte",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Restricts to periods ending on or before this date."
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Opaque base64url pagination cursor."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "As-filed statement, nested as the filing presents it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AsReportedCashFlowStatementsResponse"
                 }
               }
             }
@@ -5327,6 +5702,131 @@
         }
       }
     },
+    "/financials/as-reported": {
+      "get": {
+        "operationId": "get_all_financials_as_reported",
+        "tags": [
+          "Financial statements"
+        ],
+        "summary": "Get all as-reported financials",
+        "description": "All three statements from one filing, each under its own key. Returns the statement exactly as the filing presents it, read from the rendered statement files SEC EDGAR generates from that filing's own XBRL presentation linkbase (go/service/asreported.go). The line_items tree is the filing's real hierarchy: a heading row carries value null and its rows as children.\n\nStructural parity, not label parity. Financial Datasets normalizes some labels where this server prints what the filing prints: Apple's FY2025 income statement says \"Gross margin\" where they say \"Gross Profit\". full_label carries the row's XBRL element name on both, so it agrees either way. Verified against their own as-reported output for AAPL FY2025: balance-sheet values agree 19 of 19, cash flow 11 of 11.\n\nticker is required. Both EDGAR fetches route through Monid, so they bill the caller's wallet and write receipts like every other upstream call.",
+        "parameters": [
+          {
+            "name": "ticker",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Ticker of the issuer. Required."
+          },
+          {
+            "name": "period",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "annual",
+                "quarterly"
+              ],
+              "default": "annual"
+            },
+            "description": "annual reads the 10-K, quarterly the 10-Q."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 1
+            },
+            "description": "Number of filings to return (default: 1)."
+          },
+          {
+            "name": "cik",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "SEC CIK. Accepted for parity; this route resolves the CIK from the filing itself."
+          },
+          {
+            "name": "report_period",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Restricts to the period whose report_period equals this date (YYYY-MM-DD)."
+          },
+          {
+            "name": "report_period_gte",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Restricts to periods ending on or after this date."
+          },
+          {
+            "name": "report_period_lte",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Restricts to periods ending on or before this date."
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Opaque base64url pagination cursor."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "As-filed statement, nested as the filing presents it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AsReportedFinancialsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "402": {
+            "$ref": "#/components/responses/PaymentRequired"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "504": {
+            "$ref": "#/components/responses/GatewayTimeout"
+          }
+        }
+      }
+    },
     "/financials/search/line-items": {
       "post": {
         "operationId": "search_line_items",
@@ -8422,6 +8922,150 @@
         },
         "required": [
           "ipos"
+        ]
+      },
+      "AsReportedNode": {
+        "type": "object",
+        "title": "AsReportedNode",
+        "description": "One row of an as-filed statement, nested exactly as the filing presents it. label is the text the filing prints, full_label is the row's XBRL element name, value is null on a heading row that only groups its children, and children carries the rows beneath it.",
+        "properties": {
+          "label": {
+            "type": "string",
+            "description": "The row label as the filing prints it."
+          },
+          "full_label": {
+            "type": "string",
+            "nullable": true,
+            "description": "The row's XBRL element name, spaced into words. Null when the row carries no element."
+          },
+          "value": {
+            "type": "number",
+            "nullable": true,
+            "description": "The reported figure. Null on a heading row that groups children rather than reporting a number."
+          },
+          "children": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AsReportedNode"
+            },
+            "description": "Rows nested beneath this one."
+          }
+        }
+      },
+      "AsReportedStatement": {
+        "type": "object",
+        "title": "AsReportedStatement",
+        "description": "One filing's as-reported statement: its identity plus the line-item tree.",
+        "properties": {
+          "ticker": {
+            "type": "string"
+          },
+          "report_period": {
+            "type": "string",
+            "format": "date"
+          },
+          "fiscal_period": {
+            "type": "string",
+            "example": "FY2025"
+          },
+          "period": {
+            "type": "string",
+            "enum": [
+              "annual",
+              "quarterly"
+            ]
+          },
+          "currency": {
+            "type": "string"
+          },
+          "accession_number": {
+            "type": "string"
+          },
+          "filing_url": {
+            "type": "string"
+          },
+          "line_items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AsReportedNode"
+            }
+          }
+        }
+      },
+      "AsReportedFinancialsResponse": {
+        "type": "object",
+        "title": "AsReportedFinancialsResponse",
+        "description": "As-reported envelope: {\"financials\": [...]}. The key matches the normalized route, so a client that only changed its base URL reads the same field.",
+        "properties": {
+          "financials": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AsReportedStatement"
+            }
+          },
+          "next_page_url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "financials"
+        ]
+      },
+      "AsReportedIncomeStatementsResponse": {
+        "type": "object",
+        "title": "AsReportedIncomeStatementsResponse",
+        "description": "As-reported envelope: {\"income_statements\": [...]}. The key matches the normalized route, so a client that only changed its base URL reads the same field.",
+        "properties": {
+          "income_statements": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AsReportedStatement"
+            }
+          },
+          "next_page_url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "income_statements"
+        ]
+      },
+      "AsReportedBalanceSheetsResponse": {
+        "type": "object",
+        "title": "AsReportedBalanceSheetsResponse",
+        "description": "As-reported envelope: {\"balance_sheets\": [...]}. The key matches the normalized route, so a client that only changed its base URL reads the same field.",
+        "properties": {
+          "balance_sheets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AsReportedStatement"
+            }
+          },
+          "next_page_url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "balance_sheets"
+        ]
+      },
+      "AsReportedCashFlowStatementsResponse": {
+        "type": "object",
+        "title": "AsReportedCashFlowStatementsResponse",
+        "description": "As-reported envelope: {\"cash_flow_statements\": [...]}. The key matches the normalized route, so a client that only changed its base URL reads the same field.",
+        "properties": {
+          "cash_flow_statements": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AsReportedStatement"
+            }
+          },
+          "next_page_url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "cash_flow_statements"
         ]
       }
     },

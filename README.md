@@ -90,9 +90,10 @@ contract-tested; see the `toolHandlers` table in `go/service/tools.go`. The adve
 tool names, descriptions and input schemas are diffed against the captured Financial
 Datasets surface by test, so the two cannot silently drift.
 
-### REST routes: 48 implemented, 2 zero-cost stubs
+### REST routes: all 54, with 2 honest stubs
 
-50 of Financial Datasets' 54 REST paths are registered. Two answer
+Every one of Financial Datasets' 54 REST paths is registered. 52 return data.
+Two answer
 `{"error": "not_implemented"}` at HTTP 200, with no Monid call and no charge:
 
 - `/kpi/metrics/sectors` — sector is not a dimension the shared ticker catalog
