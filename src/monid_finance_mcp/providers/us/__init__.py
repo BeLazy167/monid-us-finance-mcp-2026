@@ -1,1 +1,0 @@
-"""US market-data adapters."""
