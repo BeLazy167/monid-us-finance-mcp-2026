@@ -16,9 +16,11 @@
 //
 // What "parity" means here, and what it does not. This route reproduces
 // Financial Datasets' as-reported STRUCTURE: the same recursive
-// {label, full_label, value, children} tree, the same metadata fields, the
-// same envelope keys (docs/fd-openapi.json's AsReportedStatement /
-// AsReportedNode). It does NOT claim label parity. Financial Datasets
+// {label, full_label, value, children} tree and the same metadata fields
+// (docs/fd-openapi.json's AsReportedNode and AsReportedStatement; the
+// envelope keys come from the live capture recorded on asReportedVariants,
+// which that file predates). It does NOT claim label parity. Financial
+// Datasets
 // normalizes some labels away from the filing's own wording - Apple's R
 // file prints "Gross margin" where Financial Datasets says "Gross Profit" -
 // and this port prints what the filing prints, because that is what
@@ -95,10 +97,15 @@ var asReportedVariants = map[string]struct {
 	variant    asReportedVariant
 	wrapperKey string
 }{
-	"all":     {asReportedAll, "as_reported_financials"},
-	"income":  {asReportedIncome, "as_reported_income_statements"},
-	"balance": {asReportedBalance, "as_reported_balance_sheets"},
-	"cash":    {asReportedCash, "as_reported_cash_flow_statements"},
+	// Envelope keys match Financial Datasets exactly, captured live
+	// 2026-09-04. The as-reported routes reuse the SAME keys as their
+	// normalized counterparts: /financials/income-statements/as-reported
+	// answers "income_statements", not a prefixed variant. A client
+	// switching base URLs reads the same key on both.
+	"all":     {asReportedAll, "financials"},
+	"income":  {asReportedIncome, "income_statements"},
+	"balance": {asReportedBalance, "balance_sheets"},
+	"cash":    {asReportedCash, "cash_flow_statements"},
 }
 
 // asReportedNode mirrors Financial Datasets' AsReportedNode schema. Every
@@ -403,29 +410,30 @@ func annualFiscalEndMonth(filings []fd.Filing) int {
 	return month
 }
 
-// fiscalPeriodLabel names the fiscal period a report date falls in: "FY"
-// for an annual filing, "Q1".."Q4" for a quarterly one, counting whole
-// months from the fiscal year end. An empty string means the label could
-// not be derived and the field is omitted.
+// fiscalPeriodLabel names the fiscal period a report date falls in,
+// matching Financial Datasets' own labels: "FY2025" for an annual filing
+// and "2026-Q3" for a quarterly one, both carrying the year. A bare "FY"
+// would not tell a caller which year they were reading. An empty string
+// means the label could not be derived and the field is omitted.
 func fiscalPeriodLabel(reportDate, period string, fiscalEndMonth int) string {
-	if period == "annual" {
-		return "FY"
-	}
-	if fiscalEndMonth == 0 {
-		return ""
-	}
 	day, err := time.Parse(dateLayout, reportDate)
 	if err != nil {
 		return ""
 	}
+	if period == "annual" {
+		return "FY" + strconv.Itoa(day.Year())
+	}
+	if fiscalEndMonth == 0 {
+		return ""
+	}
 	elapsed := ((int(day.Month())-fiscalEndMonth)%12 + 12) % 12
 	if elapsed == 0 {
-		return "FY"
+		return "FY" + strconv.Itoa(day.Year())
 	}
 	if elapsed%3 != 0 {
 		return ""
 	}
-	return "Q" + strconv.Itoa(elapsed/3)
+	return strconv.Itoa(day.Year()) + "-Q" + strconv.Itoa(elapsed/3)
 }
 
 // --- EDGAR fetch ---
@@ -438,9 +446,15 @@ func fiscalPeriodLabel(reportDate, period string, fiscalEndMonth int) string {
 // spares the operator declaring a contact User-Agent, which sec.gov
 // otherwise answers 403 without.
 //
-// The scraper returns raw content rather than rendered markdown, so both
-// documents this route asks for - a filing's FilingSummary.xml and one
-// R{n}.htm - arrive as the bytes SEC serves.
+// Measured 2026-09-04 against Apple's FY2025 10-K (accession
+// 0000320193-25-000079): the scraper returned FilingSummary.xml as the
+// exact XML SEC serves, and R3.htm with every attribute this parser reads
+// intact - class="report", the Show.showAR element reference, class="num"
+// / "nump" / "text" cells. It normalizes the surrounding markup (it
+// inserts a <tbody>, lowercases EDGAR's SGML wrapper), which is why the
+// parser anchors on the report table's class rather than on document
+// position, and parsing the scraped copy yields the same tree as parsing
+// the bytes sec.gov serves directly.
 func (c *callCtx) fetchSECDocument(url string) (string, error) {
 	run, err := c.run(contextDev, scrapeHTMLEndpoint, nil, map[string]any{"url": url})
 	if err != nil {

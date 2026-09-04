@@ -17,7 +17,7 @@ Call any of them over MCP at `/mcp` or `/api`.
 
 ## REST coverage
 
-50 of the 54 Financial Datasets REST paths are registered. 48 return data. Two answer a zero-cost `not_implemented` stub, and four are not registered at all.
+All 54 Financial Datasets REST paths are registered. 52 return data. Two answer a zero-cost `not_implemented` stub.
 
 <Tabs>
   <Tab title="Stubbed, 2 routes">
@@ -27,10 +27,10 @@ Call any of them over MCP at `/mcp` or `/api`.
 
     `/index-funds/tickers` — `get_index_fund` resolves holdings by live web search per ticker. Publishing the search-ranking hint list as a coverage catalog would overstate what this server supports.
   </Tab>
-  <Tab title="Not registered, 4 routes">
-    The four `as-reported` statement routes: `/financials/as-reported`, `/financials/income-statements/as-reported`, `/financials/balance-sheets/as-reported`, `/financials/cash-flow-statements/as-reported`.
+  <Tab title="As-reported, 4 routes">
+    `/financials/as-reported`, `/financials/income-statements/as-reported`, `/financials/balance-sheets/as-reported` and `/financials/cash-flow-statements/as-reported` read the rendered statement files EDGAR generates from a filing's own XBRL presentation linkbase, so the `line_items` tree is the filing's hierarchy.
 
-    These return as-filed XBRL with a nested `line_items` tree, which means parsing a filing's rendered statement files rather than reading a normalized feed.
+    They match Financial Datasets' structure, not its labels. Apple's filing prints "Gross margin" where Financial Datasets prints "Gross Profit", and this server prints what the filing prints. `full_label` comes from the row's XBRL element name, so it agrees with theirs either way.
   </Tab>
 </Tabs>
 
@@ -112,4 +112,4 @@ A success response contains only Financial Datasets schema keys, in schema prope
 
 If your integration reads normalized statements, metrics, prices, filings, news, earnings, ownership or KPI data, and does not depend on the omitted fields above, pointing your base URL and key here is close to a drop-in swap.
 
-Do not migrate yet if you depend on `as_reported` statements, `cik`-keyed company lookup, market-wide news, an unscoped IPO or investor listing, or the cash-flow investing line described above. File an issue on [GitHub](https://github.com/BeLazy167/monid-us-finance-mcp-2026) if you need one of those.
+Do not migrate yet if you depend on `cik`-keyed company lookup, market-wide news, an unscoped IPO or investor listing, or the cash-flow investing line described above. The `as_reported=true` flag on the normalized statement tools is also still rejected; ask the dedicated `as-reported` routes above for that hierarchy instead. File an issue on [GitHub](https://github.com/BeLazy167/monid-us-finance-mcp-2026) if you need one of those.

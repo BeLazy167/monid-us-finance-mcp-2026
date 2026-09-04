@@ -39,13 +39,19 @@ source and how current that data is.
 
 ## REST route status
 
-50 of Financial Datasets' 54 REST paths are registered. 48 return data.
+All 54 of Financial Datasets' REST paths are registered. 52 return data.
 Two answer a zero-cost `not_implemented` stub (`/kpi/metrics/sectors`,
 `/index-funds/tickers`), for the reasons noted beside each in
-`notImplementedPaths` (`go/httpapi/rest.go`). The four `as-reported`
-statement routes are not registered: they return as-filed XBRL with a
-nested line-item tree, which needs a filing's rendered statement files
-parsed rather than a normalized feed read.
+`notImplementedPaths` (`go/httpapi/rest.go`).
+
+The four `as-reported` statement routes were the last to land. They read
+the rendered statement files EDGAR generates from a filing's own XBRL
+presentation linkbase, so the `line_items` tree is the filing's
+hierarchy rather than a normalized feed reshaped to look like one. They
+reproduce Financial Datasets' structure, not its labels: Apple's filing
+prints "Gross margin" where Financial Datasets prints "Gross Profit",
+and this server prints what the filing prints. See
+`go/service/asreported.go` for what the rendered files cannot express.
 
 Deliberate deviations, each forced by its source and each stated on the
 route itself:
@@ -61,7 +67,7 @@ route itself:
 - `/filings/items/requests/{request_id}` answers `not_found` for any id.
   Filing-item extraction runs inline, so no request id is ever issued.
 
-Two envelope-key details are worth naming, because both are places where
+Three envelope-key details are worth naming, because each is a place where
 reusing one implementation across two routes would have been wrong.
 Financial Datasets keys `/activist-ownership` as `activist_owners` and
 `/beneficial-ownership` as `beneficial_owners` despite both carrying the
@@ -69,7 +75,10 @@ same record, so the activist route re-keys the shared tool's envelope.
 And `/institutional-holdings/investors` names its two fields `cik`/`name`,
 while the same values are `filer_cik`/`filer_name` on
 `InstitutionalHolding`; this server follows whichever spelling belongs to
-the endpoint being served.
+the endpoint being served. Finally, `/financials` and
+`/financials/as-reported` both answer under the key `financials`, but the
+first carries one object holding three statement lists and the second
+carries a paginated list of periods. Read the key by route, not by name.
 
 ## Known upstream data defect: cash-flow investing activities
 

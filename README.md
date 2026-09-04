@@ -101,9 +101,10 @@ Datasets surface by test, so the two cannot silently drift.
   per ticker; publishing the search-ranking hint list as a coverage catalog
   would overstate what this server supports.
 
-The four `as-reported` statement routes are not registered. They return as-filed
-XBRL with a nested line-item tree, which means parsing a filing's rendered
-statement files rather than reading a normalized feed.
+The four `as-reported` statement routes read the rendered statement files EDGAR
+generates from a filing's own XBRL presentation linkbase, so the `line_items`
+tree is the filing's hierarchy. They match Financial Datasets' structure, not
+its labels: this server prints the label the filing prints.
 
 Several registered routes deviate deliberately, each forced by its source and
 each documented: `/ipos` and `/institutional-holdings/investors` require a

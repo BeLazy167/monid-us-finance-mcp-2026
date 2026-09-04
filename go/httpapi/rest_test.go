@@ -1594,3 +1594,69 @@ func TestSearchLineItems_ValidationErrorPropagates(t *testing.T) {
 		t.Fatalf("error = %v, want bad_request", body["error"])
 	}
 }
+
+// ---- As-filed statement hierarchies (get_as_reported) ----
+
+// TestAsReportedRoutes_ReachTheCapabilityWithTheirOwnStatement pins what
+// distinguishes the four routes from each other. They share one capability,
+// so a wrong statement argument would silently serve one statement's
+// hierarchy under another route's envelope key.
+func TestAsReportedRoutes_ReachTheCapabilityWithTheirOwnStatement(t *testing.T) {
+	for path, statement := range map[string]string{
+		"/financials/as-reported":                      "all",
+		"/financials/income-statements/as-reported":    "income",
+		"/financials/balance-sheets/as-reported":       "balance",
+		"/financials/cash-flow-statements/as-reported": "cash",
+	} {
+		t.Run(path, func(t *testing.T) {
+			caller := newFakeCaller()
+			caller.capabilityResult["get_as_reported"] = Result{
+				Value: []any{}, WrapperKey: "financials", Paginate: true,
+			}
+			rt := newTestRouter(caller, nil)
+			rec := doGet(t, rt, path+"?ticker=AAPL", map[string]string{apiKeyHeader: testAPIKey})
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
+			}
+			args := caller.lastCapabilityCall().args
+			if args["statement"] != statement {
+				t.Fatalf("statement = %v, want %v", args["statement"], statement)
+			}
+			if args["period"] != "annual" || args["limit"] != float64(1) {
+				t.Fatalf("defaults = period %v limit %v, want annual and 1", args["period"], args["limit"])
+			}
+			if args["ticker"] != "AAPL" {
+				t.Fatalf("ticker = %v, want AAPL", args["ticker"])
+			}
+		})
+	}
+}
+
+// TestAsReportedRoute_ForwardsCIKAndReportPeriodFilters covers the
+// parameters Financial Datasets publishes for these routes beyond the
+// defaults, since a dropped filter returns a period the caller did not ask
+// for rather than failing.
+func TestAsReportedRoute_ForwardsCIKAndReportPeriodFilters(t *testing.T) {
+	caller := newFakeCaller()
+	caller.capabilityResult["get_as_reported"] = Result{
+		Value: []any{}, WrapperKey: "income_statements", Paginate: true,
+	}
+	rt := newTestRouter(caller, nil)
+	rec := doGet(t, rt,
+		"/financials/income-statements/as-reported?ticker=AAPL&cik=320193&period=quarterly&limit=3&report_period_gte=2025-01-01",
+		map[string]string{apiKeyHeader: testAPIKey})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	args := caller.lastCapabilityCall().args
+	for key, want := range map[string]any{
+		"cik":               "320193",
+		"period":            "quarterly",
+		"limit":             float64(3),
+		"report_period_gte": "2025-01-01",
+	} {
+		if args[key] != want {
+			t.Fatalf("%s = %v, want %v", key, args[key], want)
+		}
+	}
+}

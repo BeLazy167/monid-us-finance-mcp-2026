@@ -42,7 +42,7 @@ FD plans: Developer $200/mo ($2,000/yr), Pro $2,000/mo ($20,000/yr). A month of 
 
 - Ticker universe: FD 27,000+ US tickers, 30+ years; ours is DefiLlama US equities (~3,227 companies) + SEC EDGAR filings.
 - Earnings records from 8-K press releases with consensus estimates, surprise flags, and `signals` arrays; ours composes 10-K/10-Q statements (feed mode adds the calendar route).
-- `as_reported` raw line items, minute-level price bars (`interval_multiplier`), market-wide news, CIK lookups.
+- Minute-level price bars (`interval_multiplier`), market-wide news, CIK lookups. As-reported line items are served from EDGAR's rendered statement files, matching Financial Datasets' structure but printing the filing's own labels.
 - Ownership-state tools (`get_beneficial_owners`, `get_beneficial_ownership`, `get_insider_ownership`, `get_institutional_investors`): answered with honest typed errors — the validated feeds are capped/stale, and current-state ownership cannot be reduced safely from them.
 - Insider trades capped at the validated 15-row SECForm4 feed; screener executes `exchange` and `market_cap` filters only.
 - No SLAs, no webhooks, no real-time tick feeds.
