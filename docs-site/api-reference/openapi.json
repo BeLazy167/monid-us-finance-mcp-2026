@@ -4290,6 +4290,53 @@
         }
       }
     },
+    "/company/facts/ciks": {
+      "get": {
+        "operationId": "list_company_facts_ciks",
+        "tags": [
+          "Company"
+        ],
+        "summary": "Available CIKs for company facts",
+        "description": "The CIK universe this server can resolve company facts for: SEC's company-ticker file, deduplicated, zero-padded to 10 digits, sorted ascending. This is deliberately NOT full parity. Financial Datasets returns 21,005 distinct CIKs here (measured 2026-09-04) because it also covers filers with no listed ticker; this server returns the 8,005 it can actually source, every one of which is present in Financial Datasets' list too. Free, and requires SEC_USER_AGENT, for the same reasons as /filings/ciks.",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "CIK enumeration.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CIKListResponse"
+                },
+                "examples": {
+                  "example": {
+                    "value": {
+                      "resource": "company_facts",
+                      "ciks": [
+                        "0000001750",
+                        "0000001800",
+                        "0000002098"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "504": {
+            "$ref": "#/components/responses/GatewayTimeout"
+          }
+        }
+      }
+    },
     "/earnings/tickers": {
       "get": {
         "operationId": "list_earnings_tickers",
@@ -4437,6 +4484,54 @@
           },
           "402": {
             "$ref": "#/components/responses/PaymentRequired"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "504": {
+            "$ref": "#/components/responses/GatewayTimeout"
+          }
+        }
+      }
+    },
+    "/filings/ciks": {
+      "get": {
+        "operationId": "list_filings_ciks",
+        "tags": [
+          "Filings"
+        ],
+        "summary": "Available CIKs for SEC filings",
+        "description": "Every CIK in SEC EDGAR's published company-ticker file, in SEC's own row order and unpadded. Verified byte-identical to Financial Datasets' live /filings/ciks response on 2026-09-04: same 10,412 entries, same order, same formatting. Duplicates are intentional - a company with several share classes appears once per ticker, exactly as it does upstream. Sourced free from SEC, so this route makes no Monid call and costs nothing. Requires the SEC_USER_AGENT environment variable: SEC serves its public files only to a User-Agent carrying a real contact email, and this server declines to ship a placeholder address on every deployment's behalf.",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "CIK enumeration.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CIKListResponse"
+                },
+                "examples": {
+                  "example": {
+                    "value": {
+                      "resource": "filings",
+                      "ciks": [
+                        "1045810",
+                        "320193",
+                        "1652044",
+                        "789019"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
@@ -8030,6 +8125,31 @@
         },
         "required": [
           "snapshots"
+        ]
+      },
+      "CIKListResponse": {
+        "type": "object",
+        "title": "CIKListResponse",
+        "description": "A CIK enumeration: {\"resource\", \"ciks\"}. Sourced from SEC EDGAR's free company_tickers.json, never from a paid provider, so these routes cost the caller nothing (see go/service/secciks.go). Returned whole, with no pagination, matching Financial Datasets' own behaviour.",
+        "properties": {
+          "resource": {
+            "type": "string",
+            "example": "filings"
+          },
+          "ciks": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "example": [
+              "1045810",
+              "320193",
+              "1652044"
+            ]
+          }
+        },
+        "required": [
+          "ciks"
         ]
       }
     },

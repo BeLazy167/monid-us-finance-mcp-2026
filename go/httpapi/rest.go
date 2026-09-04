@@ -109,6 +109,10 @@ func restRoutes(rt *restAPI) []restRoute {
 		{http.MethodGet, "/institutional-holdings/tickers", rt.coverageRoute("list_institutional_holdings_tickers")},
 		{http.MethodGet, "/kpi/metrics/tickers", rt.coverageRoute("list_kpi_tickers")},
 
+		// ---- CIK enumeration, sourced free from SEC (see secciks.go) ----
+		{http.MethodGet, "/filings/ciks", rt.cikRoute("list_filings_ciks")},
+		{http.MethodGet, "/company/facts/ciks", rt.cikRoute("list_company_facts_ciks")},
+
 		// ---- Static catalogs, zero paid calls (list_filing_types / list_filing_item_types) ----
 		{http.MethodGet, "/filings/types", rt.filingTypes},
 		{http.MethodGet, "/filings/items/types", rt.filingItemTypes},
@@ -989,6 +993,19 @@ func (rt *restAPI) coverageRoute(capability string) routeHandler {
 }
 
 // ---- Static catalogs, zero paid calls (list_filing_types / list_filing_item_types) ----
+
+// ---- CIK enumeration (list_filings_ciks / list_company_facts_ciks) ----
+
+// cikRoute answers the two CIK enumeration routes. Unlike coverageRoute,
+// this layer applies no pagination and no limit: Financial Datasets
+// returns these lists whole (verified live 2026-09-04 - /filings/ciks came
+// back as all 10,412 entries with no next_page_url), so paginating here
+// would break a client that reads the array in one pass.
+func (rt *restAPI) cikRoute(capability string) routeHandler {
+	return func(w http.ResponseWriter, r *http.Request, id callerIdentity) {
+		rt.callCapabilityAndRespond(w, r, id, capability, map[string]any{}, nil)
+	}
+}
 
 // filingTypes answers /filings/types via Service.ListFilingTypes
 // (Caller.Capability, not Call): the static filing_type enum

@@ -96,6 +96,19 @@ func (s *Service) SearchLineItems(ctx context.Context, apiKey string, args map[s
 	return s.newCallCtx(ctx, apiKey, "search_line_items").searchLineItems(args)
 }
 
+// ListFilingsCIKs returns every CIK in SEC's published company-ticker
+// file, in file order (see secciks.go). Free: SEC publishes this file, so
+// the call is not routed through a paid provider.
+func (s *Service) ListFilingsCIKs(ctx context.Context, apiKey string, args map[string]any) (Result, error) {
+	return s.newCallCtx(ctx, apiKey, "list_filings_ciks").listFilingsCIKs(args)
+}
+
+// ListCompanyFactsCIKs returns that same universe deduplicated and
+// zero-padded. Free, for the same reason.
+func (s *Service) ListCompanyFactsCIKs(ctx context.Context, apiKey string, args map[string]any) (Result, error) {
+	return s.newCallCtx(ctx, apiKey, "list_company_facts_ciks").listCompanyFactsCIKs(args)
+}
+
 // GetKPISectors batch-resolves the sector (and, when present, a
 // performance figure) for up to 100 tickers via finviz's
 // /get_ticker_sectors_with_performance route (kpisectors.go).
