@@ -367,3 +367,79 @@ _LABEL_BY_FIELD: dict[str, str] = {
     "capital_expenditure": "Cash Flow from Investing Activities|Capital Expenditure",
     "free_cash_flow": "Free Cash Flow",
 }
+
+
+@dataclass(frozen=True, slots=True)
+class EarningsCalendarEntry:
+    """One Nasdaq earnings-calendar reporter, for the market-wide feed."""
+
+    ticker: str
+    report_date: date | None
+    filing_date: date | None
+
+
+def parse_earnings_calendar(value: JsonValue, *, limit: int) -> list[EarningsCalendarEntry]:
+    """Parse Nasdaq /get_earnings_calendar rows into unique reporters.
+
+    Rows are ordered most-recent first by filing date, then report date;
+    a ticker appears once. An unrecognizable payload raises
+    SchemaDriftError so the caller answers with an honest fd_error.
+    """
+    raw_rows = _calendar_rows(value)
+    entries: list[EarningsCalendarEntry] = []
+    for index, row in enumerate(raw_rows):
+        if not isinstance(row, dict):
+            raise SchemaDriftError(f"Nasdaq earnings calendar row[{index}] must be an object")
+        ticker = _opt_str(row.get("ticker")) or _opt_str(row.get("symbol"))
+        if ticker is None:
+            continue
+        entries.append(
+            EarningsCalendarEntry(
+                ticker=ticker.upper(),
+                report_date=_opt_date(row.get("reportDate") or row.get("report_date")
+                                      or row.get("periodEnding") or row.get("date")),
+                filing_date=_opt_date(row.get("filingDate") or row.get("filing_date")),
+            )
+        )
+    if not entries:
+        return []
+
+    def sort_key(entry: EarningsCalendarEntry) -> tuple[bool, date, bool, date, str]:
+        return (
+            entry.filing_date is not None,
+            entry.filing_date or date.min,
+            entry.report_date is not None,
+            entry.report_date or date.min,
+            entry.ticker,
+        )
+
+    entries.sort(key=sort_key, reverse=True)
+    unique: list[EarningsCalendarEntry] = []
+    seen: set[str] = set()
+    for entry in entries:
+        if entry.ticker in seen:
+            continue
+        seen.add(entry.ticker)
+        unique.append(entry)
+        if len(unique) >= limit:
+            break
+    return unique
+
+
+def _calendar_rows(value: JsonValue) -> list[JsonValue]:
+    current = value
+    for _ in range(5):
+        if isinstance(current, list):
+            return current
+        if not isinstance(current, dict):
+            break
+        child: JsonValue | None = None
+        for key in ("rows", "results", "data", "earnings", "calendar"):
+            candidate = current.get(key)
+            if isinstance(candidate, list | dict):
+                child = candidate
+                break
+        if child is None:
+            break
+        current = child
+    raise SchemaDriftError("Nasdaq earnings calendar payload is not parseable")

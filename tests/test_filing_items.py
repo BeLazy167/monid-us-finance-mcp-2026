@@ -396,3 +396,26 @@ async def test_list_filing_item_types_rejects_unknown_form_without_spend(tmp_pat
 
     assert response["error"] == "bad_request"
     assert client.calls == []
+
+
+@pytest.mark.asyncio
+async def test_get_filing_items_year_optional_picks_latest_filing(tmp_path: Path) -> None:
+    filings = [
+        filing_row(report_date="2024-06-29", filing_date="2024-08-01", form="10-Q", url=SEC_URL_2),
+        filing_row(report_date="2025-06-28", filing_date="2025-08-01", form="10-Q"),
+    ]
+    markdown = (
+        "# PART I\n"
+        "# ITEM 1. FINANCIAL STATEMENTS\nQuarterly statements.\n"
+    )
+    client = client_with(markdown, filings=filings)
+    client.outcomes[("context.dev", SCRAPE_ENDPOINT)] = completed(
+        "context.dev", SCRAPE_ENDPOINT, markdown_payload(markdown), run_id="scrape-run"
+    )
+
+    response = await make_service(client, tmp_path).get_filing_items(
+        "AAPL", "10-Q", None, quarter=2
+    )
+
+    assert response["year"] == 2025
+    assert response["accession_number"] == "0000320193-25-000079"

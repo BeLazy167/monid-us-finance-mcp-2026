@@ -5,7 +5,7 @@ from decimal import Decimal
 
 from monid_finance_mcp.cache import DEFAULT_TTL_SECONDS, RunCache, cache_ttl_for
 from monid_finance_mcp.client import MonidRun
-from monid_finance_mcp.models import JsonObject, Money
+from monid_finance_mcp.models import Money
 
 
 def run(run_id: str) -> MonidRun:
@@ -59,7 +59,3 @@ def test_ttl_policy() -> None:
     assert cache_ttl_for("/equities/v1/summary") == 60.0
     assert cache_ttl_for("/web/extract") == 3600.0
     assert cache_ttl_for("/unknown/endpoint") == DEFAULT_TTL_SECONDS
-
-
-def _unused(value: JsonObject) -> None:
-    del value

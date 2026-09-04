@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>MCP Tools · Monid Finance MCP</title>
+    <link rel="stylesheet" href="../assets/style.css">
+    <meta name="description" content="All 27 Financial Datasets-compatible MCP tools with exact parameters and status.">
+</head>
+<body>
+<div class="container">
+<nav class="sidebar">
+<div class="brand"><div class="logo">M</div><div><div class="name">Monid Finance MCP</div><div class="sub">FD-compatible · pay-per-call</div></div></div>
+<div class="grp">Getting Started</div>
+<a class=" item" href="../index.html">Introduction</a>
+<a class=" item" href="../quickstart.html">Quickstart</a>
+<a class=" item" href="../pricing.html">Pricing &amp; Savings</a>
+<div class="grp">Reference</div>
+<a class=" item" href="../api/company-facts.html">Company Facts<span class="badge badge-live">live</span></a>
+<a class=" item" href="../api/earnings.html">Earnings<span class="badge badge-partial">partial</span></a>
+<a class=" item" href="../api/financial-metrics.html">Financial Metrics<span class="badge badge-partial">partial</span></a>
+<a class=" item" href="../api/financial-metrics-snapshot.html">Financial Metrics Snapshot<span class="badge badge-live">live</span></a>
+<a class=" item" href="../api/income-statements.html">Income Statements<span class="badge badge-live">live</span></a>
+<a class=" item" href="../api/balance-sheets.html">Balance Sheets<span class="badge badge-live">live</span></a>
+<a class=" item" href="../api/cash-flow-statements.html">Cash Flow Statements<span class="badge badge-live">live</span></a>
+<a class=" item" href="../api/insider-trades.html">Insider Trades<span class="badge badge-partial">partial</span></a>
+<a class=" item" href="../api/news.html">News<span class="badge badge-live">live</span></a>
+<a class=" item" href="../api/filings.html">SEC Filings<span class="badge badge-live">live</span></a>
+<a class=" item" href="../api/filing-items.html">SEC Filing Items<span class="badge badge-live">live</span></a>
+<a class=" item" href="../api/filing-item-types.html">Filing Item Types<span class="badge badge-live">live</span></a>
+<a class=" item" href="../api/prices.html">Stock Prices<span class="badge badge-live">live</span></a>
+<a class=" item" href="../api/prices-snapshot.html">Price Snapshot<span class="badge badge-live">live</span></a>
+<a class=" item" href="../api/screener.html">Stock Screener<span class="badge badge-partial">partial</span></a>
+<a class=" item" href="../api/screener-filters.html">Screener Filters<span class="badge badge-partial">partial</span></a>
+<div class="grp">MCP</div>
+<a class=" item" href="../mcp.html">MCP Server</a>
+<a class=" item active" href="../api/mcp-tools.html">27 MCP Tools</a>
+</nav>
+<main>
+<h1>27 MCP Tools</h1>
+<p class="lead">The complete Financial Datasets MCP tool catalog registered by this server, with exact parameters and live status.</p>
+<div class="endpoint"><span class="method">MCP</span><span class="path">/mcp · streamable HTTP</span></div>
+<h2>Tool catalog</h2>
+<h3>Company Information</h3>
+<div class="toolgrid"><div class="toolbox"><h4 class="tname">get_company_facts <span class="status-inline live">Live</span></h4><p>Company name, ticker, sector, industry, exchange.</p><p class="small"><strong>params:</strong> <code>ticker</code>, <code>cik</code></p></div></div>
+<h3>Earnings</h3>
+<div class="toolgrid"><div class="toolbox"><h4 class="tname">get_earnings <span class="status-inline partial">Partial</span></h4><p>Composed from 10-K/10-Q; estimates not sourced.</p><p class="small"><strong>params:</strong> <code>ticker</code></p></div></div>
+<h3>Financial Metrics</h3>
+<div class="toolgrid"><div class="toolbox"><h4 class="tname">get_financial_metrics <span class="status-inline partial">Partial</span></h4><p>Historical metrics/ratios; valuation fields omitted.</p><p class="small"><strong>params:</strong> <code>ticker</code> <em>(req)</em>, <code>period</code>, <code>limit</code>, <code>report_period_gte</code>, <code>report_period_lte</code>, <code>report_period_gt</code>, <code>report_period_lt</code>, <code>report_period</code></p></div><div class="toolbox"><h4 class="tname">get_financial_metrics_snapshot <span class="status-inline live">Live</span></h4><p>Latest valuation multiples and margins (10-field subset).</p><p class="small"><strong>params:</strong> <code>ticker</code> <em>(req)</em></p></div></div>
+<h3>Financial Statements</h3>
+<div class="toolgrid"><div class="toolbox"><h4 class="tname">get_income_statement <span class="status-inline live">Live</span></h4><p>Normalized income statements.</p><p class="small"><strong>params:</strong> <code>ticker</code> <em>(req)</em>, <code>period</code>, <code>limit</code>, <code>report_period_gte</code>, <code>report_period_lte</code>, <code>report_period_gt</code>, <code>report_period_lt</code>, <code>report_period</code>, <code>as_reported</code></p></div><div class="toolbox"><h4 class="tname">get_balance_sheet <span class="status-inline live">Live</span></h4><p>Normalized balance sheets.</p><p class="small"><strong>params:</strong> <code>ticker</code> <em>(req)</em>, <code>period</code>, <code>limit</code>, <code>report_period_gte</code>, <code>report_period_lte</code>, <code>report_period_gt</code>, <code>report_period_lt</code>, <code>report_period</code>, <code>as_reported</code></p></div><div class="toolbox"><h4 class="tname">get_cash_flow_statement <span class="status-inline live">Live</span></h4><p>Normalized cash flow statements.</p><p class="small"><strong>params:</strong> <code>ticker</code> <em>(req)</em>, <code>period</code>, <code>limit</code>, <code>report_period_gte</code>, <code>report_period_lte</code>, <code>report_period_gt</code>, <code>report_period_lt</code>, <code>report_period</code>, <code>as_reported</code></p></div></div>
+<h3>Index Funds</h3>
+<div class="toolgrid"><div class="toolbox"><h4 class="tname">get_index_fund <span class="status-inline no">Not impl.</span></h4><p>Index/ETF holdings.</p><p class="small"><strong>params:</strong> <code>ticker</code> <em>(req)</em>, <code>as_of</code>, <code>asset_class</code>, <code>limit</code>, <code>offset</code></p></div></div>
+<h3>Insider Ownership</h3>
+<div class="toolgrid"><div class="toolbox"><h4 class="tname">get_insider_ownership <span class="status-inline no">Not impl.</span></h4><p>Insider ownership statements.</p><p class="small"><strong>params:</strong> <code>ticker</code> <em>(req)</em>, <code>name</code>, <code>form_type</code>, <code>filing_date</code>, <code>filing_date_gte</code>, <code>filing_date_lte</code>, <code>filing_date_gt</code>, <code>filing_date_lt</code>, <code>limit</code></p></div></div>
+<h3>Insider Trades</h3>
+<div class="toolgrid"><div class="toolbox"><h4 class="tname">get_insider_trades <span class="status-inline partial">Partial</span></h4><p>SEC Form 4 trades (capped 15-row feed).</p><p class="small"><strong>params:</strong> <code>ticker</code> <em>(req)</em>, <code>name</code>, <code>filing_date</code>, <code>filing_date_gte</code>, <code>filing_date_lte</code>, <code>limit</code></p></div></div>
+<h3>Institutional Holdings</h3>
+<div class="toolgrid"><div class="toolbox"><h4 class="tname">get_institutional_investors <span class="status-inline no">Not impl.</span></h4><p>13F filer discovery.</p><p class="small"><strong>params:</strong> <code>name</code></p></div><div class="toolbox"><h4 class="tname">get_institutional_holdings <span class="status-inline no">Not impl.</span></h4><p>13F positions.</p><p class="small"><strong>params:</strong> <code>filer_cik</code>, <code>ticker</code>, <code>report_period</code>, <code>report_period_gte</code>, <code>report_period_lte</code>, <code>limit</code></p></div></div>
+<h3>Interest Rates</h3>
+<div class="toolgrid"><div class="toolbox"><h4 class="tname">get_interest_rates <span class="status-inline no">Not impl.</span></h4><p>Central-bank interest rates.</p><p class="small"><strong>params:</strong> <em>none</em></p></div></div>
+<h3>KPIs</h3>
+<div class="toolgrid"><div class="toolbox"><h4 class="tname">get_kpi_guidance <span class="status-inline no">Not impl.</span></h4><p>Forward KPI guidance.</p><p class="small"><strong>params:</strong> <code>ticker</code> <em>(req)</em>, <code>period</code>, <code>metric_name</code>, <code>report_period_gte</code>, <code>report_period_lte</code>, <code>limit</code></p></div><div class="toolbox"><h4 class="tname">get_kpi_metrics <span class="status-inline no">Not impl.</span></h4><p>KPI history.</p><p class="small"><strong>params:</strong> <code>ticker</code> <em>(req)</em>, <code>period</code>, <code>metric_name</code>, <code>report_period_gte</code>, <code>report_period_lte</code>, <code>limit</code></p></div><div class="toolbox"><h4 class="tname">get_kpi_non_gaap <span class="status-inline no">Not impl.</span></h4><p>Non-GAAP metrics.</p><p class="small"><strong>params:</strong> <code>ticker</code> <em>(req)</em>, <code>period</code>, <code>metric_name</code>, <code>report_period_gte</code>, <code>report_period_lte</code>, <code>limit</code></p></div></div>
+<h3>News</h3>
+<div class="toolgrid"><div class="toolbox"><h4 class="tname">get_news <span class="status-inline live">Live</span></h4><p>Entity-matched news (ticker required).</p><p class="small"><strong>params:</strong> <code>ticker</code>, <code>limit</code></p></div></div>
+<h3>SEC Filings</h3>
+<div class="toolgrid"><div class="toolbox"><h4 class="tname">get_filings <span class="status-inline live">Live</span></h4><p>SEC filings index.</p><p class="small"><strong>params:</strong> <code>ticker</code>, <code>cik</code>, <code>limit</code>, <code>filing_type</code></p></div><div class="toolbox"><h4 class="tname">get_filing_items <span class="status-inline live">Live</span></h4><p>Section extraction (incl. exhibits rejected).</p><p class="small"><strong>params:</strong> <code>ticker</code> <em>(req)</em>, <code>filing_type</code> <em>(req)</em>, <code>year</code>, <code>quarter</code>, <code>accession_number</code>, <code>item</code></p></div><div class="toolbox"><h4 class="tname">list_filing_item_types <span class="status-inline live">Live</span></h4><p>Supported item catalog (static).</p><p class="small"><strong>params:</strong> <em>none</em></p></div></div>
+<h3>Segmented Financials</h3>
+<div class="toolgrid"><div class="toolbox"><h4 class="tname">get_segmented_financials <span class="status-inline no">Not impl.</span></h4><p>Segment/geographic breakdowns.</p><p class="small"><strong>params:</strong> <code>ticker</code> <em>(req)</em>, <code>period</code>, <code>limit</code>, <code>report_period_gte</code>, <code>report_period_lte</code>, <code>report_period_gt</code>, <code>report_period_lt</code>, <code>report_period</code></p></div></div>
+<h3>Stock Prices</h3>
+<div class="toolgrid"><div class="toolbox"><h4 class="tname">get_stock_prices <span class="status-inline live">Live</span></h4><p>Historical OHLCV with local aggregation.</p><p class="small"><strong>params:</strong> <code>ticker</code> <em>(req)</em>, <code>interval</code>, <code>interval_multiplier</code>, <code>start_date</code>, <code>end_date</code></p></div><div class="toolbox"><h4 class="tname">get_stock_price <span class="status-inline live">Live</span></h4><p>Latest price snapshot.</p><p class="small"><strong>params:</strong> <code>ticker</code> <em>(req)</em></p></div></div>
+<h3>Stock Screener</h3>
+<div class="toolgrid"><div class="toolbox"><h4 class="tname">screen_stocks <span class="status-inline partial">Partial</span></h4><p>Exchange + market_cap, eq only.</p><p class="small"><strong>params:</strong> <code>filters</code> <em>(req)</em>, <code>currency</code>, <code>limit</code></p></div><div class="toolbox"><h4 class="tname">list_stock_screener_filters <span class="status-inline partial">Partial</span></h4><p>Executable filters only.</p><p class="small"><strong>params:</strong> <em>none</em></p></div></div>
+<h3>Beneficial/Activist Ownership</h3>
+<div class="toolgrid"><div class="toolbox"><h4 class="tname">get_beneficial_owners <span class="status-inline no">Not impl.</span></h4><p>5%+ beneficial owners.</p><p class="small"><strong>params:</strong> <code>name</code>, <code>limit</code></p></div><div class="toolbox"><h4 class="tname">get_beneficial_ownership <span class="status-inline no">Not impl.</span></h4><p>13D/13G stakes.</p><p class="small"><strong>params:</strong> <code>ticker</code>, <code>filer_cik</code>, <code>type</code>, <code>history</code>, <code>filing_date</code>, <code>filing_date_gte</code>, <code>filing_date_lte</code>, <code>limit</code></p></div></div>
+<h2>Response contract</h2>
+<p>Success responses contain only Financial Datasets schema keys in schema property order. All failures return <code>{"error": &lt;code&gt;, "message": &lt;detail&gt;}</code>. Error codes: <code>bad_request</code>, <code>not_found</code>, <code>invalid_cursor</code>, <code>upstream_error</code>, <code>timeout</code>, <code>schema_drift</code>, <code>not_implemented</code>. Pagination: <code>limit</code> is a total record budget, <code>cursor</code> is an opaque base64url token, <code>next_page_url</code> appears only when more records remain (10 per page; 100 for prices).</p>
+<div class="note">Provenance, measured cost, and warnings never appear inside responses; they are committed to <code>receipts/ledger.jsonl</code> per Monid call.</div>
+<footer><p>Monid Finance MCP — an independent, Monid-backed Financial Datasets–compatible API. Not affiliated with or endorsed by Financial Datasets. Data sourced from SEC EDGAR, DefiLlama US equities, and Context.dev via Monid, measured per call.</p></footer>
+</main>
+</div>
+</body>
+</html>

@@ -15,6 +15,7 @@ dependencies = [
 
 [project.scripts]
 monid-finance-mcp = "monid_finance_mcp.server:main"
+monid-finance-rest = "monid_finance_mcp.rest_api:main"
 
 [dependency-groups]
 dev = [

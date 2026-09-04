@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Introduction · Monid Finance MCP</title>
+    <link rel="stylesheet" href="assets/style.css">
+    <meta name="description" content="Monid-backed, Financial Datasets-compatible US financial data API.">
+</head>
+<body>
+<div class="container">
+<nav class="sidebar">
+<div class="brand"><div class="logo">M</div><div><div class="name">Monid Finance MCP</div><div class="sub">FD-compatible · pay-per-call</div></div></div>
+<div class="grp">Getting Started</div>
+<a class=" item active" href="index.html">Introduction</a>
+<a class=" item" href="quickstart.html">Quickstart</a>
+<a class=" item" href="pricing.html">Pricing &amp; Savings</a>
+<div class="grp">Reference</div>
+<a class=" item" href="api/company-facts.html">Company Facts<span class="badge badge-live">live</span></a>
+<a class=" item" href="api/earnings.html">Earnings<span class="badge badge-partial">partial</span></a>
+<a class=" item" href="api/financial-metrics.html">Financial Metrics<span class="badge badge-partial">partial</span></a>
+<a class=" item" href="api/financial-metrics-snapshot.html">Financial Metrics Snapshot<span class="badge badge-live">live</span></a>
+<a class=" item" href="api/income-statements.html">Income Statements<span class="badge badge-live">live</span></a>
+<a class=" item" href="api/balance-sheets.html">Balance Sheets<span class="badge badge-live">live</span></a>
+<a class=" item" href="api/cash-flow-statements.html">Cash Flow Statements<span class="badge badge-live">live</span></a>
+<a class=" item" href="api/insider-trades.html">Insider Trades<span class="badge badge-partial">partial</span></a>
+<a class=" item" href="api/news.html">News<span class="badge badge-live">live</span></a>
+<a class=" item" href="api/filings.html">SEC Filings<span class="badge badge-live">live</span></a>
+<a class=" item" href="api/filing-items.html">SEC Filing Items<span class="badge badge-live">live</span></a>
+<a class=" item" href="api/filing-item-types.html">Filing Item Types<span class="badge badge-live">live</span></a>
+<a class=" item" href="api/prices.html">Stock Prices<span class="badge badge-live">live</span></a>
+<a class=" item" href="api/prices-snapshot.html">Price Snapshot<span class="badge badge-live">live</span></a>
+<a class=" item" href="api/screener.html">Stock Screener<span class="badge badge-partial">partial</span></a>
+<a class=" item" href="api/screener-filters.html">Screener Filters<span class="badge badge-partial">partial</span></a>
+<div class="grp">MCP</div>
+<a class=" item" href="mcp.html">MCP Server</a>
+<a class=" item" href="api/mcp-tools.html">27 MCP Tools</a>
+</nav>
+<main>
+<h1>Financial Datasets-compatible US Financial Data API, backed by Monid</h1>
+<p class="lead">An independent, Monid-backed clone of the Financial Datasets API public interface: the same 27 MCP tool names, the same input parameters, and the same response shapes — at a fraction of the cost.</p>
+<p>Pay only for what you call. Our live US-equities data routes SEC EDGAR, DefiLlama US equities, and Context.dev through Monid at pay-per-call prices of <strong>$0.0006 – $0.01 per call</strong>, versus Financial Datasets&rsquo; <strong>$200/month Developer</strong> and <strong>$2,000/month Pro</strong> plans.</p>
+<div class="cards">
+<div class="card"><div class="icon">🚀</div><h3><a href="quickstart.html">REST API</a></h3><p>Authenticate with X-API-KEY and make your first request in under two minutes.</p></div>
+<div class="card"><div class="icon">🤖</div><h3><a href="mcp.html">MCP Server</a></h3><p>Give Claude, Cursor, and Claude Code direct, typed access to market data.</p></div>
+<div class="card"><div class="icon">📄</div><h3><a href="api/mcp-tools.html">OpenAPI Spec</a></h3><p>Wire generators and clients from the machine-readable contract and tool schemas.</p></div>
+<div class="card"><div class="icon">💰</div><h3><a href="pricing.html">Pricing comparison</a></h3><p>FD per-request prices vs our measured per-call costs, and the honest scope.</p></div>
+</div>
+<h2>Tool catalog</h2>
+<p>All 27 Financial Datasets MCP tool names are registered, grouped below exactly as their docs index groups them. <span class="status live">Live</span> tools are Monid-backed and contract-tested; <span class="status partial">Partial</span> tools work but with honest limits; <span class="status no">Not implemented</span> tools answer <code>{"error":"not_implemented"}</code> at zero cost until their routes land.</p>
+<h3>Company Information</h3>
+<div class="toolgrid"><div class="toolbox"><h4 class="tname">get_company_facts <span class="status-inline live">Live</span></h4><p>Company name, ticker, sector, industry, exchange.</p></div></div>
+<h3>Earnings</h3>
+<div class="toolgrid"><div class="toolbox"><h4 class="tname">get_earnings <span class="status-inline partial">Partial</span></h4><p>Composed from 10-K/10-Q; estimates not sourced.</p></div></div>
+<h3>Financial Metrics</h3>
+<div class="toolgrid"><div class="toolbox"><h4 class="tname">get_financial_metrics <span class="status-inline partial">Partial</span></h4><p>Historical metrics/ratios; valuation fields omitted.</p></div><div class="toolbox"><h4 class="tname">get_financial_metrics_snapshot <span class="status-inline live">Live</span></h4><p>Latest valuation multiples and margins (10-field subset).</p></div></div>
+<h3>Financial Statements</h3>
+<div class="toolgrid"><div class="toolbox"><h4 class="tname">get_income_statement <span class="status-inline live">Live</span></h4><p>Normalized income statements.</p></div><div class="toolbox"><h4 class="tname">get_balance_sheet <span class="status-inline live">Live</span></h4><p>Normalized balance sheets.</p></div><div class="toolbox"><h4 class="tname">get_cash_flow_statement <span class="status-inline live">Live</span></h4><p>Normalized cash flow statements.</p></div></div>
+<h3>Index Funds</h3>
+<div class="toolgrid"><div class="toolbox"><h4 class="tname">get_index_fund <span class="status-inline no">Not impl.</span></h4><p>Index/ETF holdings.</p></div></div>
+<h3>Insider Ownership</h3>
+<div class="toolgrid"><div class="toolbox"><h4 class="tname">get_insider_ownership <span class="status-inline no">Not impl.</span></h4><p>Insider ownership statements.</p></div></div>
+<h3>Insider Trades</h3>
+<div class="toolgrid"><div class="toolbox"><h4 class="tname">get_insider_trades <span class="status-inline partial">Partial</span></h4><p>SEC Form 4 trades (capped 15-row feed).</p></div></div>
+<h3>Institutional Holdings</h3>
+<div class="toolgrid"><div class="toolbox"><h4 class="tname">get_institutional_investors <span class="status-inline no">Not impl.</span></h4><p>13F filer discovery.</p></div><div class="toolbox"><h4 class="tname">get_institutional_holdings <span class="status-inline no">Not impl.</span></h4><p>13F positions.</p></div></div>
+<h3>Interest Rates</h3>
+<div class="toolgrid"><div class="toolbox"><h4 class="tname">get_interest_rates <span class="status-inline no">Not impl.</span></h4><p>Central-bank interest rates.</p></div></div>
+<h3>KPIs</h3>
+<div class="toolgrid"><div class="toolbox"><h4 class="tname">get_kpi_guidance <span class="status-inline no">Not impl.</span></h4><p>Forward KPI guidance.</p></div><div class="toolbox"><h4 class="tname">get_kpi_metrics <span class="status-inline no">Not impl.</span></h4><p>KPI history.</p></div><div class="toolbox"><h4 class="tname">get_kpi_non_gaap <span class="status-inline no">Not impl.</span></h4><p>Non-GAAP metrics.</p></div></div>
+<h3>News</h3>
+<div class="toolgrid"><div class="toolbox"><h4 class="tname">get_news <span class="status-inline live">Live</span></h4><p>Entity-matched news (ticker required).</p></div></div>
+<h3>SEC Filings</h3>
+<div class="toolgrid"><div class="toolbox"><h4 class="tname">get_filings <span class="status-inline live">Live</span></h4><p>SEC filings index.</p></div><div class="toolbox"><h4 class="tname">get_filing_items <span class="status-inline live">Live</span></h4><p>Section extraction (incl. exhibits rejected).</p></div><div class="toolbox"><h4 class="tname">list_filing_item_types <span class="status-inline live">Live</span></h4><p>Supported item catalog (static).</p></div></div>
+<h3>Segmented Financials</h3>
+<div class="toolgrid"><div class="toolbox"><h4 class="tname">get_segmented_financials <span class="status-inline no">Not impl.</span></h4><p>Segment/geographic breakdowns.</p></div></div>
+<h3>Stock Prices</h3>
+<div class="toolgrid"><div class="toolbox"><h4 class="tname">get_stock_prices <span class="status-inline live">Live</span></h4><p>Historical OHLCV with local aggregation.</p></div><div class="toolbox"><h4 class="tname">get_stock_price <span class="status-inline live">Live</span></h4><p>Latest price snapshot.</p></div></div>
+<h3>Stock Screener</h3>
+<div class="toolgrid"><div class="toolbox"><h4 class="tname">screen_stocks <span class="status-inline partial">Partial</span></h4><p>Exchange + market_cap, eq only.</p></div><div class="toolbox"><h4 class="tname">list_stock_screener_filters <span class="status-inline partial">Partial</span></h4><p>Executable filters only.</p></div></div>
+<h3>Beneficial/Activist Ownership</h3>
+<div class="toolgrid"><div class="toolbox"><h4 class="tname">get_beneficial_owners <span class="status-inline no">Not impl.</span></h4><p>5%+ beneficial owners.</p></div><div class="toolbox"><h4 class="tname">get_beneficial_ownership <span class="status-inline no">Not impl.</span></h4><p>13D/13G stakes.</p></div></div>
+<h2>Design principles</h2>
+<p><strong>Contract parity</strong> — responses contain only Financial Datasets schema keys, in schema property order.</p>
+<p><strong>Zero mock data</strong> — no fabricated numbers. Unsourced fields are omitted, not guessed or nulled.</p>
+<p><strong>Auditable receipts</strong> — every Monid call, its run ID, and its measured cost are committed to <code>receipts/ledger.jsonl</code>.</p>
+<p><strong>Deterministic parsing</strong> — <code>get_filing_items</code> extracts canonical SEC sections with rule-based parsing; no LLM hallucination risk.</p>
+<h2>At a glance</h2>
+<table><tr><th>Field</th><th>Type</th><th>Notes</th></tr><tr><td><code>27</code></td><td>tools registered</td><td>All Financial Datasets MCP tool names, with matching parameters.</td></tr><tr><td><code>16</code></td><td>live / contract-tested</td><td>Monid-backed tools returning real data.</td></tr><tr><td><code>11</code></td><td>not yet implemented</td><td>Answer not_implemented at zero cost.</td></tr><tr><td><code>$0.0135</code></td><td>total measured</td><td>Across 22 live calls (both Gate A/B ledgers) — 96.9% cheaper than incumbent credit packs.</td></tr><tr><td><code>$0.0006–$0.01</code></td><td>per call</td><td>Measured Monid cost per live call.</td></tr><tr><td><code>$0.0078</code></td><td>fresh full pass</td><td>12-call FD-contract full pass (2026-09-04).</td></tr></table>
+<div class="warn">Honest scope: this is not a trading terminal. No real-time tick streams, no 30-year normalized depth, no enterprise SLAs, and some tools are partial. See the <a href='pricing.html'>pricing &amp; scope</a> page.</div>
+<footer><p>Monid Finance MCP — an independent, Monid-backed Financial Datasets–compatible API. Not affiliated with or endorsed by Financial Datasets. Data sourced from SEC EDGAR, DefiLlama US equities, and Context.dev via Monid, measured per call.</p></footer>
+</main>
+</div>
+</body>
+</html>

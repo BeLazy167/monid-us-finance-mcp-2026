@@ -464,12 +464,32 @@ async def test_get_earnings_10k_includes_annual_block(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_get_earnings_requires_ticker(tmp_path: Path) -> None:
-    finance = make_service(gate_b_client(), tmp_path)
+async def test_get_earnings_feed_routes_without_ticker(tmp_path: Path) -> None:
+    client = gate_b_client()
+    calendar = {
+        "data": {
+            "rows": [
+                {"symbol": "AAPL", "reportDate": "2026-01-20"},
+                {"symbol": "MSFT", "reportDate": "2026-01-21"},
+            ]
+        }
+    }
+    client.outcomes[("nasdaq", "/get_earnings_calendar")] = completed(
+        "nasdaq", "/get_earnings_calendar", calendar, "0.01"
+    )
+    finance = make_service(client, tmp_path)
 
-    response = await finance.get_earnings(limit=5)
+    response = await finance.get_earnings(limit=2)
 
-    assert response["error"] == "bad_request"
+    records = as_records(response["earnings"])
+    assert records
+    required = {
+        key
+        for key, spec in FD_CONTRACT["EarningsRecord"].items()
+        if spec.get("required")
+    }
+    for record in records:
+        assert required <= set(record)
 
 
 @pytest.mark.asyncio

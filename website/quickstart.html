@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Quickstart · Monid Finance MCP</title>
+    <link rel="stylesheet" href="assets/style.css">
+    <meta name="description" content="Auth, base URL, first REST call, MCP connect, and a Python example for the Monid-backed Financial Datasets-compatible API.">
+</head>
+<body>
+<div class="container">
+<nav class="sidebar">
+<div class="brand"><div class="logo">M</div><div><div class="name">Monid Finance MCP</div><div class="sub">FD-compatible · pay-per-call</div></div></div>
+<div class="grp">Getting Started</div>
+<a class=" item" href="index.html">Introduction</a>
+<a class=" item active" href="quickstart.html">Quickstart</a>
+<a class=" item" href="pricing.html">Pricing &amp; Savings</a>
+<div class="grp">Reference</div>
+<a class=" item" href="api/company-facts.html">Company Facts<span class="badge badge-live">live</span></a>
+<a class=" item" href="api/earnings.html">Earnings<span class="badge badge-partial">partial</span></a>
+<a class=" item" href="api/financial-metrics.html">Financial Metrics<span class="badge badge-partial">partial</span></a>
+<a class=" item" href="api/financial-metrics-snapshot.html">Financial Metrics Snapshot<span class="badge badge-live">live</span></a>
+<a class=" item" href="api/income-statements.html">Income Statements<span class="badge badge-live">live</span></a>
+<a class=" item" href="api/balance-sheets.html">Balance Sheets<span class="badge badge-live">live</span></a>
+<a class=" item" href="api/cash-flow-statements.html">Cash Flow Statements<span class="badge badge-live">live</span></a>
+<a class=" item" href="api/insider-trades.html">Insider Trades<span class="badge badge-partial">partial</span></a>
+<a class=" item" href="api/news.html">News<span class="badge badge-live">live</span></a>
+<a class=" item" href="api/filings.html">SEC Filings<span class="badge badge-live">live</span></a>
+<a class=" item" href="api/filing-items.html">SEC Filing Items<span class="badge badge-live">live</span></a>
+<a class=" item" href="api/filing-item-types.html">Filing Item Types<span class="badge badge-live">live</span></a>
+<a class=" item" href="api/prices.html">Stock Prices<span class="badge badge-live">live</span></a>
+<a class=" item" href="api/prices-snapshot.html">Price Snapshot<span class="badge badge-live">live</span></a>
+<a class=" item" href="api/screener.html">Stock Screener<span class="badge badge-partial">partial</span></a>
+<a class=" item" href="api/screener-filters.html">Screener Filters<span class="badge badge-partial">partial</span></a>
+<div class="grp">MCP</div>
+<a class=" item" href="mcp.html">MCP Server</a>
+<a class=" item" href="api/mcp-tools.html">27 MCP Tools</a>
+</nav>
+<main>
+<h1>Quickstart</h1>
+<p class="lead">Authenticate, hit the REST facade, or connect the MCP server — in under two minutes.</p>
+<h2>1. Get your API key</h2>
+<p>Create an account and grab your API key from your Monid dashboard. Authenticate every request by sending it in the <code>X-API-KEY</code> header.</p>
+<div class="code-caption">Terminal</div><pre><code>export MONID_API_KEY=&lt;your-api-key&gt;</code></pre>
+<h2>2. Choose a base URL</h2>
+<div class="code-caption">Terminal</div><pre><code>export BASE_URL=https://api.monid-finance-mcp.example</code></pre>
+<p class="small">This is the documented facade base. The live MCP server is served from <code>https://api.monid-finance-mcp.example/mcp</code>.</p>
+<h2>3. Your first REST request</h2>
+<p>Pull AAPL&rsquo;s FY2025 income statement. Route:</p>
+<div class="endpoint"><span class="method">GET</span><span class="path">/financials/income-statements</span></div>
+<div class="code-caption">Request</div><pre><code>curl -s 'https://api.monid-finance-mcp.example/financials/income-statements?ticker=AAPL&amp;period=annual&amp;limit=1' \
+  -H 'X-API-KEY: &lt;your-api-key&gt;'</code></pre>
+<div class="code-caption">Response</div><pre><code>{
+  "income_statements": [
+    {
+      "ticker": "AAPL",
+      "report_period": "2025-09-27",
+      "fiscal_period": "FY2025",
+      "period": "annual",
+      "currency": "USD",
+      "accession_number": "0000320193-25-000079",
+      "form_type": "10-K",
+      "filing_url": "https://www.sec.gov/Archives/edgar/data/320193/000032019325000079/0000320193-25-000079-index.htm",
+      "filing_date": "2025-10-31",
+      "filing_datetime": "2025-10-31T10:01:26-04:00",
+      "revenue": 416161000000.0,
+      "cost_of_revenue": 220960000000.0,
+      "gross_profit": 195201000000.0,
+      "operating_expense": 62151000000.0,
+      "selling_general_and_administrative_expenses": 27601000000.0,
+      "research_and_development": 34550000000.0,
+      "operating_income": 133050000000.0,
+      "interest_expense": null,
+      "ebit": 132729000000.0,
+      "income_tax_expense": 20719000000.0,
+      "nonoperating_income_expense": -321000000.0,
+      "net_income_discontinued_operations": null,
+      "net_income_non_controlling_interests": null,
+      "net_income": 112010000000.0,
+      "net_income_common_stock": 112010000000.0,
+      "preferred_dividends_impact": 0.0,
+      "consolidated_income": 112010000000.0,
+      "earnings_per_share": 7.49,
+      "earnings_per_share_diluted": 7.46,
+      "dividends_per_common_share": 1.02,
+      "weighted_average_shares": 14948500000.0,
+      "weighted_average_shares_diluted": 15004697000.0
+    }
+  ],
+  "next_page_url": null
+}</code></pre>
+<div class="note">A live AAPL FY2025 income-statement call measured $0.0006 on Monid — vs $0.04/request on Financial Datasets, and far below the $200/month commitment.</div>
+<h2>4. Connect the MCP server</h2>
+<p><code>https://api.monid-finance-mcp.example/mcp</code> is a streamable-HTTP MCP endpoint. Set the <code>X-API-KEY</code> header so the server can authenticate you.</p>
+<h3>Claude Desktop</h3>
+<div class="code-caption">claude_desktop_config.json</div><pre><code>{
+  "mcpServers": {
+    "monid-finance": {
+      "url": "https://api.monid-finance-mcp.example/mcp",
+      "headers": { "X-API-KEY": "&lt;your-api-key&gt;" }
+    }
+  }
+}</code></pre>
+<h3>Claude Code</h3>
+<div class="code-caption">Terminal</div><pre><code>claude mcp add monid-finance --transport http https://api.monid-finance-mcp.example/mcp --header "X-API-KEY: &lt;your-api-key&gt;"</code></pre>
+<h3>Cursor</h3>
+<div class="code-caption">.cursor/mcp.json</div><pre><code>{
+  "mcpServers": {
+    "monid-finance": {
+      "url": "https://api.monid-finance-mcp.example/mcp",
+      "headers": { "X-API-KEY": "&lt;your-api-key&gt;" }
+    }
+  }
+}</code></pre>
+<p class="small">See the <a href="mcp.html">MCP Server</a> page for the full 27-tool catalog and more clients.</p>
+<h2>5. Python example</h2>
+<div class="code-caption">Python</div><pre><code>import requests
+
+BASE_URL = "https://api.monid-finance-mcp.example"
+API_KEY = "&lt;your-api-key&gt;"
+
+headers = {"X-API-KEY": API_KEY}
+
+def income_statements(ticker: str, period: str = "annual", limit: int = 4):
+    resp = requests.get(
+        f"{BASE_URL}/financials/income-statements",
+        params={"ticker": ticker, "period": period, "limit": limit},
+        headers=headers,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+# AAPL FY2025 annual income statement
+data = income_statements("AAPL", "annual", 1)
+record = data["income_statements"][0]
+print(record["report_period"], record["revenue"], record["earnings_per_share"])
+# 2025-09-27 416161000000.0 7.49
+</code></pre>
+<div class="warn">Tests and demo code must never make live/paid Monid calls. Use the FakeClient pattern in <code>tests/test_service.py</code> for local runs. Live calls append receipts to <code>receipts/ledger.jsonl</code>.</div>
+<footer><p>Monid Finance MCP — an independent, Monid-backed Financial Datasets–compatible API. Not affiliated with or endorsed by Financial Datasets. Data sourced from SEC EDGAR, DefiLlama US equities, and Context.dev via Monid, measured per call.</p></footer>
+</main>
+</div>
+</body>
+</html>

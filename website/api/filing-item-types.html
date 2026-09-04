@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Filing Item Types · Monid Finance MCP</title>
+    <link rel="stylesheet" href="../assets/style.css">
+    <meta name="description" content="List the supported SEC filing item catalog for 10-K, 10-Q, and 8-K forms, with canonical items and their SEC titles.">
+</head>
+<body>
+<div class="container">
+<nav class="sidebar">
+<div class="brand"><div class="logo">M</div><div><div class="name">Monid Finance MCP</div><div class="sub">FD-compatible · pay-per-call</div></div></div>
+<div class="grp">Getting Started</div>
+<a class=" item" href="../index.html">Introduction</a>
+<a class=" item" href="../quickstart.html">Quickstart</a>
+<a class=" item" href="../pricing.html">Pricing &amp; Savings</a>
+<div class="grp">Reference</div>
+<a class=" item" href="../api/company-facts.html">Company Facts<span class="badge badge-live">live</span></a>
+<a class=" item" href="../api/earnings.html">Earnings<span class="badge badge-partial">partial</span></a>
+<a class=" item" href="../api/financial-metrics.html">Financial Metrics<span class="badge badge-partial">partial</span></a>
+<a class=" item" href="../api/financial-metrics-snapshot.html">Financial Metrics Snapshot<span class="badge badge-live">live</span></a>
+<a class=" item" href="../api/income-statements.html">Income Statements<span class="badge badge-live">live</span></a>
+<a class=" item" href="../api/balance-sheets.html">Balance Sheets<span class="badge badge-live">live</span></a>
+<a class=" item" href="../api/cash-flow-statements.html">Cash Flow Statements<span class="badge badge-live">live</span></a>
+<a class=" item" href="../api/insider-trades.html">Insider Trades<span class="badge badge-partial">partial</span></a>
+<a class=" item" href="../api/news.html">News<span class="badge badge-live">live</span></a>
+<a class=" item" href="../api/filings.html">SEC Filings<span class="badge badge-live">live</span></a>
+<a class=" item" href="../api/filing-items.html">SEC Filing Items<span class="badge badge-live">live</span></a>
+<a class=" item" href="../api/filing-item-types.html">Filing Item Types<span class="badge badge-live">live</span></a>
+<a class=" item" href="../api/prices.html">Stock Prices<span class="badge badge-live">live</span></a>
+<a class=" item" href="../api/prices-snapshot.html">Price Snapshot<span class="badge badge-live">live</span></a>
+<a class=" item" href="../api/screener.html">Stock Screener<span class="badge badge-partial">partial</span></a>
+<a class=" item" href="../api/screener-filters.html">Screener Filters<span class="badge badge-partial">partial</span></a>
+<div class="grp">MCP</div>
+<a class=" item" href="../mcp.html">MCP Server</a>
+<a class=" item" href="../api/mcp-tools.html">27 MCP Tools</a>
+</nav>
+<main>
+<h1>Filing Item Types</h1>
+<div class="status-row"><span class="status live">Live</span></div>
+<p class="subtitle">List the supported SEC filing item catalog for 10-K, 10-Q, and 8-K forms, with canonical items and their SEC titles.</p>
+<div class="tooltag">MCP tool: list_filing_item_types</div>
+<div class="endpoint"><span class="method">GET</span><span class="path">/filings/items/types</span></div>
+<h2>Description</h2>
+<p>List the supported SEC filing item catalog for 10-K, 10-Q, and 8-K forms, with canonical items and their SEC titles. It mirrors the Financial Datasets public interface; see the compatibility contract at <code>docs/compatibility.md</code> in the repo.</p>
+<h2>Parameters</h2>
+<table><tr><th>Parameter</th><th>Type</th><th>Default</th><th>Required</th><th>Notes</th></tr><tr><td><code>filing_type</code></td><td><code>string: 10-K / 10-Q / 8-K</code></td><td>—</td><td>no</td><td>Restrict the catalog to one form; omit for all.</td></tr></table>
+<h2>Response</h2>
+<table><tr><th>Field</th><th>Type</th><th>Notes</th></tr><tr><td><code>10-K / 10-Q / 8-K</code></td><td>array&lt;{name,title,description}&gt;</td><td>Item catalog per form.</td></tr></table>
+<p class="small">Unsuccessful calls return the Financial Datasets <code>{&#34;error&#34;, &#34;message&#34;}</code> shape (e.g. <code>bad_request</code>, <code>not_found</code>, <code>upstream_error</code>). Fields the backing sources cannot honestly provide are omitted, never fabricated.</p>
+<h2>Examples</h2>
+<div class="code-caption">Request</div><pre><code>curl -s 'https://api.monid-finance-mcp.example/filings/items/types?filing_type=10-K' \
+  -H 'X-API-KEY: &lt;your-api-key&gt;'</code></pre>
+<div class="code-caption">Response (real 10-K catalog subset — static, zero-cost)</div><pre><code>{
+  "10-K": [
+    {
+      "name": "Item-1",
+      "title": "Business",
+      "description": "Business"
+    },
+    {
+      "name": "Item-1A",
+      "title": "Risk Factors",
+      "description": "Risk Factors"
+    },
+    {
+      "name": "Item-1B",
+      "title": "Unresolved Staff Comments",
+      "description": "Unresolved Staff Comments"
+    },
+    {
+      "name": "Item-1C",
+      "title": "Cybersecurity",
+      "description": "Cybersecurity"
+    },
+    {
+      "name": "Item-7",
+      "title": "Management's Discussion and Analysis of Financial Condition and Results of Operations",
+      "description": "Management's Discussion and Analysis"
+    }
+  ]
+}</code></pre>
+<h2>Honest notes</h2>
+<div class="note">This is a deterministic static catalog derived from SEC form instructions; it never makes a Monid call.</div>
+<footer><p>Monid Finance MCP — an independent, Monid-backed Financial Datasets–compatible API. Not affiliated with or endorsed by Financial Datasets. Data sourced from SEC EDGAR, DefiLlama US equities, and Context.dev via Monid, measured per call.</p></footer>
+</main>
+</div>
+</body>
+</html>

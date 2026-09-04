@@ -399,3 +399,141 @@ def screener_filters_response() -> JsonObject:
         },
         "operators": ["eq"],
     }
+
+
+def interest_rate_record(
+    *,
+    bank: str,
+    name: str,
+    rate: int | float,
+    date: str | None,
+) -> JsonObject:
+    """One Financial Datasets InterestRate, in schema property order."""
+    record: JsonObject = {"bank": bank, "name": name, "rate": rate}
+    _set(record, "date", date)
+    return record
+
+
+def interest_rates_response(records: list[JsonObject]) -> JsonObject:
+    return {"interest_rates": records}
+
+
+def kpi_metric_record(
+    *,
+    ticker: str,
+    metric_name: str,
+    value: int | float | None,
+    unit: str,
+    period: str,
+    period_type: str,
+    source_text: str | None,
+    source_url: str,
+) -> JsonObject:
+    record: JsonObject = {"ticker": ticker, "metric_name": metric_name}
+    _set(record, "value", value)
+    record["unit"] = unit
+    record["period"] = period
+    record["period_type"] = period_type
+    _set(record, "source_text", source_text)
+    _set(record, "source_url", source_url)
+    return record
+
+
+def kpi_guidance_item_record(
+    *,
+    ticker: str,
+    metric_name: str,
+    value: int | float | None,
+    unit: str,
+    period: str,
+    period_type: str,
+    raw_text: str | None,
+    source_text: str | None,
+    source_url: str,
+) -> JsonObject:
+    record: JsonObject = {"ticker": ticker, "metric_name": metric_name}
+    _set(record, "value", value)
+    record["unit"] = unit
+    record["period"] = period
+    record["period_type"] = period_type
+    _set(record, "raw_text", raw_text)
+    _set(record, "source_text", source_text)
+    _set(record, "source_url", source_url)
+    return record
+
+
+def kpi_non_gaap_metric_record(
+    *,
+    ticker: str,
+    metric_name: str,
+    value: int | float | None,
+    unit: str,
+    period: str,
+    period_type: str,
+    source_text: str | None,
+    source_url: str,
+) -> JsonObject:
+    record: JsonObject = {"ticker": ticker, "metric_name": metric_name}
+    _set(record, "value", value)
+    record["unit"] = unit
+    record["period"] = period
+    record["period_type"] = period_type
+    _set(record, "source_text", source_text)
+    _set(record, "source_url", source_url)
+    return record
+
+
+def fund_holding_record(
+    *,
+    ticker: str | None,
+    name: str | None,
+    cusip: str | None,
+    isin: str | None,
+    weight: int | float | None,
+    market_value: int | float | None,
+    shares: int | float | None,
+    asset_class: str,
+) -> JsonObject:
+    record: JsonObject = {}
+    _set(record, "ticker", ticker)
+    _set(record, "name", name)
+    _set(record, "cusip", cusip)
+    _set(record, "isin", isin)
+    _set(record, "weight", _clean_number(weight))
+    _set(record, "market_value", _clean_number(market_value))
+    _set(record, "shares", _clean_number(shares))
+    record["asset_class"] = asset_class
+    return record
+
+
+def index_fund_response(
+    ticker: str, fund: JsonObject, holdings: list[JsonObject]
+) -> JsonObject:
+    return {"ticker": ticker, "fund": fund, "holdings": holdings}
+
+
+def institutional_holding_record(
+    *,
+    ticker: str,
+    name_of_issuer: str | None,
+    shares: int | None,
+    value_usd: int | None,
+    report_period: str | None,
+    filer_name: str | None,
+) -> JsonObject:
+    record: JsonObject = {"ticker": ticker}
+    _set(record, "name_of_issuer", name_of_issuer)
+    _set(record, "report_period", report_period)
+    _set(record, "shares", shares)
+    _set(record, "value_usd", value_usd)
+    _set(record, "filer_name", filer_name)
+    return record
+
+
+def institutional_holdings_response(
+    ticker: str, records: list[JsonObject], next_url: str | None
+) -> JsonObject:
+    response: JsonObject = {"ticker": ticker, "institutional_holdings": records}
+    if next_url is not None:
+        response["next_page_url"] = next_url
+    return response

@@ -246,27 +246,38 @@ async def test_client_hydrates_signed_json_without_dropping_wrapper() -> None:
 
 
 @pytest.mark.asyncio
-async def test_client_serializes_inspect_run_pairs_across_concurrent_calls() -> None:
+async def test_client_runs_inspect_before_run_per_call_under_concurrency() -> None:
+    """Concurrent client.run calls interleave, but each call still executes
+    its own inspect before its own run for the same endpoint."""
     first = "/equities/v1/summary"
     second = "/equities/v1/filings"
-    runner = YieldingRunner(
-        deque(
-            [
-                inspect_response(first),
-                run_response(first, output={"currentPrice": 1}),
-                inspect_response(second),
-                run_response(second, output=[]),
-            ]
-        )
-    )
-    client = MonidClient(runner=runner)
+    responses: dict[str, deque[CommandResult]] = {
+        first: deque([inspect_response(first), run_response(first, output={"currentPrice": 1})]),
+        second: deque([inspect_response(second), run_response(second, output=[])]),
+    }
+    calls: list[tuple[str, str]] = []
+
+    class PerEndpointRunner:
+        async def run(self, args: tuple[str, ...], timeout_seconds: float) -> CommandResult:
+            del timeout_seconds
+            operation = args[1]
+            endpoint = args[args.index("--endpoint") + 1]
+            calls.append((operation, endpoint))
+            queue = responses[endpoint]
+            result = queue.popleft()
+            await asyncio.sleep(0)
+            return result
+
+    client = MonidClient(runner=PerEndpointRunner())
 
     await asyncio.gather(
         client.run("defillama", first),
         client.run("defillama", second),
     )
 
-    assert [call[0][1] for call in runner.calls] == ["inspect", "run", "inspect", "run"]
+    for endpoint in (first, second):
+        order = [operation for operation, seen in calls if seen == endpoint]
+        assert order == ["inspect", "run"], (endpoint, order)
 
 
 @pytest.mark.asyncio

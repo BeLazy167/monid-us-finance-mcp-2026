@@ -7,11 +7,13 @@ never inside responses.
 """
 from __future__ import annotations
 
+import json
 from collections.abc import Awaitable, Callable
 from datetime import date
 from functools import wraps
 from typing import TypeVar
 
+from monid_finance_mcp.cache import RunCache, cache_ttl_for
 from monid_finance_mcp.client import (
     MonidClientProtocol,
     MonidError,
@@ -35,7 +37,11 @@ from monid_finance_mcp.fd import (
     filing_items_response,
     filing_record,
     income_statement_record,
+    index_fund_response,
     insider_trade_record,
+    institutional_holdings_response,
+    interest_rate_record,
+    interest_rates_response,
     list_response,
     metric_snapshot_record,
     news_record,
@@ -46,7 +52,10 @@ from monid_finance_mcp.fd import (
     screener_search_result,
 )
 from monid_finance_mcp.models import JsonObject, JsonValue
-from monid_finance_mcp.providers.us.earnings import normalize_earnings
+from monid_finance_mcp.providers.us.earnings import (
+    normalize_earnings,
+    parse_earnings_calendar,
+)
 from monid_finance_mcp.providers.us.filing_items import (
     derive_accession,
     normalize_accession,
@@ -56,7 +65,49 @@ from monid_finance_mcp.providers.us.financial_metrics import (
     MetricsPeriod,
     normalize_financial_metrics,
 )
+from monid_finance_mcp.providers.us.index_fund import (
+    SCRAPE_ENDPOINT,
+    index_fund_search_request,
+    parse_as_of,
+    parse_holdings,
+    pick_holdings_candidates,
+    validate_asset_class,
+)
+from monid_finance_mcp.providers.us.index_fund import (
+    SEARCH_ENDPOINT as INDEX_FUND_SEARCH_ENDPOINT,
+)
+from monid_finance_mcp.providers.us.index_fund import (
+    parse_scrape_markdown as parse_fund_scrape,
+)
+from monid_finance_mcp.providers.us.index_fund import (
+    scrape_query as fund_scrape_query,
+)
 from monid_finance_mcp.providers.us.insider_trades import normalize_insider_trades
+from monid_finance_mcp.providers.us.institutional_holdings import (
+    normalize_institutional_holdings,
+)
+from monid_finance_mcp.providers.us.interest_rates import (
+    BANK_SPECS,
+    parse_policy_rate,
+)
+from monid_finance_mcp.providers.us.interest_rates import (
+    parse_scrape_markdown as parse_bank_scrape,
+)
+from monid_finance_mcp.providers.us.interest_rates import (
+    scrape_query as bank_scrape_query,
+)
+from monid_finance_mcp.providers.us.kpi import (
+    KPI_GUIDANCE_INSTRUCTIONS,
+    KPI_METRICS_INSTRUCTIONS,
+    KPI_NONGAAP_INSTRUCTIONS,
+    kpi_guidance_extract_schema,
+    kpi_metrics_extract_schema,
+    kpi_nongaap_extract_schema,
+    normalize_kpi_guidance,
+    normalize_kpi_metrics,
+    normalize_kpi_nongaap,
+    validate_kpi_period,
+)
 from monid_finance_mcp.providers.us.normalize import (
     InputError,
     SchemaDriftError,
@@ -74,6 +125,11 @@ from monid_finance_mcp.providers.us.normalize import (
     validate_period,
     validate_ticker,
 )
+from monid_finance_mcp.providers.us.segmented_financials import (
+    SEGMENT_INSTRUCTIONS,
+    normalize_segmented_financials,
+    segment_extract_schema,
+)
 from monid_finance_mcp.providers.us.statements import (
     PeriodRow,
     StatementSeries,
@@ -87,6 +143,11 @@ from monid_finance_mcp.providers.us.stock_screener import (
     normalize_screener,
     validate_screener_request,
 )
+from monid_finance_mcp.providers.us.web_extract import (
+    EXTRACT_ENDPOINT,
+    extract_request,
+    parse_extract_output,
+)
 from monid_finance_mcp.receipts import ReceiptsLedger
 
 DEFILLAMA = "defillama"
@@ -99,9 +160,11 @@ NEWS_PROVIDER = "context.dev"
 NEWS_ENDPOINT = "/news/search"
 SECFORM4 = "secform4"
 INSIDER_ENDPOINT = "/search"
+INSTITUTIONAL_ENDPOINT = "/get_institution_holders"
 NASDAQ = "nasdaq"
 SCREENER_ENDPOINT = "/get_stock_screener"
 SCREENER_MAX_ROWS = 25
+EARNINGS_CALENDAR_ENDPOINT = "/get_earnings_calendar"
 
 STATEMENT_RESPONSE_KEYS = {
     "income": ("income_statements", "income-statements"),
@@ -176,10 +239,14 @@ def _fd_errors(tool: Callable[..., Awaitable[JsonObject]]) -> Callable[..., Awai
 
 class FinanceService:
     def __init__(
-        self, client: MonidClientProtocol, ledger: ReceiptsLedger | None = None
+        self,
+        client: MonidClientProtocol,
+        ledger: ReceiptsLedger | None = None,
+        cache: RunCache | None = None,
     ) -> None:
         self._client = client
         self._ledger = ledger if ledger is not None else ReceiptsLedger()
+        self._cache = cache if cache is not None else RunCache()
 
     async def _call(
         self,
@@ -190,7 +257,15 @@ class FinanceService:
         body: JsonObject | None = None,
         query_params: JsonObject | None = None,
     ) -> MonidRun:
-        """Run one Monid call, record a receipt, and map failures to FD errors."""
+        """Run one Monid call, record a receipt, and map failures to FD errors.
+
+        Repeat calls with identical inputs are served from the TTL run cache:
+        no new Monid run, no wallet spend, no ledger row.
+        """
+        cache_key = _cache_key(provider, endpoint, body, query_params)
+        cached = self._cache.get(cache_key)
+        if cached is not None:
+            return cached
         try:
             run = await self._client.run(
                 provider, endpoint, body=body, query_params=query_params
@@ -214,6 +289,7 @@ class FinanceService:
             )
             raise UpstreamError("upstream_error", str(error)) from error
         self._ledger.record_success(tool=tool, run=run, body=body, query_params=query_params)
+        self._cache.put(cache_key, run, ttl_seconds=cache_ttl_for(endpoint))
         return run
 
     @_fd_errors
@@ -630,7 +706,7 @@ class FinanceService:
         cursor: str | None = None,
     ) -> JsonObject:
         if ticker is None:
-            raise InputError("ticker is required (market-wide news is not supported)")
+            raise InputError("market-wide news is not routed; pass ticker")
         symbol = validate_ticker(ticker)
         bounded_limit = validate_limit(limit, maximum=10)
         offset = decode_cursor(cursor)[0] if cursor is not None else 0
@@ -664,37 +740,37 @@ class FinanceService:
         limit: int = 1,
         cursor: str | None = None,
     ) -> JsonObject:
-        if ticker is None:
-            raise InputError(
-                "ticker is required (the market-wide real-time earnings feed is not routed)"
-            )
-        symbol = validate_ticker(ticker)
         bounded_limit = validate_limit(limit, maximum=40)
         offset = decode_cursor(cursor)[0] if cursor is not None else 0
-        statements_run = await self._call(
-            "get_earnings",
-            DEFILLAMA,
-            STATEMENTS_ENDPOINT,
-            query_params={"ticker": symbol, "country": "US"},
-        )
-        filings_run = await self._call(
-            "get_earnings",
-            DEFILLAMA,
-            FILINGS_ENDPOINT,
-            query_params={"ticker": symbol, "country": "US"},
-        )
-        filings_rows = normalize_filings(
-            filings_run.output,
-            filing_types=None,
-            limit=10_000,
-            filing_date_gte=None,
-            filing_date_lte=None,
-        )
-        data = normalize_earnings(
-            statements_run.output, filings_rows, ticker=symbol, limit=bounded_limit
-        )
-        page = paginate(data.records, offset=offset, path="/earnings")
+        if ticker is None:
+            records = await self._earnings_feed(bounded_limit)
+        else:
+            symbol = validate_ticker(ticker)
+            records = await self._earnings_for_ticker(
+                "get_earnings", symbol, limit=bounded_limit
+            )
+        page = paginate(records, offset=offset, path="/earnings")
         return list_response("earnings", page.records, page.next_url)
+
+    async def _earnings_feed(self, limit: int) -> list[JsonObject]:
+        """Compose the market-wide earnings feed from the Nasdaq calendar."""
+        calendar_run = await self._call(
+            "get_earnings", NASDAQ, EARNINGS_CALENDAR_ENDPOINT,
+            query_params={"limit": limit},
+        )
+        reporters = parse_earnings_calendar(calendar_run.output, limit=limit)
+        records: list[JsonObject] = []
+        for reporter in reporters:
+            entry_symbol = validate_ticker(reporter.ticker)
+            try:
+                composed = await self._earnings_for_ticker(
+                    "get_earnings", entry_symbol, limit=1
+                )
+            except (UpstreamError, SchemaDriftError):
+                continue
+            records.extend(composed)
+        records.sort(key=_earnings_filing_sort_key, reverse=True)
+        return records
 
     async def get_financial_metrics(
         self,
@@ -955,7 +1031,7 @@ class FinanceService:
         self,
         ticker: str,
         filing_type: str,
-        year: int,
+        year: int | None = None,
         quarter: int | None = None,
         item: str | None = None,
         accession_number: str | None = None,
@@ -964,7 +1040,9 @@ class FinanceService:
         from monid_finance_mcp.providers.us.filing_items import (
             parse_filing_sections,
             parse_scrape_payload,
+            resolve_item,
             select_filing,
+            validate_catalog_filing_type,
             validate_filing_item_request,
         )
 
@@ -973,14 +1051,37 @@ class FinanceService:
                 "include_exhibits is not supported: the validated route cannot "
                 "identify and fetch filing exhibits"
             )
-        symbol, normalized_type, selected_year, selected_quarter, selected_item = (
-            validate_filing_item_request(ticker, filing_type, year, quarter, item)
-        )
         normalized_accession = normalize_accession(accession_number)
-        filings_run = await self._call(
-            "get_filing_items", DEFILLAMA, FILINGS_ENDPOINT,
-            query_params={"ticker": symbol, "country": "US"},
-        )
+        if year is None:
+            symbol = validate_ticker(ticker)
+            normalized_type = validate_catalog_filing_type(filing_type)
+            if quarter is not None and (isinstance(quarter, bool) or not 1 <= quarter <= 4):
+                raise InputError("quarter must be between 1 and 4")
+            selected_item = resolve_item(normalized_type, item) if item is not None else None
+            filings_run = await self._call(
+                "get_filing_items", DEFILLAMA, FILINGS_ENDPOINT,
+                query_params={"ticker": symbol, "country": "US"},
+            )
+            selected_year = _latest_filing_year(
+                filings_run.output,
+                filing_type=normalized_type,
+                quarter=quarter,
+                accession_number=normalized_accession,
+            )
+            selected_quarter = quarter
+            if selected_year is None:
+                return fd_error(
+                    "not_found",
+                    f"No {normalized_type} filing matches ticker {symbol}.",
+                )
+        else:
+            symbol, normalized_type, selected_year, selected_quarter, selected_item = (
+                validate_filing_item_request(ticker, filing_type, year, quarter, item)
+            )
+            filings_run = await self._call(
+                "get_filing_items", DEFILLAMA, FILINGS_ENDPOINT,
+                query_params={"ticker": symbol, "country": "US"},
+            )
         selection = select_filing(
             filings_run.output,
             filing_type=normalized_type,
@@ -1059,6 +1160,543 @@ class FinanceService:
         return response
 
 
+
+
+    async def _earnings_for_ticker(
+        self, tool: str, ticker: str, *, limit: int
+    ) -> list[JsonObject]:
+        """Compose earnings records for one ticker from statements + filings."""
+        statements_run = await self._call(
+            tool,
+            DEFILLAMA,
+            STATEMENTS_ENDPOINT,
+            query_params={"ticker": ticker, "country": "US"},
+        )
+        filings_run = await self._call(
+            tool,
+            DEFILLAMA,
+            FILINGS_ENDPOINT,
+            query_params={"ticker": ticker, "country": "US"},
+        )
+        filings_rows = normalize_filings(
+            filings_run.output,
+            filing_types=None,
+            limit=10_000,
+            filing_date_gte=None,
+            filing_date_lte=None,
+        )
+        return normalize_earnings(
+            statements_run.output, filings_rows, ticker=ticker, limit=limit
+        ).records
+
+    @_fd_errors
+    async def get_segmented_financials(
+        self,
+        ticker: str | None = None,
+        period: str = "annual",
+        limit: int = 10,
+        report_period: str | None = None,
+        report_period_gte: str | None = None,
+        report_period_lte: str | None = None,
+        report_period_gt: str | None = None,
+        report_period_lt: str | None = None,
+        cursor: str | None = None,
+    ) -> JsonObject:
+        if ticker is None:
+            raise InputError("ticker is required")
+        symbol = validate_ticker(ticker)
+        normalized_period = validate_period(period)
+        if normalized_period != "annual":
+            raise InputError(
+                "period must be annual: the validated route extracts the annual 10-K"
+            )
+        bounded_limit = validate_limit(limit, maximum=100)
+        report = _date_filters(
+            report_period,
+            report_period_gte,
+            report_period_lte,
+            report_period_gt,
+            report_period_lt,
+            prefix="report_period",
+        )
+        offset = decode_cursor(cursor)[0] if cursor is not None else 0
+
+        filings_run = await self._call(
+            "get_segmented_financials",
+            DEFILLAMA,
+            FILINGS_ENDPOINT,
+            query_params={"ticker": symbol, "country": "US"},
+        )
+        filings_rows = normalize_filings(
+            filings_run.output,
+            filing_types=None,
+            limit=10_000,
+            filing_date_gte=None,
+            filing_date_lte=None,
+        )
+        filing = _latest_ten_k(filings_rows)
+        if filing is None:
+            return fd_error(
+                "not_found",
+                f"No 10-K filing exists for ticker {symbol}.",
+            )
+        filing_url = _opt_str(filing.get("primary_document_url")) or ""
+        accession = derive_accession(filing_url)
+        extract_run = await self._call(
+            "get_segmented_financials",
+            "context.dev",
+            EXTRACT_ENDPOINT,
+            body=extract_request(
+                url=filing_url,
+                schema=segment_extract_schema(),
+                instructions=SEGMENT_INSTRUCTIONS,
+            ),
+        )
+        data = parse_extract_output(extract_run.output, expected_url=filing_url)
+        records = normalize_segmented_financials(
+            data,
+            ticker=symbol,
+            filing_url=filing_url,
+            accession_number=accession,
+        )
+        records = [
+            record
+            for record in records
+            if _segment_matches(record, report)
+        ][:bounded_limit]
+        page = paginate(
+            records, offset=offset, path="/financials/income-statements/segments"
+        )
+        return list_response("segmented_financials", page.records, page.next_url)
+
+    @_fd_errors
+    async def get_kpi_metrics(
+        self,
+        ticker: str | None = None,
+        period: str = "quarterly",
+        metric_name: str | None = None,
+        report_period_gte: str | None = None,
+        report_period_lte: str | None = None,
+        limit: int = 4,
+        cursor: str | None = None,
+    ) -> JsonObject:
+        return await self._kpi_extract_response(
+            tool="get_kpi_metrics",
+            response_key="kpi_metrics",
+            path="/kpi/metrics",
+            schema=kpi_metrics_extract_schema(),
+            instructions=KPI_METRICS_INSTRUCTIONS,
+            normalize=_normalize_kpi_metrics,
+            ticker=ticker,
+            period=period,
+            metric_name=metric_name,
+            report_period_gte=report_period_gte,
+            report_period_lte=report_period_lte,
+            limit=limit,
+            cursor=cursor,
+        )
+
+    @_fd_errors
+    async def get_kpi_guidance(
+        self,
+        ticker: str | None = None,
+        period: str = "quarterly",
+        metric_name: str | None = None,
+        report_period_gte: str | None = None,
+        report_period_lte: str | None = None,
+        limit: int = 4,
+        cursor: str | None = None,
+    ) -> JsonObject:
+        return await self._kpi_extract_response(
+            tool="get_kpi_guidance",
+            response_key="kpi_guidance",
+            path="/kpi/guidance",
+            schema=kpi_guidance_extract_schema(),
+            instructions=KPI_GUIDANCE_INSTRUCTIONS,
+            normalize=_normalize_kpi_guidance,
+            ticker=ticker,
+            period=period,
+            metric_name=metric_name,
+            report_period_gte=report_period_gte,
+            report_period_lte=report_period_lte,
+            limit=limit,
+            cursor=cursor,
+        )
+
+    @_fd_errors
+    async def get_kpi_non_gaap(
+        self,
+        ticker: str | None = None,
+        period: str = "quarterly",
+        metric_name: str | None = None,
+        report_period_gte: str | None = None,
+        report_period_lte: str | None = None,
+        limit: int = 4,
+        cursor: str | None = None,
+    ) -> JsonObject:
+        return await self._kpi_extract_response(
+            tool="get_kpi_non_gaap",
+            response_key="kpi_non_gaap",
+            path="/kpi/non-gaap",
+            schema=kpi_nongaap_extract_schema(),
+            instructions=KPI_NONGAAP_INSTRUCTIONS,
+            normalize=_normalize_kpi_nongaap,
+            ticker=ticker,
+            period=period,
+            metric_name=metric_name,
+            report_period_gte=report_period_gte,
+            report_period_lte=report_period_lte,
+            limit=limit,
+            cursor=cursor,
+        )
+
+    @_fd_errors
+    async def _kpi_extract_response(
+        self,
+        *,
+        tool: str,
+        response_key: str,
+        path: str,
+        schema: JsonObject,
+        instructions: str,
+        normalize: Callable[..., list[JsonObject]],
+        ticker: str | None,
+        period: str,
+        metric_name: str | None,
+        report_period_gte: str | None,
+        report_period_lte: str | None,
+        limit: int,
+        cursor: str | None,
+    ) -> JsonObject:
+        if ticker is None:
+            raise InputError("ticker is required")
+        symbol = validate_ticker(ticker)
+        normalized_period = validate_kpi_period(period)
+        bounded_limit = validate_limit(limit, maximum=50)
+        gte = validate_date(report_period_gte, "report_period_gte")
+        lte = validate_date(report_period_lte, "report_period_lte")
+        offset = decode_cursor(cursor)[0] if cursor is not None else 0
+
+        filings_run = await self._call(
+            tool,
+            DEFILLAMA,
+            FILINGS_ENDPOINT,
+            query_params={"ticker": symbol, "country": "US"},
+        )
+        filings_rows = normalize_filings(
+            filings_run.output,
+            filing_types=None,
+            limit=10_000,
+            filing_date_gte=None,
+            filing_date_lte=None,
+        )
+        filing = _latest_kpi_filing(filings_rows, annual=normalized_period == "annual")
+        if filing is None:
+            return fd_error(
+                "not_found",
+                f"No {'10-K' if normalized_period == 'annual' else '10-Q'} "
+                f"filing exists for ticker {symbol}.",
+            )
+        report_day = _opt_date(filing.get("report_date"))
+        if report_day is not None and (
+            (gte is not None and report_day < gte)
+            or (lte is not None and report_day > lte)
+        ):
+            return list_response(response_key, [], None)
+        filing_url = _opt_str(filing.get("primary_document_url")) or ""
+        extract_run = await self._call(
+            tool,
+            "context.dev",
+            EXTRACT_ENDPOINT,
+            body=extract_request(url=filing_url, schema=schema, instructions=instructions),
+        )
+        data = parse_extract_output(extract_run.output, expected_url=filing_url)
+        records = normalize(
+            data,
+            ticker=symbol,
+            filing_url=filing_url,
+            period=normalized_period,
+            metric_name=metric_name,
+        )[:bounded_limit]
+        page = paginate(records, offset=offset, path=path)
+        return list_response(response_key, page.records, page.next_url)
+
+    @_fd_errors
+    async def get_interest_rates(self) -> JsonObject:
+        records: list[JsonObject] = []
+        for spec in BANK_SPECS:
+            try:
+                run = await self._call(
+                    "get_interest_rates", "context.dev", SCRAPE_ENDPOINT,
+                    query_params=bank_scrape_query(spec.url),
+                )
+                markdown = parse_bank_scrape(run.output, expected_url=spec.url)
+                rate = parse_policy_rate(markdown, bank=spec.bank)
+            except (UpstreamError, SchemaDriftError):
+                continue
+            if rate is None:
+                continue
+            records.append(
+                interest_rate_record(
+                    bank=rate.bank, name=rate.name, rate=rate.rate, date=rate.date
+                )
+            )
+        return interest_rates_response(records)
+
+    @_fd_errors
+    async def get_index_fund(
+        self,
+        ticker: str | None = None,
+        as_of: str | None = None,
+        asset_class: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> JsonObject:
+        if ticker is None:
+            raise InputError("ticker is required")
+        symbol = validate_ticker(ticker)
+        as_of_date = validate_date(as_of, "as_of")
+        normalized_class = validate_asset_class(asset_class)
+        bounded_limit = validate_limit(limit, maximum=1000)
+        if offset < 0:
+            raise InputError("offset must be a non-negative integer")
+
+        search_run = await self._call(
+            "get_index_fund", "context.dev", INDEX_FUND_SEARCH_ENDPOINT,
+            body=index_fund_search_request(symbol),
+        )
+        candidates = pick_holdings_candidates(search_run.output, ticker=symbol)
+        markdown: str | None = None
+        title: str | None = None
+        for candidate in candidates[:3]:
+            url = _opt_str(candidate.get("url"))
+            if url is None:
+                continue
+            try:
+                scrape_run = await self._call(
+                    "get_index_fund", "context.dev", SCRAPE_ENDPOINT,
+                    query_params=fund_scrape_query(url),
+                )
+                page_markdown = parse_fund_scrape(scrape_run.output, expected_url=url)
+            except (UpstreamError, SchemaDriftError):
+                continue
+            if parse_holdings(page_markdown):
+                markdown = page_markdown
+                title = _opt_str(candidate.get("title"))
+                break
+        if markdown is None:
+            return fd_error(
+                "bad_request",
+                f"holdings document not routable for {symbol}",
+            )
+        holdings = parse_holdings(markdown)
+        if normalized_class is not None:
+            holdings = [
+                holding
+                for holding in holdings
+                if holding.get("asset_class") == normalized_class
+            ]
+        document_as_of = parse_as_of(markdown)
+        if as_of_date is not None and document_as_of is not None:
+            document_day = _opt_date(document_as_of)
+            if document_day is not None and document_day > as_of_date:
+                return fd_error(
+                    "not_found",
+                    f"No holdings composition in effect on or before {as_of} "
+                    f"is routable for {symbol}.",
+                )
+        page_holdings = holdings[offset : offset + bounded_limit]
+        fund: JsonObject = {}
+        _set_opt(fund, "name", title)
+        _set_opt(fund, "as_of", document_as_of)
+        fund["source"] = "public fund holdings fact sheet (markdown)"
+        fund["total_holdings"] = len(holdings)
+        fund["returned"] = len(page_holdings)
+        fund["offset"] = offset
+        return index_fund_response(symbol, fund, page_holdings)
+
+    @_fd_errors
+    async def get_institutional_holdings(
+        self,
+        ticker: str | None = None,
+        filer_cik: str | None = None,
+        report_period: str | None = None,
+        report_period_gte: str | None = None,
+        report_period_lte: str | None = None,
+        report_period_gt: str | None = None,
+        report_period_lt: str | None = None,
+        limit: int = 10,
+        cursor: str | None = None,
+    ) -> JsonObject:
+        if filer_cik is not None:
+            return fd_error(
+                "bad_request", "filer_cik lookup is not routed; pass ticker instead"
+            )
+        if ticker is None:
+            raise InputError("ticker is required")
+        symbol = validate_ticker(ticker)
+        bounded_limit = validate_limit(limit, maximum=200)
+        report = _date_filters(
+            report_period,
+            report_period_gte,
+            report_period_lte,
+            report_period_gt,
+            report_period_lt,
+            prefix="report_period",
+        )
+        offset = decode_cursor(cursor)[0] if cursor is not None else 0
+        run = await self._call(
+            "get_institutional_holdings",
+            SECFORM4,
+            INSTITUTIONAL_ENDPOINT,
+            query_params={"ticker": symbol},
+        )
+        records = normalize_institutional_holdings(
+            run.output,
+            ticker=symbol,
+            limit=bounded_limit,
+            report_period=report,
+        )
+        page = paginate(records, offset=offset, path="/institutional-holdings")
+        return institutional_holdings_response(symbol, page.records, page.next_url)
+
+
+
+
+
+def _set_opt(record: JsonObject, key: str, value: JsonValue) -> None:
+    """Set an optional record field only when a sourced value exists."""
+    if value is None:
+        return
+    record[key] = value
+
+
+def _earnings_filing_sort_key(record: JsonObject) -> tuple[bool, str]:
+    filing_day = _opt_str(record.get("filing_date"))
+    return filing_day is not None, filing_day or ""
+
+
+def _latest_ten_k(filings_rows: list[JsonObject]) -> JsonObject | None:
+    """The most recent SEC-valid 10-K filing row, by report then filing date."""
+    candidates: list[tuple[date, date, JsonObject]] = []
+    for record in filings_rows:
+        form = _opt_str(record.get("form"))
+        if form is None or form.upper() != "10-K":
+            continue
+        url = _opt_str(record.get("primary_document_url"))
+        if url is None:
+            continue
+        try:
+            validate_sec_url(url)
+        except ValueError:
+            continue
+        report_day = _opt_date(record.get("report_date"))
+        filing_day = _opt_date(record.get("filing_date"))
+        if report_day is None or filing_day is None:
+            continue
+        candidates.append((report_day, filing_day, record))
+    if not candidates:
+        return None
+    candidates.sort(key=lambda item: (item[0], item[1]), reverse=True)
+    return candidates[0][2]
+
+
+def _latest_kpi_filing(
+    filings_rows: list[JsonObject], *, annual: bool
+) -> JsonObject | None:
+    """The most recent SEC-valid 10-K (annual) or 10-Q (quarterly) filing."""
+    wanted = "10-K" if annual else "10-Q"
+    candidates: list[tuple[date, date, JsonObject]] = []
+    for record in filings_rows:
+        form = _opt_str(record.get("form"))
+        if form is None or form.upper() != wanted:
+            continue
+        url = _opt_str(record.get("primary_document_url"))
+        if url is None:
+            continue
+        try:
+            validate_sec_url(url)
+        except ValueError:
+            continue
+        report_day = _opt_date(record.get("report_date"))
+        filing_day = _opt_date(record.get("filing_date"))
+        if report_day is None or filing_day is None:
+            continue
+        candidates.append((report_day, filing_day, record))
+    if not candidates:
+        return None
+    candidates.sort(key=lambda item: (item[0], item[1]), reverse=True)
+    return candidates[0][2]
+
+
+def _segment_matches(
+    record: JsonObject, report: dict[str, date | None]
+) -> bool:
+    day = _opt_date(record.get("report_period"))
+    if day is None:
+        return False
+    return _date_matches(
+        day,
+        exact=report["exact"],
+        gte=report["gte"],
+        lte=report["lte"],
+        gt=report["gt"],
+        lt=report["lt"],
+    )
+
+
+def _normalize_kpi_metrics(
+    data: JsonObject,
+    *,
+    ticker: str,
+    filing_url: str,
+    period: str,
+    metric_name: str | None,
+) -> list[JsonObject]:
+    return normalize_kpi_metrics(
+        data,
+        ticker=ticker,
+        filing_url=filing_url,
+        period=period,
+        metric_name=metric_name,
+    )
+
+
+def _normalize_kpi_guidance(
+    data: JsonObject,
+    *,
+    ticker: str,
+    filing_url: str,
+    period: str,
+    metric_name: str | None,
+) -> list[JsonObject]:
+    return normalize_kpi_guidance(
+        data,
+        ticker=ticker,
+        filing_url=filing_url,
+        period=period,
+        metric_name=metric_name,
+    )
+
+
+def _normalize_kpi_nongaap(
+    data: JsonObject,
+    *,
+    ticker: str,
+    filing_url: str,
+    period: str,
+    metric_name: str | None,
+) -> list[JsonObject]:
+    return normalize_kpi_nongaap(
+        data,
+        ticker=ticker,
+        filing_url=filing_url,
+        period=period,
+        metric_name=metric_name,
+    )
+
+
+
 def _metric_string(value: object) -> str | None:
     """Render a screener metric value as a clean string."""
     if isinstance(value, bool) or not isinstance(value, int | float):
@@ -1068,6 +1706,23 @@ def _metric_string(value: object) -> str | None:
             return str(int(value))
         return str(round(value, 6))
     return str(value)
+
+
+def _cache_key(
+    provider: str,
+    endpoint: str,
+    body: JsonObject | None,
+    query_params: JsonObject | None,
+) -> tuple[str, str, str, str]:
+    """A hashable cache key for one Monid call."""
+    return (
+        provider,
+        endpoint,
+        json.dumps(body, sort_keys=True, separators=(",", ":")) if body else "",
+        json.dumps(query_params, sort_keys=True, separators=(",", ":"))
+        if query_params
+        else "",
+    )
 
 
 def _opt_num(value: JsonValue) -> float | None:
@@ -1277,3 +1932,60 @@ def _opt_date(value: JsonValue) -> date | None:
         return None
 
 
+
+
+def _latest_filing_year(
+    value: JsonValue,
+    *,
+    filing_type: str,
+    quarter: int | None,
+    accession_number: str | None,
+) -> int | None:
+    """Return the newest year with a filing matching the year-optional request.
+
+    Used only when get_filing_items receives year=None; select_filing then
+    performs the authoritative selection within the resolved year.
+    """
+    best: int | None = None
+    for record in _filing_records(value):
+        form = record.get("form")
+        if not isinstance(form, str) or form.strip().upper() != filing_type:
+            continue
+        report_date = record.get("reportDate")
+        if not isinstance(report_date, str):
+            continue
+        try:
+            day = date.fromisoformat(report_date[:10])
+        except ValueError:
+            continue
+        if quarter is not None and ((day.month - 1) // 3) + 1 != quarter:
+            continue
+        if accession_number is not None:
+            source_url = record.get("primaryDocumentUrl")
+            if not isinstance(source_url, str) or derive_accession(source_url) != accession_number:
+                continue
+        if best is None or day.year > best:
+            best = day.year
+    return best
+
+
+def _filing_records(value: JsonValue) -> list[JsonObject]:
+    """Unwrap a DefiLlama filings payload into a list of filing rows."""
+    current = value
+    for _ in range(4):
+        if isinstance(current, list):
+            rows: list[JsonObject] = []
+            for record in current:
+                if isinstance(record, dict):
+                    rows.append(record)
+            return rows
+        if not isinstance(current, dict):
+            break
+        for key in ("data", "filings"):
+            child = current.get(key)
+            if isinstance(child, list | dict):
+                current = child
+                break
+        else:
+            break
+    return []
