@@ -34,7 +34,7 @@ import (
 // --- provider/endpoint constants (mirrors service.py's module constants) ---
 
 const (
-	defillama               = "defillama"
+	defillama                = "defillama"
 	catalogEndpoint          = "/equities/v1/companies-list"
 	summaryEndpoint          = "/equities/v1/summary"
 	statementsEndpoint       = "/equities/v1/statements"
@@ -238,7 +238,6 @@ func concurrent2(a, b func()) {
 	wg.Wait()
 }
 
-
 // --- get_company_facts ---
 
 func (c *callCtx) getCompanyFacts(args map[string]any) (Result, error) {
@@ -308,11 +307,11 @@ var emptyLabelSet = providers.NewLabelSet()
 // three statement tools and get_financial_metrics, mirroring their
 // identical parameter lists.
 type statementArgs struct {
-	ticker        string
-	period        string
-	limit         int
-	report        dateFilters
-	filing        dateFilters
+	ticker string
+	period string
+	limit  int
+	report dateFilters
+	filing dateFilters
 }
 
 // parseStatementArgs validates ticker/cik/period/limit and the two
@@ -715,7 +714,6 @@ func buildCashFlowStatement(ticker, period, reportPeriod string, fiscalPeriod *s
 	return rec
 }
 
-
 // --- get_financial_metrics ---
 
 // metricsKeyOrder mirrors service.py's _METRICS_KEY_ORDER exactly.
@@ -1091,4 +1089,1226 @@ func (c *callCtx) getNews(args map[string]any) (Result, error) {
 		records[i] = a
 	}
 	return Result{Value: records, WrapperKey: "news", Paginate: true}, nil
+}
+
+// --- get_earnings ---
+
+// earningsFeedLimit mirrors server.py's hardcoded limit=5 for the
+// market-wide earnings feed: get_earnings' FD JSON Schema exposes no limit
+// parameter at all (docs/fd-mcp-tools.json's get_earnings params are just
+// ["ticker"]), and the Python MCP surface always requests 5 regardless of
+// path (ticker or market-wide feed).
+const earningsFeedLimit = 5
+
+func (c *callCtx) getEarnings(args map[string]any) (Result, error) {
+	tickerArg, err := argString(args, "ticker")
+	if err != nil {
+		return Result{}, err
+	}
+	var records []fd.EarningsRecord
+	if tickerArg == nil {
+		records, err = c.earningsFeed(earningsFeedLimit)
+	} else {
+		var symbol string
+		symbol, err = validateTicker(*tickerArg)
+		if err == nil {
+			records, err = c.earningsForTicker(symbol, earningsFeedLimit)
+		}
+	}
+	if err != nil {
+		return Result{}, err
+	}
+	out := make([]any, len(records))
+	for i, r := range records {
+		out[i] = r
+	}
+	return Result{Value: out, WrapperKey: "earnings", Paginate: true}, nil
+}
+
+// earningsForTicker composes earnings records for one ticker from
+// statements + filings, mirroring service._earnings_for_ticker. Per this
+// port's brief, the two independent Monid calls run concurrently instead
+// of the Python source's sequential await/await (measured 2.1x faster).
+func (c *callCtx) earningsForTicker(ticker string, limit int) ([]fd.EarningsRecord, error) {
+	var statementsRun *monid.Run
+	var statementsErr error
+	var filingsRun *monid.Run
+	var filingsErr error
+	concurrent2(
+		func() {
+			statementsRun, statementsErr = c.run(defillama, statementsEndpoint, nil,
+				map[string]any{"ticker": ticker, "country": "US"})
+		},
+		func() {
+			filingsRun, filingsErr = c.run(defillama, filingsEndpoint, nil,
+				map[string]any{"ticker": ticker, "country": "US"})
+		},
+	)
+	if statementsErr != nil {
+		return nil, statementsErr
+	}
+	if filingsErr != nil {
+		return nil, filingsErr
+	}
+	statementsValue, err := unmarshalRun(statementsRun)
+	if err != nil {
+		return nil, err
+	}
+	filings, err := providers.NormalizeFilings(filingsRun.Output, ticker, nil, 10_000, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	data, err := providers.NormalizeEarnings(statementsValue, filingsToRaw(filings), ticker, limit)
+	if err != nil {
+		return nil, err
+	}
+	return data.Records, nil
+}
+
+func filingsToRaw(filings []fd.Filing) []providers.RawFiling {
+	out := make([]providers.RawFiling, 0, len(filings))
+	for _, f := range filings {
+		if f.FilingDate == nil || f.ReportDate == nil || f.FilingType == nil || f.URL == nil {
+			continue
+		}
+		out = append(out, providers.RawFiling{
+			FilingDate: *f.FilingDate, ReportDate: *f.ReportDate, Form: *f.FilingType, PrimaryDocumentURL: *f.URL,
+		})
+	}
+	return out
+}
+
+// earningsFeed composes the market-wide earnings feed from the Nasdaq
+// calendar, mirroring service._earnings_feed. Per this port's brief, the
+// per-reporter earningsForTicker calls fan out over goroutines instead of
+// the Python source's sequential loop.
+func (c *callCtx) earningsFeed(limit int) ([]fd.EarningsRecord, error) {
+	calendarRun, err := c.run(nasdaq, earningsCalendarEndpoint, nil, map[string]any{"limit": limit})
+	if err != nil {
+		return nil, err
+	}
+	value, err := unmarshalRun(calendarRun)
+	if err != nil {
+		return nil, err
+	}
+	reporters, err := parseEarningsCalendar(value, limit)
+	if err != nil {
+		return nil, err
+	}
+	// entry_symbol = validate_ticker(reporter.ticker) runs unguarded in
+	// Python (outside the try/except around the per-ticker composition),
+	// so one malformed calendar ticker fails the whole feed request - this
+	// pre-validation pass mirrors that before any fan-out starts.
+	symbols := make([]string, len(reporters))
+	for i, reporter := range reporters {
+		symbol, verr := validateTicker(reporter.Ticker)
+		if verr != nil {
+			return nil, verr
+		}
+		symbols[i] = symbol
+	}
+
+	batches := make([][]fd.EarningsRecord, len(symbols))
+	var wg sync.WaitGroup
+	wg.Add(len(symbols))
+	for i, symbol := range symbols {
+		go func(i int, symbol string) {
+			defer wg.Done()
+			composed, cerr := c.earningsForTicker(symbol, 1)
+			if cerr != nil {
+				// mirrors `except (UpstreamError, SchemaDriftError): continue` -
+				// earningsForTicker can only fail with a *monid.RunError or a
+				// *providers.SchemaDriftError, both swallowed here.
+				return
+			}
+			batches[i] = composed
+		}(i, symbol)
+	}
+	wg.Wait()
+
+	var records []fd.EarningsRecord
+	for _, batch := range batches {
+		records = append(records, batch...)
+	}
+	sort.SliceStable(records, func(i, j int) bool { return earningsRecordNewer(records[i], records[j]) })
+	return records, nil
+}
+
+// earningsRecordNewer mirrors service._earnings_filing_sort_key under
+// reverse=True: records with a filing_date sort before those without one;
+// among dated records, the newer filing_date sorts first.
+func earningsRecordNewer(a, b fd.EarningsRecord) bool {
+	aHas, bHas := a.FilingDate != nil, b.FilingDate != nil
+	if aHas != bHas {
+		return aHas
+	}
+	if !aHas {
+		return false
+	}
+	return *a.FilingDate > *b.FilingDate
+}
+
+// earningsCalendarEntry mirrors earnings.EarningsCalendarEntry.
+type earningsCalendarEntry struct {
+	Ticker     string
+	ReportDate *time.Time
+	FilingDate *time.Time
+}
+
+// calendarRows mirrors earnings._calendar_rows.
+func calendarRows(value any) ([]any, error) {
+	current := value
+	for i := 0; i < 5; i++ {
+		if arr, ok := current.([]any); ok {
+			return arr, nil
+		}
+		obj, ok := current.(map[string]any)
+		if !ok {
+			break
+		}
+		var child any
+		for _, key := range []string{"rows", "results", "data", "earnings", "calendar"} {
+			if c, exists := obj[key]; exists {
+				switch c.(type) {
+				case []any, map[string]any:
+					child = c
+				}
+			}
+			if child != nil {
+				break
+			}
+		}
+		if child == nil {
+			break
+		}
+		current = child
+	}
+	return nil, &providers.SchemaDriftError{Msg: "Nasdaq earnings calendar payload is not parseable"}
+}
+
+// parseEarningsCalendar mirrors earnings.parse_earnings_calendar: unique
+// reporters ordered most-recent first by filing date then report date.
+func parseEarningsCalendar(value any, limit int) ([]earningsCalendarEntry, error) {
+	rows, err := calendarRows(value)
+	if err != nil {
+		return nil, err
+	}
+	entries := make([]earningsCalendarEntry, 0, len(rows))
+	for index, rawRow := range rows {
+		row, ok := rawRow.(map[string]any)
+		if !ok {
+			return nil, &providers.SchemaDriftError{Msg: fmt.Sprintf("Nasdaq earnings calendar row[%d] must be an object", index)}
+		}
+		ticker := firstStringGeneric(row, "ticker", "symbol")
+		if ticker == nil {
+			continue
+		}
+		entries = append(entries, earningsCalendarEntry{
+			Ticker:     strings.ToUpper(*ticker),
+			ReportDate: firstDateGeneric(row, "reportDate", "report_date", "periodEnding", "date"),
+			FilingDate: firstDateGeneric(row, "filingDate", "filing_date"),
+		})
+	}
+	if len(entries) == 0 {
+		return nil, nil
+	}
+	sort.SliceStable(entries, func(i, j int) bool { return calendarEntryNewer(entries[i], entries[j]) })
+	seen := map[string]bool{}
+	unique := make([]earningsCalendarEntry, 0, limit)
+	for _, entry := range entries {
+		if seen[entry.Ticker] {
+			continue
+		}
+		seen[entry.Ticker] = true
+		unique = append(unique, entry)
+		if len(unique) >= limit {
+			break
+		}
+	}
+	return unique, nil
+}
+
+func calendarEntryNewer(a, b earningsCalendarEntry) bool {
+	aFiling, bFiling := a.FilingDate != nil, b.FilingDate != nil
+	if aFiling != bFiling {
+		return aFiling
+	}
+	if aFiling {
+		if !a.FilingDate.Equal(*b.FilingDate) {
+			return a.FilingDate.After(*b.FilingDate)
+		}
+	}
+	aReport, bReport := a.ReportDate != nil, b.ReportDate != nil
+	if aReport != bReport {
+		return aReport
+	}
+	if aReport && !a.ReportDate.Equal(*b.ReportDate) {
+		return a.ReportDate.After(*b.ReportDate)
+	}
+	return a.Ticker > b.Ticker
+}
+
+func firstDateGeneric(record map[string]any, keys ...string) *time.Time {
+	for _, key := range keys {
+		s, ok := record[key].(string)
+		if !ok || s == "" {
+			continue
+		}
+		text := s
+		if len(text) > 10 {
+			text = text[:10]
+		}
+		if t, err := time.Parse(dateLayout, text); err == nil {
+			return &t
+		}
+	}
+	return nil
+}
+
+// --- get_insider_trades ---
+
+func (c *callCtx) getInsiderTrades(args map[string]any) (Result, error) {
+	tickerArg, err := argString(args, "ticker")
+	if err != nil {
+		return Result{}, err
+	}
+	if tickerArg == nil {
+		return Result{}, &providers.InputError{Msg: "ticker is required"}
+	}
+	formTypeArg, err := argString(args, "form_type")
+	if err != nil {
+		return Result{}, err
+	}
+	if formTypeArg != nil {
+		return Result{}, &providers.InputError{Msg: "form_type filtering is not supported: the validated SECForm4 route " +
+			"does not report form types"}
+	}
+	symbol, err := validateTicker(*tickerArg)
+	if err != nil {
+		return Result{}, err
+	}
+	limitRaw, err := argIntDefault(args, "limit", 100)
+	if err != nil {
+		return Result{}, err
+	}
+	limit, err := validateLimit(limitRaw, 15)
+	if err != nil {
+		return Result{}, err
+	}
+	nameArg, err := argString(args, "name")
+	if err != nil {
+		return Result{}, err
+	}
+	transactionTypeArg, err := argString(args, "transaction_type")
+	if err != nil {
+		return Result{}, err
+	}
+	filingDateArg, err := argString(args, "filing_date")
+	if err != nil {
+		return Result{}, err
+	}
+	filingDateGTEArg, err := argString(args, "filing_date_gte")
+	if err != nil {
+		return Result{}, err
+	}
+	filingDateLTEArg, err := argString(args, "filing_date_lte")
+	if err != nil {
+		return Result{}, err
+	}
+	if _, verr := validateDate(filingDateArg, "filing_date"); verr != nil {
+		return Result{}, verr
+	}
+	if _, verr := validateDate(filingDateGTEArg, "filing_date_gte"); verr != nil {
+		return Result{}, verr
+	}
+	if _, verr := validateDate(filingDateLTEArg, "filing_date_lte"); verr != nil {
+		return Result{}, verr
+	}
+	run, err := c.run(secform4, insiderEndpoint, nil, map[string]any{"query": symbol})
+	if err != nil {
+		return Result{}, err
+	}
+	trades, err := providers.NormalizeInsiderTrades(run.Output, symbol, limit, nameArg, transactionTypeArg,
+		filingDateArg, filingDateGTEArg, filingDateLTEArg)
+	if err != nil {
+		return Result{}, err
+	}
+	out := make([]any, len(trades))
+	for i, t := range trades {
+		out[i] = t
+	}
+	return Result{Value: out, WrapperKey: "insider_trades", Paginate: true}, nil
+}
+
+// --- screen_stocks / list_stock_screener_filters ---
+
+func (c *callCtx) screenStocks(args map[string]any) (Result, error) {
+	currencyArg, err := argString(args, "currency")
+	if err != nil {
+		return Result{}, err
+	}
+	if currencyArg != nil && *currencyArg != "USD" {
+		return Result{}, &providers.InputError{Msg: "only USD currency is supported by the Monid-backed server."}
+	}
+	filtersArg, present, err := argObjectSlice(args, "filters")
+	if err != nil {
+		return Result{}, err
+	}
+	if !present {
+		return Result{}, &providers.InputError{Msg: "filters is required and must include exchange and/or market_cap"}
+	}
+	limitRaw, err := argIntDefault(args, "limit", 10)
+	if err != nil {
+		return Result{}, err
+	}
+	limit, err := validateLimit(limitRaw, 100)
+	if err != nil {
+		return Result{}, err
+	}
+	request, err := providers.ValidateScreenerRequest(filtersArg, limit, 0)
+	if err != nil {
+		return Result{}, err
+	}
+	queryParams := make(map[string]any, len(request.QueryParams))
+	for k, v := range request.QueryParams {
+		queryParams[k] = v
+	}
+	run, err := c.run(nasdaq, screenerEndpoint, nil, queryParams)
+	if err != nil {
+		return Result{}, err
+	}
+	rows, err := providers.NormalizeScreener(run.Output)
+	if err != nil {
+		return Result{}, err
+	}
+	var exchange *string
+	if v, ok := request.QueryParams["exchange"]; ok {
+		exchange = &v
+	}
+	results := providers.BuildSearchResults(rows, exchange, limit)
+	out := make([]any, len(results))
+	for i, r := range results {
+		out[i] = r
+	}
+	return Result{Value: out, WrapperKey: "search_results"}, nil
+}
+
+func (c *callCtx) listStockScreenerFilters(args map[string]any) (Result, error) {
+	return Result{Value: providers.ScreenerFilters()}, nil
+}
+
+// --- get_filing_items / list_filing_item_types ---
+
+func (c *callCtx) getFilingItems(args map[string]any) (Result, error) {
+	includeExhibits, err := argBoolDefault(args, "include_exhibits", false)
+	if err != nil {
+		return Result{}, err
+	}
+	if includeExhibits {
+		return Result{}, &providers.InputError{Msg: "include_exhibits is not supported: the validated route cannot " +
+			"identify and fetch filing exhibits"}
+	}
+	accessionArg, err := argString(args, "accession_number")
+	if err != nil {
+		return Result{}, err
+	}
+	normalizedAccession, err := providers.NormalizeAccession(accessionArg)
+	if err != nil {
+		return Result{}, err
+	}
+	tickerArg, err := argString(args, "ticker")
+	if err != nil {
+		return Result{}, err
+	}
+	if tickerArg == nil {
+		return Result{}, &providers.InputError{Msg: "ticker is required"}
+	}
+	filingTypeArg, err := argString(args, "filing_type")
+	if err != nil {
+		return Result{}, err
+	}
+	if filingTypeArg == nil {
+		return Result{}, &providers.InputError{Msg: "filing_type is required"}
+	}
+	yearArg, err := argInt(args, "year")
+	if err != nil {
+		return Result{}, err
+	}
+	quarterArg, err := argInt(args, "quarter")
+	if err != nil {
+		return Result{}, err
+	}
+	itemArg, err := argString(args, "item")
+	if err != nil {
+		return Result{}, err
+	}
+
+	var symbol, normalizedType string
+	var selectedYear int
+	var selectedQuarter *int
+	var selectedItem *providers.FilingItem
+	var filingsRun *monid.Run
+
+	if yearArg == nil {
+		symbol, err = validateTicker(*tickerArg)
+		if err != nil {
+			return Result{}, err
+		}
+		normalizedType, err = providers.ValidateCatalogFilingType(*filingTypeArg)
+		if err != nil {
+			return Result{}, err
+		}
+		if quarterArg != nil && (*quarterArg < 1 || *quarterArg > 4) {
+			return Result{}, &providers.InputError{Msg: "quarter must be between 1 and 4"}
+		}
+		if itemArg != nil {
+			resolved, rerr := providers.ResolveItem(normalizedType, *itemArg)
+			if rerr != nil {
+				return Result{}, rerr
+			}
+			selectedItem = &resolved
+		}
+		filingsRun, err = c.run(defillama, filingsEndpoint, nil, map[string]any{"ticker": symbol, "country": "US"})
+		if err != nil {
+			return Result{}, err
+		}
+		filingsValue, uerr := unmarshalRun(filingsRun)
+		if uerr != nil {
+			return Result{}, uerr
+		}
+		year, yerr := latestFilingYear(filingsValue, normalizedType, quarterArg, normalizedAccession)
+		if yerr != nil {
+			return Result{}, yerr
+		}
+		selectedQuarter = quarterArg
+		if year == nil {
+			return Result{Value: fd.NewErrorResponse("not_found", "No "+normalizedType+" filing matches ticker "+symbol+".")}, nil
+		}
+		selectedYear = *year
+	} else {
+		symbol, normalizedType, selectedYear, selectedQuarter, selectedItem, err = providers.ValidateFilingItemRequest(
+			*tickerArg, *filingTypeArg, *yearArg, quarterArg, itemArg)
+		if err != nil {
+			return Result{}, err
+		}
+		filingsRun, err = c.run(defillama, filingsEndpoint, nil, map[string]any{"ticker": symbol, "country": "US"})
+		if err != nil {
+			return Result{}, err
+		}
+	}
+
+	filingsValue, err := unmarshalRun(filingsRun)
+	if err != nil {
+		return Result{}, err
+	}
+	selection, err := providers.SelectFiling(filingsValue, normalizedType, selectedYear, selectedQuarter, normalizedAccession)
+	if err != nil {
+		return Result{}, err
+	}
+	if selection.Filing == nil {
+		message := fmt.Sprintf("No %s filing matches ticker %s, year %d", normalizedType, symbol, selectedYear)
+		if selectedQuarter != nil {
+			message += fmt.Sprintf(", quarter %d.", *selectedQuarter)
+		} else {
+			message += "."
+		}
+		return Result{Value: fd.NewErrorResponse("not_found", message)}, nil
+	}
+	selected := *selection.Filing
+	sourceURL, err := providers.ValidateSECURL(selected.SourceURL)
+	if err != nil {
+		return Result{}, &monid.RunError{Kind: monid.ErrProviderHTTP, Message: err.Error()}
+	}
+	// timeoutMS: 30_000 here matches service.py's get_filing_items scrape
+	// call exactly; other scrape call sites (interest rates, index fund)
+	// use 60_000.
+	scrapeRun, err := c.run(contextDev, scrapeEndpoint, nil, map[string]any{
+		"url": sourceURL, "includeLinks": false, "includeImages": false,
+		"useMainContentOnly": true, "timeoutMS": 30_000,
+	})
+	if err != nil {
+		return Result{}, err
+	}
+	scrapeValue, err := unmarshalRun(scrapeRun)
+	if err != nil {
+		return Result{}, err
+	}
+	markdown, _, err := providers.ParseScrapePayload(scrapeValue, sourceURL)
+	if err != nil {
+		return Result{}, err
+	}
+	sections, err := providers.ParseFilingSections(markdown, normalizedType, selectedItem)
+	if err != nil {
+		return Result{}, err
+	}
+	items := make([]fd.FilingItem, 0, len(sections))
+	for _, section := range sections {
+		number, _ := section["item"].(string)
+		name, _ := section["title"].(string)
+		text, _ := section["content"].(string)
+		items = append(items, providers.FilingItemRecord(number, name, text))
+	}
+	if selectedItem != nil && len(items) == 0 {
+		return Result{Value: fd.NewErrorResponse("not_found",
+			fmt.Sprintf("Filing %s has no item %s.", selected.AccessionNumber, selectedItem.Name))}, nil
+	}
+	reportDay, err := time.Parse(dateLayout, selected.ReportDate)
+	if err != nil {
+		return Result{}, &providers.SchemaDriftError{Msg: "selected filing report_date is not ISO-8601"}
+	}
+	var accessionPtr *string
+	if selected.AccessionNumber != "" {
+		accession := selected.AccessionNumber
+		accessionPtr = &accession
+	}
+	var quarterPtr *int
+	if normalizedType != "10-K" {
+		q := ((int(reportDay.Month()) - 1) / 3) + 1
+		quarterPtr = &q
+	}
+	response := providers.BuildFilingItemsResponse(sourceURL, symbol, selected.Form, accessionPtr, reportDay.Year(), quarterPtr, items)
+	return Result{Value: response}, nil
+}
+
+// latestFilingYear mirrors service._latest_filing_year: the newest year
+// with a filing matching filingType (and, if given, quarter/accession),
+// used only when get_filing_items receives year=nil.
+func latestFilingYear(value any, filingType string, quarter *int, accessionNumber *string) (*int, error) {
+	records, err := filingRecordsRaw(value)
+	if err != nil {
+		return nil, err
+	}
+	var best *int
+	for _, record := range records {
+		form, ok := record["form"].(string)
+		if !ok || strings.ToUpper(strings.TrimSpace(form)) != filingType {
+			continue
+		}
+		reportDate, ok := record["reportDate"].(string)
+		if !ok {
+			continue
+		}
+		text := reportDate
+		if len(text) > 10 {
+			text = text[:10]
+		}
+		day, perr := time.Parse(dateLayout, text)
+		if perr != nil {
+			continue
+		}
+		if quarter != nil {
+			q := ((int(day.Month()) - 1) / 3) + 1
+			if q != *quarter {
+				continue
+			}
+		}
+		if accessionNumber != nil {
+			sourceURL, ok := record["primaryDocumentUrl"].(string)
+			if !ok {
+				continue
+			}
+			acc := providers.DeriveAccession(sourceURL)
+			if acc == nil || *acc != *accessionNumber {
+				continue
+			}
+		}
+		year := day.Year()
+		if best == nil || year > *best {
+			y := year
+			best = &y
+		}
+	}
+	return best, nil
+}
+
+// filingRecordsRaw mirrors service._filing_records: unwraps a DefiLlama
+// filings payload into its row list, descending through "data"/"filings"
+// wrapper keys up to four levels.
+func filingRecordsRaw(value any) ([]map[string]any, error) {
+	current := value
+	for i := 0; i < 4; i++ {
+		if arr, ok := current.([]any); ok {
+			records := make([]map[string]any, 0, len(arr))
+			for index, item := range arr {
+				obj, ok := item.(map[string]any)
+				if !ok {
+					return nil, &providers.SchemaDriftError{Msg: fmt.Sprintf("filing row %d is not an object", index)}
+				}
+				records = append(records, obj)
+			}
+			return records, nil
+		}
+		obj, ok := current.(map[string]any)
+		if !ok {
+			break
+		}
+		advanced := false
+		for _, key := range []string{"data", "filings"} {
+			child, exists := obj[key]
+			if !exists {
+				continue
+			}
+			switch child.(type) {
+			case []any, map[string]any:
+				current = child
+				advanced = true
+			}
+			if advanced {
+				break
+			}
+		}
+		if !advanced {
+			break
+		}
+	}
+	return nil, &providers.SchemaDriftError{Msg: "DefiLlama payload omitted filing records"}
+}
+
+func (c *callCtx) listFilingItemTypes(args map[string]any) (Result, error) {
+	filingTypeArg, err := argString(args, "filing_type")
+	if err != nil {
+		return Result{}, err
+	}
+	response, err := providers.ListFilingItemTypes(filingTypeArg)
+	if err != nil {
+		return Result{}, err
+	}
+	return Result{Value: response}, nil
+}
+
+// --- get_segmented_financials ---
+
+func (c *callCtx) getSegmentedFinancials(args map[string]any) (Result, error) {
+	tickerArg, err := argString(args, "ticker")
+	if err != nil {
+		return Result{}, err
+	}
+	if tickerArg == nil {
+		return Result{}, &providers.InputError{Msg: "ticker is required"}
+	}
+	symbol, err := validateTicker(*tickerArg)
+	if err != nil {
+		return Result{}, err
+	}
+	periodRaw, err := argStringDefault(args, "period", "annual")
+	if err != nil {
+		return Result{}, err
+	}
+	period, err := validatePeriod(periodRaw)
+	if err != nil {
+		return Result{}, err
+	}
+	if period != "annual" {
+		return Result{}, &providers.InputError{Msg: "period must be annual: the validated route extracts the annual 10-K"}
+	}
+	limitRaw, err := argIntDefault(args, "limit", 4)
+	if err != nil {
+		return Result{}, err
+	}
+	limit, err := validateLimit(limitRaw, 100)
+	if err != nil {
+		return Result{}, err
+	}
+	report, err := parseDateFilterGroup(args, "report_period")
+	if err != nil {
+		return Result{}, err
+	}
+
+	filingsRun, err := c.run(defillama, filingsEndpoint, nil, map[string]any{"ticker": symbol, "country": "US"})
+	if err != nil {
+		return Result{}, err
+	}
+	filings, err := providers.NormalizeFilings(filingsRun.Output, symbol, nil, 10_000, nil, nil)
+	if err != nil {
+		return Result{}, err
+	}
+	filing := latestFilingByForm(filings, "10-K")
+	if filing == nil {
+		return Result{Value: fd.NewErrorResponse("not_found", "No 10-K filing exists for ticker "+symbol+".")}, nil
+	}
+	filingURL := ""
+	if filing.URL != nil {
+		filingURL = *filing.URL
+	}
+	accession := providers.DeriveAccession(filingURL)
+
+	extractRun, err := c.run(contextDev, extractEndpoint,
+		extractRequestBody(filingURL, segmentExtractSchema(), segmentInstructions), nil)
+	if err != nil {
+		return Result{}, err
+	}
+	data, err := parseExtractOutput(extractRun.Output)
+	if err != nil {
+		return Result{}, err
+	}
+	records, err := normalizeSegmentedFinancials(data, symbol, filingURL, accession)
+	if err != nil {
+		return Result{}, err
+	}
+	out := make([]any, 0, len(records))
+	for _, record := range records {
+		if !report.any() || report.matches(record.ReportPeriod) {
+			out = append(out, record.Object)
+		}
+		if len(out) >= limit {
+			break
+		}
+	}
+	return Result{Value: out, WrapperKey: "segmented_financials", Paginate: true}, nil
+}
+
+// latestFilingByForm mirrors the shared shape of service._latest_ten_k and
+// service._latest_kpi_filing: the most recent SEC-valid filing of one form,
+// by (report_date, filing_date) descending.
+func latestFilingByForm(filings []fd.Filing, wantedForm string) *fd.Filing {
+	var best *fd.Filing
+	var bestReport, bestFiling string
+	for i := range filings {
+		f := filings[i]
+		if f.FilingType == nil || strings.ToUpper(*f.FilingType) != wantedForm {
+			continue
+		}
+		if f.URL == nil {
+			continue
+		}
+		if _, verr := providers.ValidateSECURL(*f.URL); verr != nil {
+			continue
+		}
+		if f.ReportDate == nil || f.FilingDate == nil {
+			continue
+		}
+		if best == nil || *f.ReportDate > bestReport || (*f.ReportDate == bestReport && *f.FilingDate > bestFiling) {
+			fCopy := f
+			best = &fCopy
+			bestReport, bestFiling = *f.ReportDate, *f.FilingDate
+		}
+	}
+	return best
+}
+
+// --- get_kpi_metrics / get_kpi_guidance / get_kpi_non_gaap ---
+
+// kpiExtractArgs is the shared, pre-validated argument set for the three
+// KPI extraction tools, mirroring their identical parameter lists.
+type kpiExtractArgs struct {
+	ticker     string
+	period     string
+	metricName *string
+	gte        *time.Time
+	gteStr     *string
+	lte        *time.Time
+	limit      int
+}
+
+func parseKPIExtractArgs(args map[string]any) (kpiExtractArgs, error) {
+	tickerArg, err := argString(args, "ticker")
+	if err != nil {
+		return kpiExtractArgs{}, err
+	}
+	if tickerArg == nil {
+		return kpiExtractArgs{}, &providers.InputError{Msg: "ticker is required"}
+	}
+	symbol, err := validateTicker(*tickerArg)
+	if err != nil {
+		return kpiExtractArgs{}, err
+	}
+	periodRaw, err := argStringDefault(args, "period", "quarterly")
+	if err != nil {
+		return kpiExtractArgs{}, err
+	}
+	period, err := validateKPIPeriod(periodRaw)
+	if err != nil {
+		return kpiExtractArgs{}, err
+	}
+	metricName, err := argString(args, "metric_name")
+	if err != nil {
+		return kpiExtractArgs{}, err
+	}
+	gteArg, err := argString(args, "report_period_gte")
+	if err != nil {
+		return kpiExtractArgs{}, err
+	}
+	gte, err := validateDate(gteArg, "report_period_gte")
+	if err != nil {
+		return kpiExtractArgs{}, err
+	}
+	lteArg, err := argString(args, "report_period_lte")
+	if err != nil {
+		return kpiExtractArgs{}, err
+	}
+	lte, err := validateDate(lteArg, "report_period_lte")
+	if err != nil {
+		return kpiExtractArgs{}, err
+	}
+	limitRaw, err := argIntDefault(args, "limit", 4)
+	if err != nil {
+		return kpiExtractArgs{}, err
+	}
+	limit, err := validateLimit(limitRaw, 50)
+	if err != nil {
+		return kpiExtractArgs{}, err
+	}
+	return kpiExtractArgs{ticker: symbol, period: period, metricName: metricName, gte: gte, lte: lte, limit: limit}, nil
+}
+
+// kpiFiling fetches the filings run, joins the latest matching 10-K/10-Q,
+// and runs the /web/extract call, mirroring the shared prologue of
+// service._kpi_extract_response (through parse_extract_output). ok is
+// false when no matching filing exists (the caller renders a not_found FD
+// error) or the filing's report_period falls outside [gte, lte] (the
+// caller renders an empty list, per Python's early
+// `list_response(response_key, [], None)` return).
+func (c *callCtx) kpiFiling(parsed kpiExtractArgs, schema map[string]any, instructions string) (data map[string]any, filingURL string, found, inRange bool, err error) {
+	filingsRun, rerr := c.run(defillama, filingsEndpoint, nil, map[string]any{"ticker": parsed.ticker, "country": "US"})
+	if rerr != nil {
+		return nil, "", false, false, rerr
+	}
+	filings, nerr := providers.NormalizeFilings(filingsRun.Output, parsed.ticker, nil, 10_000, nil, nil)
+	if nerr != nil {
+		return nil, "", false, false, nerr
+	}
+	wanted := "10-Q"
+	if parsed.period == "annual" {
+		wanted = "10-K"
+	}
+	filing := latestFilingByForm(filings, wanted)
+	if filing == nil {
+		return nil, "", false, false, nil
+	}
+	if filing.ReportDate != nil {
+		reportDay, perr := time.Parse(dateLayout, *filing.ReportDate)
+		if perr == nil {
+			if (parsed.gte != nil && reportDay.Before(*parsed.gte)) || (parsed.lte != nil && reportDay.After(*parsed.lte)) {
+				return nil, "", true, false, nil
+			}
+		}
+	}
+	if filing.URL != nil {
+		filingURL = *filing.URL
+	}
+	extractRun, cerr := c.run(contextDev, extractEndpoint, extractRequestBody(filingURL, schema, instructions), nil)
+	if cerr != nil {
+		return nil, "", true, true, cerr
+	}
+	data, perr := parseExtractOutput(extractRun.Output)
+	if perr != nil {
+		return nil, "", true, true, perr
+	}
+	return data, filingURL, true, true, nil
+}
+
+func (c *callCtx) getKPIMetrics(args map[string]any) (Result, error) {
+	parsed, err := parseKPIExtractArgs(args)
+	if err != nil {
+		return Result{}, err
+	}
+	data, filingURL, found, inRange, err := c.kpiFiling(parsed, kpiMetricsExtractSchema(), kpiMetricsInstructions)
+	if err != nil {
+		return Result{}, err
+	}
+	if !found {
+		wanted := "10-Q"
+		if parsed.period == "annual" {
+			wanted = "10-K"
+		}
+		return Result{Value: fd.NewErrorResponse("not_found", "No "+wanted+" filing exists for ticker "+parsed.ticker+".")}, nil
+	}
+	if !inRange {
+		return Result{Value: []any{}, WrapperKey: "kpi_metrics", Paginate: true}, nil
+	}
+	records, err := normalizeKPIMetrics(data, parsed.ticker, filingURL, &parsed.period, parsed.metricName)
+	if err != nil {
+		return Result{}, err
+	}
+	if len(records) > parsed.limit {
+		records = records[:parsed.limit]
+	}
+	out := make([]any, len(records))
+	for i, r := range records {
+		out[i] = r
+	}
+	return Result{Value: out, WrapperKey: "kpi_metrics", Paginate: true}, nil
+}
+
+func (c *callCtx) getKPIGuidance(args map[string]any) (Result, error) {
+	parsed, err := parseKPIExtractArgs(args)
+	if err != nil {
+		return Result{}, err
+	}
+	data, filingURL, found, inRange, err := c.kpiFiling(parsed, kpiGuidanceExtractSchema(), kpiGuidanceInstructions)
+	if err != nil {
+		return Result{}, err
+	}
+	if !found {
+		wanted := "10-Q"
+		if parsed.period == "annual" {
+			wanted = "10-K"
+		}
+		return Result{Value: fd.NewErrorResponse("not_found", "No "+wanted+" filing exists for ticker "+parsed.ticker+".")}, nil
+	}
+	if !inRange {
+		return Result{Value: []any{}, WrapperKey: "kpi_guidance", Paginate: true}, nil
+	}
+	records, err := normalizeKPIGuidance(data, parsed.ticker, filingURL, &parsed.period, parsed.metricName)
+	if err != nil {
+		return Result{}, err
+	}
+	if len(records) > parsed.limit {
+		records = records[:parsed.limit]
+	}
+	out := make([]any, len(records))
+	for i, r := range records {
+		out[i] = r
+	}
+	return Result{Value: out, WrapperKey: "kpi_guidance", Paginate: true}, nil
+}
+
+func (c *callCtx) getKPINonGAAP(args map[string]any) (Result, error) {
+	parsed, err := parseKPIExtractArgs(args)
+	if err != nil {
+		return Result{}, err
+	}
+	data, filingURL, found, inRange, err := c.kpiFiling(parsed, kpiNonGAAPExtractSchema(), kpiNonGAAPInstructions)
+	if err != nil {
+		return Result{}, err
+	}
+	if !found {
+		wanted := "10-Q"
+		if parsed.period == "annual" {
+			wanted = "10-K"
+		}
+		return Result{Value: fd.NewErrorResponse("not_found", "No "+wanted+" filing exists for ticker "+parsed.ticker+".")}, nil
+	}
+	if !inRange {
+		return Result{Value: []any{}, WrapperKey: "kpi_non_gaap", Paginate: true}, nil
+	}
+	records, err := normalizeKPINonGAAP(data, parsed.ticker, filingURL, &parsed.period, parsed.metricName)
+	if err != nil {
+		return Result{}, err
+	}
+	if len(records) > parsed.limit {
+		records = records[:parsed.limit]
+	}
+	out := make([]any, len(records))
+	for i, r := range records {
+		out[i] = r
+	}
+	return Result{Value: out, WrapperKey: "kpi_non_gaap", Paginate: true}, nil
+}
+
+// --- get_interest_rates ---
+
+// getInterestRates mirrors service.get_interest_rates. Per this port's
+// brief, the four central-bank scrapes fan out over goroutines instead of
+// the Python source's sequential loop; a bank whose page can't be fetched
+// or parsed is omitted, exactly as Python's `except (UpstreamError,
+// SchemaDriftError): continue` does, and never fails the whole call.
+func (c *callCtx) getInterestRates(args map[string]any) (Result, error) {
+	results := make([]*fd.InterestRate, len(bankSpecs))
+	var wg sync.WaitGroup
+	wg.Add(len(bankSpecs))
+	for i, spec := range bankSpecs {
+		go func(i int, spec bankSpec) {
+			defer wg.Done()
+			run, err := c.run(contextDev, scrapeEndpoint, nil, interestRateScrapeQuery(spec.URL))
+			if err != nil {
+				return
+			}
+			markdown, perr := parseInterestRateScrapeMarkdown(run.Output, spec.URL)
+			if perr != nil {
+				return
+			}
+			rate := parsePolicyRate(markdown, spec.Bank)
+			if rate == nil {
+				return
+			}
+			bank, name, value := rate.Bank, rate.Name, rate.Rate
+			results[i] = &fd.InterestRate{Bank: &bank, Name: &name, Rate: &value, Date: rate.Date}
+		}(i, spec)
+	}
+	wg.Wait()
+	records := make([]any, 0, len(bankSpecs))
+	for _, r := range results {
+		if r != nil {
+			records = append(records, *r)
+		}
+	}
+	return Result{Value: records, WrapperKey: "interest_rates"}, nil
+}
+
+// --- get_index_fund ---
+
+func (c *callCtx) getIndexFund(args map[string]any) (Result, error) {
+	tickerArg, err := argString(args, "ticker")
+	if err != nil {
+		return Result{}, err
+	}
+	if tickerArg == nil {
+		return Result{}, &providers.InputError{Msg: "ticker is required"}
+	}
+	symbol, err := validateTicker(*tickerArg)
+	if err != nil {
+		return Result{}, err
+	}
+	asOfArg, err := argString(args, "as_of")
+	if err != nil {
+		return Result{}, err
+	}
+	asOfDate, err := validateDate(asOfArg, "as_of")
+	if err != nil {
+		return Result{}, err
+	}
+	assetClassArg, err := argString(args, "asset_class")
+	if err != nil {
+		return Result{}, err
+	}
+	normalizedClass, err := validateAssetClass(assetClassArg)
+	if err != nil {
+		return Result{}, err
+	}
+	limitRaw, err := argIntDefault(args, "limit", 50)
+	if err != nil {
+		return Result{}, err
+	}
+	limit, err := validateLimit(limitRaw, 1000)
+	if err != nil {
+		return Result{}, err
+	}
+	offset, err := argIntDefault(args, "offset", 0)
+	if err != nil {
+		return Result{}, err
+	}
+	if offset < 0 {
+		return Result{}, &providers.InputError{Msg: "offset must be a non-negative integer"}
+	}
+
+	searchRun, err := c.run(contextDev, indexFundSearchEndpoint, indexFundSearchRequestBody(symbol), nil)
+	if err != nil {
+		return Result{}, err
+	}
+	candidates, err := pickHoldingsCandidates(searchRun.Output, symbol)
+	if err != nil {
+		return Result{}, err
+	}
+	var markdown string
+	var title *string
+	found := false
+	max := len(candidates)
+	if max > 3 {
+		max = 3
+	}
+	for _, candidate := range candidates[:max] {
+		run, rerr := c.run(contextDev, scrapeEndpoint, nil, indexFundScrapeQuery(candidate.URL))
+		if rerr != nil {
+			continue
+		}
+		pageMarkdown, perr := parseIndexFundScrapeMarkdown(run.Output, candidate.URL)
+		if perr != nil {
+			continue
+		}
+		if len(parseFundHoldings(pageMarkdown)) > 0 {
+			markdown = pageMarkdown
+			title = candidate.Title
+			found = true
+			break
+		}
+	}
+	if !found {
+		return Result{Value: fd.NewErrorResponse("bad_request", "holdings document not routable for "+symbol)}, nil
+	}
+	holdings := parseFundHoldings(markdown)
+	if normalizedClass != nil {
+		filtered := make([]fd.FundHolding, 0, len(holdings))
+		for _, h := range holdings {
+			if h.AssetClass != nil && *h.AssetClass == *normalizedClass {
+				filtered = append(filtered, h)
+			}
+		}
+		holdings = filtered
+	}
+	documentAsOf := parseFundAsOf(markdown)
+	if asOfDate != nil && documentAsOf != nil {
+		if documentDay, perr := time.Parse(dateLayout, *documentAsOf); perr == nil && documentDay.After(*asOfDate) {
+			return Result{Value: fd.NewErrorResponse("not_found",
+				"No holdings composition in effect on or before "+*asOfArg+" is routable for "+symbol+".")}, nil
+		}
+	}
+	end := offset + limit
+	if end > len(holdings) {
+		end = len(holdings)
+	}
+	var pageHoldings []fd.FundHolding
+	if offset < len(holdings) {
+		pageHoldings = holdings[offset:end]
+	}
+
+	fund := newOrderedJSONObject()
+	if title != nil {
+		fund.set("name", *title)
+	}
+	if documentAsOf != nil {
+		fund.set("as_of", *documentAsOf)
+	}
+	fund.set("source", "public fund holdings fact sheet (markdown)")
+	fund.set("total_holdings", len(holdings))
+	fund.set("returned", len(pageHoldings))
+	fund.set("offset", offset)
+
+	holdingsAny := make([]any, len(pageHoldings))
+	for i, h := range pageHoldings {
+		holdingsAny[i] = h
+	}
+	response := newOrderedJSONObject()
+	response.set("ticker", symbol)
+	response.set("fund", fund)
+	response.set("holdings", holdingsAny)
+	return Result{Value: response}, nil
+}
+
+// --- get_institutional_holdings ---
+
+func (c *callCtx) getInstitutionalHoldings(args map[string]any) (Result, error) {
+	filerCIKArg, err := argString(args, "filer_cik")
+	if err != nil {
+		return Result{}, err
+	}
+	if filerCIKArg != nil {
+		return Result{Value: fd.NewErrorResponse("bad_request", "filer_cik lookup is not routed; pass ticker instead")}, nil
+	}
+	tickerArg, err := argString(args, "ticker")
+	if err != nil {
+		return Result{}, err
+	}
+	if tickerArg == nil {
+		return Result{}, &providers.InputError{Msg: "ticker is required"}
+	}
+	symbol, err := validateTicker(*tickerArg)
+	if err != nil {
+		return Result{}, err
+	}
+	limitRaw, err := argIntDefault(args, "limit", 10)
+	if err != nil {
+		return Result{}, err
+	}
+	limit, err := validateLimit(limitRaw, 200)
+	if err != nil {
+		return Result{}, err
+	}
+	report, err := parseDateFilterGroup(args, "report_period")
+	if err != nil {
+		return Result{}, err
+	}
+	run, err := c.run(secform4, institutionalEndpoint, nil, map[string]any{"ticker": symbol})
+	if err != nil {
+		return Result{}, err
+	}
+	holdings, err := normalizeInstitutionalHoldings(run.Output, symbol, limit, report)
+	if err != nil {
+		return Result{}, err
+	}
+	out := make([]any, len(holdings))
+	for i, h := range holdings {
+		out[i] = h
+	}
+	return Result{Value: out, WrapperKey: "institutional_holdings", Paginate: true}, nil
 }

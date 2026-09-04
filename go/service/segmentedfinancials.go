@@ -11,6 +11,7 @@ package service
 import (
 	"sort"
 	"strconv"
+	"time"
 
 	"github.com/belazy/monid-finance/providers"
 )
@@ -50,10 +51,10 @@ func segmentExtractSchema() map[string]any {
 		"type":                 "object",
 		"additionalProperties": false,
 		"properties": map[string]any{
-			"company":          map[string]any{"type": []any{"string", "null"}},
-			"filing_type":      map[string]any{"type": []any{"string", "null"}},
-			"fiscal_year_end":  map[string]any{"type": []any{"string", "null"}},
-			"source_url":       map[string]any{"type": []any{"string", "null"}},
+			"company":           map[string]any{"type": []any{"string", "null"}},
+			"filing_type":       map[string]any{"type": []any{"string", "null"}},
+			"fiscal_year_end":   map[string]any{"type": []any{"string", "null"}},
+			"source_url":        map[string]any{"type": []any{"string", "null"}},
 			"product_net_sales": map[string]any{"type": "array", "items": segmentArrayItemSchema},
 			"geographic_reportable_segment_net_sales": map[string]any{
 				"type": "array", "items": segmentArrayItemSchema,
@@ -81,7 +82,16 @@ type segmentPeriod struct {
 
 // normalizeSegmentedFinancials mirrors
 // segmented_financials.normalize_segmented_financials.
-func normalizeSegmentedFinancials(data map[string]any, ticker, filingURL string, accessionNumber *string) ([]*orderedJSONObject, error) {
+// segmentedFinancialRecord pairs one segmented-financials record's ordered
+// JSON body with its parsed report_period, so callers can filter by the
+// report_period* date filters (mirroring service._segment_matches) without
+// re-parsing the "report_period" key back out of the ordered object.
+type segmentedFinancialRecord struct {
+	ReportPeriod time.Time
+	Object       *orderedJSONObject
+}
+
+func normalizeSegmentedFinancials(data map[string]any, ticker, filingURL string, accessionNumber *string) ([]segmentedFinancialRecord, error) {
 	periods := map[string]*segmentPeriod{}
 	var order []string
 	collect := func(value any, isProducts bool) error {
@@ -152,9 +162,10 @@ func normalizeSegmentedFinancials(data map[string]any, ticker, filingURL string,
 	}
 
 	sort.Sort(sort.Reverse(sort.StringSlice(order)))
-	records := make([]*orderedJSONObject, 0, len(order))
+	records := make([]segmentedFinancialRecord, 0, len(order))
 	for _, key := range order {
 		period := periods[key]
+		reportDay, _ := time.Parse(dateLayout, key)
 		record := newOrderedJSONObject()
 		record.set("ticker", ticker)
 		record.set("report_period", key)
@@ -178,7 +189,7 @@ func normalizeSegmentedFinancials(data map[string]any, ticker, filingURL string,
 			income["revenue"] = revenue
 			record.set("income_statement", income)
 		}
-		records = append(records, record)
+		records = append(records, segmentedFinancialRecord{ReportPeriod: reportDay, Object: record})
 	}
 	return records, nil
 }

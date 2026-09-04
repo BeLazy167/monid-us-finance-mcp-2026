@@ -78,6 +78,8 @@ type Client struct {
 	BaseURL   string
 	HTTP      *http.Client
 	Allowlist Allowlist
+	// ArtifactTimeout bounds one artifact download; zero means 60s.
+	ArtifactTimeout time.Duration
 	// slots bounds concurrent runs so one request cannot exhaust the pool.
 	slots chan struct{}
 }
@@ -171,5 +173,13 @@ func (c *Client) Run(ctx context.Context, provider, endpoint string, input Input
 	if run.ProviderHTTPStatus >= 400 {
 		return nil, &RunError{Kind: ErrProviderHTTP, Message: fmt.Sprintf("provider returned HTTP %d", run.ProviderHTTPStatus), Run: run, Provider: provider, Endpoint: endpoint}
 	}
+
+	// Large payloads arrive as a signed artifact link rather than inline JSON,
+	// so resolve them before the caller ever sees the output.
+	hydrated, err := c.hydrateArtifacts(ctx, run.Output, provider, endpoint)
+	if err != nil {
+		return nil, err
+	}
+	run.Output = hydrated
 	return run, nil
 }

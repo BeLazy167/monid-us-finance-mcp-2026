@@ -310,7 +310,6 @@ func findCompanyName(raw json.RawMessage, ticker string) (name *string, found bo
 	return nil, false, nil
 }
 
-
 // parseOptDate parses the first 10 characters of value as YYYY-MM-DD,
 // returning nil (not an error) on any parse failure, mirroring
 // segmented_financials._opt_date's try/except ValueError -> None.

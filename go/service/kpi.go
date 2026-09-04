@@ -16,13 +16,13 @@ var kpiItemSchema = map[string]any{
 	"type":                 "object",
 	"additionalProperties": false,
 	"properties": map[string]any{
-		"name":            map[string]any{"type": []any{"string", "null"}},
-		"unit":            map[string]any{"type": []any{"string", "null"}},
-		"period":          map[string]any{"type": []any{"string", "null"}},
-		"value_text":      map[string]any{"type": []any{"string", "null"}},
-		"value":           map[string]any{"type": []any{"number", "null"}},
-		"basis":           map[string]any{"type": []any{"string", "null"}},
-		"evidence_quote":  map[string]any{"type": []any{"string", "null"}},
+		"name":           map[string]any{"type": []any{"string", "null"}},
+		"unit":           map[string]any{"type": []any{"string", "null"}},
+		"period":         map[string]any{"type": []any{"string", "null"}},
+		"value_text":     map[string]any{"type": []any{"string", "null"}},
+		"value":          map[string]any{"type": []any{"number", "null"}},
+		"basis":          map[string]any{"type": []any{"string", "null"}},
+		"evidence_quote": map[string]any{"type": []any{"string", "null"}},
 	},
 	"required": []any{"name", "unit", "period", "value_text", "value", "basis", "evidence_quote"},
 }
@@ -41,7 +41,9 @@ func kpiSchema(description string) map[string]any {
 }
 
 // kpiMetricsExtractSchema mirrors kpi.kpi_metrics_extract_schema.
-func kpiMetricsExtractSchema() map[string]any { return kpiSchema("Operational key performance indicators") }
+func kpiMetricsExtractSchema() map[string]any {
+	return kpiSchema("Operational key performance indicators")
+}
 
 // kpiGuidanceExtractSchema mirrors kpi.kpi_guidance_extract_schema.
 func kpiGuidanceExtractSchema() map[string]any { return kpiSchema("Forward guidance") }
