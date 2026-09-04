@@ -87,7 +87,6 @@ def normalize_segmented_financials(
     ticker: str,
     filing_url: str,
     accession_number: str | None,
-    form_type: str | None,
 ) -> list[JsonObject]:
     """Map extracted segment data to Financial Datasets records."""
     periods: dict[date, SegmentPeriod] = {}
@@ -108,7 +107,6 @@ def normalize_segmented_financials(
         if accession_number is not None:
             record["accession_number"] = accession_number
         record["filing_url"] = filing_url
-        del form_type
         income_statement: JsonObject = {}
         if period.products:
             income_statement["revenue"] = {
