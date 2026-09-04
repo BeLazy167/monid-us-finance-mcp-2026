@@ -11,8 +11,24 @@ from pathlib import Path
 
 from monid_finance_mcp.receipts import summarize_ledger
 
-FD_PAY_PER_CALL = 0.0200
-FD_BUILD_PER_CALL = 0.0020
+# Financial Datasets published per-request prices (docs.financialdatasets.ai, 2026-09-04)
+FD_PER_REQUEST_PRICES: dict[str, float] = {
+    "get_income_statement": 0.04,
+    "get_balance_sheet": 0.04,
+    "get_cash_flow_statement": 0.04,
+    "get_financial_metrics": 0.04,
+    "get_financial_metrics_snapshot": 0.04,
+    "get_segmented_financials": 0.04,
+    "get_news": 0.04,
+    "get_insider_trades": 0.04,
+    "get_earnings": 0.01,
+    "screen_stocks": 0.01,
+    "get_stock_prices": 0.02,
+    "get_stock_price": 0.02,
+    "get_filings": 0.02,
+    "get_interest_rates": 0.02,
+}
+FD_DEFAULT_PRICE = 0.04
 
 
 def _as_int(value: object) -> int:
@@ -34,14 +50,21 @@ def main() -> None:
     total_cost = _as_float(summary.get("total_usd_cost"))
     avg_cost = total_cost / total_calls if total_calls else 0.0
 
-    fd_pay_cost = total_calls * FD_PAY_PER_CALL
-    fd_build_cost = total_calls * FD_BUILD_PER_CALL
+    tools = summary.get("tools")
+    fd_equivalent = 0.0
+    if isinstance(tools, dict):
+        for tool, stats in tools.items():
+            if isinstance(stats, dict):
+                calls = stats.get("calls", 0)
+                fd_equivalent += FD_PER_REQUEST_PRICES.get(tool, FD_DEFAULT_PRICE) * (
+                    calls if isinstance(calls, int) else 0
+                )
 
     print("=" * 78)
     print("  MONID vs. FINANCIAL DATASETS API — MEASURED COST RECEIPT")
     print("=" * 78)
-    print("  Target product killed : Financial Datasets API (financialdatasets.ai)")
-    print("  Target plan / price   : Build Plan $200/mo ($2,000/yr) | Starter $20/1k calls")
+    print("  Target product killed : Financial Datasets API per-request layer")
+    print("  Target plan / price   : Developer $200/mo | Pro $2,000/mo | $0.01-$0.04 per request")
     print("  Replacement server    : Monid US Finance MCP (live multi-provider routing)")
     print(f"  Total Monid calls     : {total_calls} (including {failures} failed runs)")
     print(f"  Measured Monid spend  : ${total_cost:.4f} USD")
@@ -49,10 +72,9 @@ def main() -> None:
     print("-" * 78)
     print(f"  {'Cost for this run':<30} | {'Spend':<12} | {'Savings vs FD':<18}")
     print("-" * 78)
-    print(f"  Financial Datasets Starter     | ${fd_pay_cost:>8.4f} USD | base")
-    print(f"  Financial Datasets Build Plan  | ${fd_build_cost:>8.4f} USD | base")
-    savings_starter = (1 - (total_cost / fd_pay_cost)) * 100 if fd_pay_cost else 0
-    savings_label = f"{savings_starter:>6.1f}% cheaper"
+    print(f"  Financial Datasets pay-per-req | ${fd_equivalent:>8.4f} USD | base")
+    savings = (1 - (total_cost / fd_equivalent)) * 100 if fd_equivalent else 0
+    savings_label = f"{savings:>6.1f}% cheaper"
     print(f"  Monid US Finance MCP (ACTUAL)  | ${total_cost:>8.4f} USD | {savings_label}")
     print("-" * 78)
     print("  PER-TOOL MEASURED BREAKDOWN:")
