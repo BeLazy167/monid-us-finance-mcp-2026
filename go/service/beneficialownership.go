@@ -23,7 +23,7 @@ import (
 // beneficialOwnerFiler is one distinct filer entry for
 // get_beneficial_owners, named after the same reporting_person_name/
 // filer_cik fields the Financial Datasets BeneficialOwner contract uses
-// for a filer (docs/fd-contract-reference.json), even though this
+// for a filer (the Financial Datasets contract (captured 2026-09-04)), even though this
 // directory shape itself is not one of that contract's response types.
 type beneficialOwnerFiler struct {
 	ReportingPersonName *string `json:"reporting_person_name,omitempty"`
@@ -98,7 +98,7 @@ func (c *callCtx) getBeneficialOwners(args map[string]any) (Result, error) {
 
 // beneficialOwnershipRow is one stake row for get_beneficial_ownership,
 // field-named and ordered after the Financial Datasets BeneficialOwner
-// contract (docs/fd-contract-reference.json) as far as this port can
+// contract (the Financial Datasets contract (captured 2026-09-04)) as far as this port can
 // source it from the SECForm4 13D/13G feed; every contract field this
 // feed never carries (issuer_cik, voting/dispositive powers,
 // purpose_of_transaction, ...) is left off the struct entirely rather

@@ -2,7 +2,7 @@
 
 ## Scope
 
-Phase 1 serves US equities and ETFs. It exposes the Financial Datasets API contract: same 27 MCP tool names, same inputs, and response objects whose keys match the Financial Datasets OpenAPI schemas (`docs/fd-contract-reference.json`). Data is sourced independently through Monid; no Financial Datasets data or outputs are used. It does not claim the incumbent's latency, coverage, or redistribution rights.
+Phase 1 serves US equities and ETFs. It exposes the Financial Datasets API contract: same 27 MCP tool names, same inputs, and response objects whose keys match the Financial Datasets OpenAPI schemas (captured 2026-09-04). Data is sourced independently through Monid; no Financial Datasets data or outputs are used. It does not claim the incumbent's latency, coverage, or redistribution rights.
 
 ## Flow
 

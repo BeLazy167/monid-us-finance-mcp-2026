@@ -208,7 +208,7 @@ func fullOutcomes() map[string]fakeOutcome {
 func TestDefaults_IncomeStatementPeriodAndLimit(t *testing.T) {
 	svc, transport := newTestService(t, fullOutcomes())
 	// No period/limit supplied: the FD JSON Schema default is period=ttm,
-	// limit=4 (docs/fd-mcp-tool-schemas.json), even though the Python
+	// limit=4 (the Financial Datasets MCP tool schemas), even though the Python
 	// source's own internal default differs (period="annual") - this port
 	// follows the schema, per its brief.
 	result, err := svc.Call(context.Background(), "key", "get_income_statement", map[string]any{"ticker": "AAPL"})

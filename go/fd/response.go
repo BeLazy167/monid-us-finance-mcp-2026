@@ -6,7 +6,7 @@
 //
 // fd.ErrorResponse itself already lives in types.go; this file only adds
 // the constructor and the envelope types the contract does not otherwise
-// provide (see docs/fd-contract-reference.json's FilingsResponse,
+// provide (see the Financial Datasets contract's FilingsResponse,
 // PricesResponse, PriceSnapshotResponse, NewsResponse,
 // InsiderTradesResponse, FinancialMetricSnapshotResponse, and
 // FinancialsSearchResponse schemas).

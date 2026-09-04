@@ -3,7 +3,7 @@
 // Field order defines JSON key order, matching the Financial Datasets
 // OpenAPI property order exactly. Pointer fields with omitempty encode the
 // contract rule that unsourced values are omitted, never fabricated.
-// Generated from docs/fd-contract-reference.json; do not hand-edit ordering.
+// Generated from the Financial Datasets contract (captured 2026-09-04); do not hand-edit ordering.
 package fd
 
 import "encoding/json"

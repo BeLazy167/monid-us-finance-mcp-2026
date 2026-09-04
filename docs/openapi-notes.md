@@ -32,7 +32,7 @@ every route this server's HTTP router actually registers.
    `FinancialsSearchResponse`, `ScreenerFiltersCatalog`, `FilingItemsResponse`) and the
    handful of dynamically-built responses (`FinancialMetric` rows, via
    `service.orderMetricsRecord` and `service.metricsKeyOrder`).
-8. `docs/fd-mcp-tool-schemas.json` — the 27 MCP tool JSON Schemas, used to state each
+8. `go/mcpserver/tool_schemas.json` — the 27 MCP tool JSON Schemas this server embeds, used to state each
    tool's own published default/enum/required set and to spot every place the REST
    route's actual behavior diverges from it (see "REST-vs-tool deviations" below).
 9. `docs/compatibility.md` — cross-checked against the Go source for the honest-gap
@@ -40,9 +40,9 @@ every route this server's HTTP router actually registers.
    won, since it is the literal thing this server runs.
 10. `docs/our-live-samples/*.json` — real captured responses from **our own** live
     deployment (https://monid-finance-api.fly.dev), used for every response example that
-    has a captured sample (see "Examples" below). `docs/fd-live-samples/*.json` is
-    Financial Datasets' own captured output and is explicitly **not** a source for this
-    document: an earlier revision of this file mistakenly copied values from it (a real
+    has a captured sample (see "Examples" below). Financial Datasets' own captured
+    output is explicitly **not** a source for this document and is not kept in this
+    repository: an earlier revision of this file mistakenly copied values from it (a real
     provenance bug, since fixed — see "Examples" below for what changed and why).
 
 ## REST-vs-tool-schema deviations worth flagging explicitly
@@ -51,7 +51,7 @@ These are not bugs to fix here; they are real, current behavior of the deployed 
 server, verified by reading `rest.go` and `service.go` line by line, and each is called
 out in its operation's `description` in openapi.json:
 
-- **period default is "annual" on REST, not "ttm".** `docs/fd-mcp-tool-schemas.json` and
+- **period default is "annual" on REST, not "ttm".** The Financial Datasets MCP tool schemas and
   the get_income_statement/get_balance_sheet/get_cash_flow_statement/get_financial_metrics
   tools' own internal default (`parseStatementArgs(args, "ttm", ...)`) both default to
   `"ttm"`. But `rest.go`'s `statementRoute`/`financialMetrics` handlers always populate
@@ -108,7 +108,7 @@ So the live server's actual byte order for `/prices` is
 `{"next_page_url"?, "prices", "ticker"}` (alphabetical), not the semantic
 `{"ticker", "prices", "next_page_url"}` order `go/fd/response.go`'s typed
 `PricesResponse` struct would produce if it were used at this call site (it isn't; REST
-uses the generic `wrapBody` map path, per `respond()` in `rest.go`). `docs/fd-live-samples/
+uses the generic `wrapBody` map path, per `respond()` in `rest.go`). Financial Datasets' own captured output (not kept in this repository)
 prices.json` shows `ticker` before `prices`, which is consistent with the typed struct,
 not with the live Go REST server's actual map-based serialization — that sample was very
 likely captured from an earlier/reference implementation, not this deployment's REST
@@ -126,7 +126,7 @@ objects inside those arrays) still transcribes the real, literal Go struct field
 ## Examples: our own live responses, nothing from a third party
 
 **Provenance fix (this revision).** An earlier revision of this file copied response
-examples from `docs/fd-live-samples/*.json` — Financial Datasets' own captured output,
+examples from Financial Datasets' own captured output (not kept in this repository),
 not ours. That was both a licensing/provenance problem (this repo is headed for
 open-sourcing) and a factual bug: it asserted fields and values our own API does not
 emit (most visibly `filing_datetime`, and the accession `0000320193-25-000079` /
@@ -136,7 +136,7 @@ this document is now sourced exclusively from `docs/our-live-samples/*.json` —
 verified responses captured from our own live deployment
 (https://monid-finance-api.fly.dev) — or, where no live sample exists, built from
 `go/fd/types.go` field names with clearly-labeled synthetic placeholder values. No value
-in this document is copied from `docs/fd-live-samples/**` or any Financial Datasets
+in this document is copied from Financial Datasets' captured output or any Financial Datasets
 page.
 
 **Endpoints with a real captured sample** (`docs/our-live-samples/*.json`, values kept
@@ -165,9 +165,9 @@ byte-for-byte, arrays trimmed to 1-2 records for readability):
 stub paths): examples are built strictly from `go/fd/types.go` (or, for `/earnings`,
 also `go/providers/earnings.go`'s `EarningsTimeDimension`) field names, with clearly
 synthetic, round, illustrative values. No value here is copied from
-`docs/fd-live-samples/**`. Each operation's `description` says explicitly that the
+Financial Datasets' captured output. Each operation's `description` says explicitly that the
 example is illustrative-only. The `/earnings` example previously copied real AAPL 8-K
-figures byte-for-byte from `docs/fd-live-samples/earnings.json` (revenue, EPS, every
+figures byte-for-byte from Financial Datasets' captured earnings sample (revenue, EPS, every
 `signals[]` entry, the accession number, and the filing timestamp all matched
 exactly) — that example has been replaced entirely with synthetic placeholder values.
 The `/financials/search/screener` example's `market_cap` previously matched Financial
@@ -214,7 +214,7 @@ The validated file is copied byte-for-byte to `docs-site/api-reference/openapi.j
 (`diff docs/openapi.json docs-site/api-reference/openapi.json` is empty) so the Mintlify
 API reference tab renders from the same, provenance-clean spec.
 
-A full-document sweep for every distinctive value found in `docs/fd-live-samples/*.json`
+A full-document sweep for every distinctive value found in Financial Datasets' captured samples
 (accession numbers, filing timestamps, dollar figures with 5+ significant digits, signal
 headlines) turned up zero remaining matches after this revision, aside from real AAPL
 financial facts our own live samples independently confirm (e.g. FY2025

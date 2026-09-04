@@ -17,7 +17,7 @@
 // What "parity" means here, and what it does not. This route reproduces
 // Financial Datasets' as-reported STRUCTURE: the same recursive
 // {label, full_label, value, children} tree and the same metadata fields
-// (docs/fd-openapi.json's AsReportedNode and AsReportedStatement; the
+// (the Financial Datasets OpenAPI spec's AsReportedNode and AsReportedStatement; the
 // envelope keys come from the live capture recorded on asReportedVariants,
 // which that file predates). It does NOT claim label parity. Financial
 // Datasets
@@ -92,7 +92,7 @@ const (
 
 // asReportedVariants maps the capability's "statement" argument to its
 // variant and to the Financial Datasets envelope key that variant answers
-// with (docs/fd-openapi.json).
+// with (the Financial Datasets OpenAPI spec).
 var asReportedVariants = map[string]struct {
 	variant    asReportedVariant
 	wrapperKey string

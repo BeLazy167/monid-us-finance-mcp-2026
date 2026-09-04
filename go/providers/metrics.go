@@ -86,7 +86,7 @@ var growthOutputs = []growthOutput{
 }
 
 // FinancialMetricsRecord is one Financial Datasets FinancialMetricsResponse
-// record. Field order matches docs/fd-contract-reference.json
+// record. Field order matches the Financial Datasets contract (captured 2026-09-04)
 // FinancialMetricsResponse exactly (Go struct field order is JSON key
 // order, so this is authoritative regardless of assignment order below).
 // Valuation fields the validated routes cannot source without fabricating

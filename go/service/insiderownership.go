@@ -29,7 +29,7 @@ import (
 
 // insiderOwnershipRow is one insider's current holding for
 // get_insider_ownership, field-named and ordered after the Financial
-// Datasets InsiderOwnership contract (docs/fd-contract-reference.json).
+// Datasets InsiderOwnership contract (the Financial Datasets contract (captured 2026-09-04)).
 // Fields this port cannot source from SECForm4's insider-trading feed
 // (title, is_board_director/is_officer/is_ten_percent_owner, the
 // derivative-security fields) are left off the struct entirely rather

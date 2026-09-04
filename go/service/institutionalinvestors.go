@@ -3,7 +3,7 @@
 // SECForm4's /get_institution_holders route unscoped (no ticker), the
 // same way get_beneficial_owners scans the 13D/13G feed for distinct
 // filers. Field names follow the Financial Datasets InstitutionalInvestor
-// contract for this route (cik/name - docs/fd-contract-reference.json),
+// contract for this route (cik/name - the Financial Datasets contract (captured 2026-09-04)),
 // NOT fd.InstitutionalHolding's filer_cik/filer_name pair, even though
 // get_institutional_holdings sources the same two values from this same
 // route: Financial Datasets names them differently on the two endpoints,

@@ -34,7 +34,7 @@ FD plans: Developer $200/mo ($2,000/yr), Pro $2,000/mo ($20,000/yr). A month of 
 - **Filings**: same record shape (`accession_number`, `filing_type`, `report_date`, `filing_date`, `ticker`, `url`); same 10-K set returned.
 - **Prices**: same `Price` shape; day bars in ascending time order.
 - **Earnings**: same `EarningsRecord` shape incl. `quarterly` block and ratio `yoy_chg` fields. FD's freshest record is the 8-K press release (filed 2026-07-30); ours composes the 10-Q (filed 2026-07-31) — same quarter, same schema, one day later source.
-- **MCP**: 27 tools with identical names, parameter names/order/required flags, and verbatim descriptions (captured live into `docs/fd-mcp-tools.json`). List tools return the bare records array; object tools the bare object; errors `{"error", "message"}`.
+- **MCP**: 27 tools with identical names, parameter names/order/required flags, and verbatim descriptions (captured live 2026-09-04). List tools return the bare records array; object tools the bare object; errors `{"error", "message"}`.
 - **REST**: same routes, same wrapped responses (`{"income_statements": [...]}` + `next_page_url` cursor pagination), same `X-API-KEY` header auth.
 - **Depth parity, honestly measured**: FD's live MCP returned 3 annual income statements for AAPL at `limit=25`; our DefiLlama matrix carries the same recent-years depth. Neither serves 30 years on this endpoint in practice today.
 

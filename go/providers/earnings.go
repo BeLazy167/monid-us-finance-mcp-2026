@@ -57,7 +57,7 @@ type EarningsData struct {
 }
 
 // EarningsTimeDimension is one Financial Datasets EarningsTimeDimension
-// block. Field order matches docs/fd-contract-reference.json
+// block. Field order matches the Financial Datasets contract (captured 2026-09-04)
 // EarningsTimeDimension exactly. Note: earnings.py's own _time_dimension
 // builds its dict with all three margin fields (gross/operating/net)
 // grouped together right after gross_profit, before operating_income and

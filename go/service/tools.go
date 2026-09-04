@@ -4,7 +4,7 @@
 // JSON-decoded shape both the MCP and REST callers hand to Service.Call.
 //
 // Every handler validates and applies its tool's Financial Datasets JSON
-// Schema default (docs/fd-mcp-tool-schemas.json) BEFORE any Monid call, so
+// Schema default (the Financial Datasets MCP tool schemas) BEFORE any Monid call, so
 // a bad request never costs the caller. Where the embedded Python service
 // layer's own internal default differs from the published FD schema
 // default (get_income_statement/get_balance_sheet/get_cash_flow_statement:

@@ -10,7 +10,7 @@
 // IPOs pending in any bucket that day), not an error, so an empty payload
 // answers an empty list rather than a schema-drift failure. Records map
 // onto the Financial Datasets Ipo contract field names
-// (docs/fd-contract-reference.json) as far as this route's fields let this
+// (the Financial Datasets contract (captured 2026-09-04)) as far as this route's fields let this
 // port source them; ExpectedDate/Bucket are not part of that contract
 // (Ipo is filing-centric: accession_number/cik/form_type/filing_date, not
 // a calendar date), but genuinely sourced and worth keeping rather than

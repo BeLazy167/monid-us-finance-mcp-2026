@@ -8,7 +8,7 @@
 // rejection, and composition step here was verified against the live
 // Financial Datasets API by that Python implementation. Where this port's
 // brief explicitly calls for different behavior (the FD JSON Schema
-// defaults in docs/fd-mcp-tool-schemas.json, and the goroutine fan-outs
+// defaults in the Financial Datasets MCP tool schemas, and the goroutine fan-outs
 // described below), that is noted at the call site.
 //
 // Provenance, cost, and warnings never appear inside a tool response: every
@@ -451,7 +451,7 @@ func (c *callCtx) getCashFlowStatement(args map[string]any) (Result, error) {
 }
 
 // statementResponse mirrors service._statement_response. The FD JSON
-// Schema default period is "ttm" (docs/fd-mcp-tool-schemas.json), limit 4,
+// Schema default period is "ttm" (the Financial Datasets MCP tool schemas), limit 4,
 // max 100 - this port's brief calls this out explicitly since Python's own
 // internal default (period="annual") differs from the published schema.
 func (c *callCtx) statementResponse(statement string, args map[string]any) (Result, error) {
@@ -1188,7 +1188,7 @@ func (c *callCtx) getNews(args map[string]any) (Result, error) {
 
 // earningsFeedLimit mirrors server.py's hardcoded limit=5 for the
 // market-wide earnings feed: get_earnings' FD JSON Schema exposes no limit
-// parameter at all (docs/fd-mcp-tools.json's get_earnings params are just
+// parameter at all (the Financial Datasets MCP tool list's get_earnings params are just
 // ["ticker"]), and the Python MCP surface always requests 5 regardless of
 // path (ticker or market-wide feed).
 const earningsFeedLimit = 5
