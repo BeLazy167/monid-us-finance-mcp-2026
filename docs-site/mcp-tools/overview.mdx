@@ -284,7 +284,7 @@ Extracts non-GAAP metrics a company reports about itself. Adjusted EBITDA, compa
 
 <Icon icon="triangle-alert" color="#d97706" /> **Implemented, unverified live**
 
-Returns each major central bank's current policy interest rate. Federal Reserve, European Central Bank, Bank of England, and Bank of Japan. Scraped live from each bank's own site and parsed on the fly. No parameters are accepted. A bank whose page cannot be scraped or parsed in a given call is left out of the response rather than failing the whole request.
+Returns the current policy interest rate of the Federal Reserve, the European Central Bank and the Bank of England, read live from each bank's own site: the Fed target-range midpoint, the ECB deposit facility rate, the BOE Bank Rate, each dated by its decision. No parameters are accepted. A bank whose page cannot be read in a given call is left out; if none can be, the call fails.
 
 _No parameters._
 

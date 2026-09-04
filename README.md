@@ -142,7 +142,7 @@ its labels: this server prints the label the filing prints.
 Several registered routes deviate deliberately, each forced by its source and
 each documented: `/ipos` and `/institutional-holdings/investors` require a
 ticker, `/company/facts/ciks` covers 8,005 CIKs against Financial Datasets'
-21,005, and `/macro/interest-rates/banks` lists the four central banks this
+21,005, and `/macro/interest-rates/banks` lists the three central banks this
 server actually scrapes rather than ten. Route-by-route notes are in
 [docs/openapi-notes.md](docs/openapi-notes.md) and
 [docs/compatibility.md](docs/compatibility.md).

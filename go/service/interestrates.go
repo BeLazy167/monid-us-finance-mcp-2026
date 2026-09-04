@@ -1,9 +1,11 @@
-// Current policy rates from four central-bank pages, fetched through
+// Current policy rates from three central-bank pages, fetched through
 // Context.dev /web/scrape/markdown and parsed by the shape each bank
 // publishes: the Fed and the ECB list decisions in a table, newest first;
-// the BOE and BOJ state the rate in prose beside the announcement it came
-// from. A bank whose page cannot be fetched or parsed is omitted; rates
-// and dates are never guessed from anything other than the page text.
+// the BOE states the rate under a heading beside the announcement it
+// came from. A bank whose page cannot be fetched or parsed is omitted;
+// rates and dates are never guessed from anything other than the page
+// text. The Bank of Japan is not listed: it publishes decisions only as
+// PDF statements, which the markdown scraper cannot read.
 package service
 
 import (
@@ -29,7 +31,6 @@ var bankSpecs = []bankSpec{
 	{Bank: "ECB", Name: "European Central Bank", URL: "https://www.ecb.europa.eu/stats/policy_and_exchange_rates/" +
 		"key_ecb_interest_rates/html/index.en.html"},
 	{Bank: "BOE", Name: "Bank of England", URL: "https://www.bankofengland.co.uk/monetary-policy"},
-	{Bank: "BOJ", Name: "Bank of Japan", URL: "https://www.boj.or.jp/en/mopo/mpr_2026/index.htm"},
 }
 
 // interestRateScrapeQuery mirrors interest_rates.scrape_query(url, timeout_ms=60_000).
@@ -118,9 +119,6 @@ var (
 	boeCurrentRE  = regexp.MustCompile(`(?i)current\s+bank\s+rate\s+(\d{1,2}\.\d{1,2})\s*%`)
 	boeDecisionRE = regexp.MustCompile(`(?i)#+\s*bank\s+rate\s+(?:maintained|held|increased|raised|reduced|cut)\s+(?:at|to)\s+\d{1,2}\.\d{1,2}\s*%`)
 
-	// The BOJ states its rate in the prose of each policy statement.
-	bojRateRE = regexp.MustCompile(`(?i)(?:short-term\s+policy\s+interest\s+rate|uncollateralized\s+overnight\s+call\s+rate|policy\s+rate)[^\n]{0,180}?(\d{1,2}(?:\.\d{1,2})?)\s*(?:percent|%)`)
-
 	dateUSRE   = regexp.MustCompile(`(?i)(` + monthAlt + `)\s+(\d{1,2}),?\s+(\d{4})`)
 	dateLongRE = regexp.MustCompile(`(?i)(\d{1,2})\s+(` + monthAlt + `)\s+(\d{4})`)
 	dateISORE  = regexp.MustCompile(`(20\d{2})-(\d{2})-(\d{2})`)
@@ -142,8 +140,6 @@ func parsePolicyRate(markdown, bank string) *bankRate {
 		rate, date = ecbTable(markdown)
 	case "BOE":
 		rate, date = boeProse(markdown)
-	case "BOJ":
-		rate, date = bojProse(markdown)
 	}
 	if rate == nil {
 		return nil
@@ -218,20 +214,6 @@ func boeProse(markdown string) (*float64, *string) {
 		date = dateBefore(markdown, loc[0])
 	}
 	return &rate, date
-}
-
-// bojProse reads the rate from statement prose and dates it from the
-// text just before the statement.
-func bojProse(markdown string) (*float64, *string) {
-	loc := bojRateRE.FindStringSubmatchIndex(markdown)
-	if loc == nil {
-		return nil, nil
-	}
-	rate, err := strconv.ParseFloat(markdown[loc[2]:loc[3]], 64)
-	if err != nil {
-		return nil, nil
-	}
-	return &rate, dateBefore(markdown, loc[0])
 }
 
 // dateBeforeWindow bounds how far back dateBefore looks for the date a

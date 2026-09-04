@@ -777,7 +777,6 @@ func TestInterestRateBanks_DerivedFromServiceCapabilityNoToolCall(t *testing.T) 
 				map[string]any{"bank": "FED", "name": "Federal Reserve"},
 				map[string]any{"bank": "ECB", "name": "European Central Bank"},
 				map[string]any{"bank": "BOE", "name": "Bank of England"},
-				map[string]any{"bank": "BOJ", "name": "Bank of Japan"},
 			},
 		},
 	}
@@ -791,7 +790,7 @@ func TestInterestRateBanks_DerivedFromServiceCapabilityNoToolCall(t *testing.T) 
 	if !ok {
 		t.Fatalf("banks missing/not a list: %#v", body)
 	}
-	want := map[string]bool{"FED": true, "ECB": true, "BOE": true, "BOJ": true}
+	want := map[string]bool{"FED": true, "ECB": true, "BOE": true}
 	if len(banks) != len(want) {
 		t.Fatalf("banks = %#v, want exactly %v", banks, want)
 	}
