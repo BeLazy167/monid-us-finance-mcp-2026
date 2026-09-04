@@ -47,27 +47,10 @@ var toolHandlers = map[string]handlerFunc{
 	"get_interest_rates":             (*callCtx).getInterestRates,
 	"get_index_fund":                 (*callCtx).getIndexFund,
 	"get_institutional_holdings":     (*callCtx).getInstitutionalHoldings,
-	"get_beneficial_owners":          notImplementedHandler,
-	"get_beneficial_ownership":       notImplementedHandler,
-	"get_insider_ownership":          notImplementedHandler,
-	"get_institutional_investors":    notImplementedHandler,
-}
-
-// notImplementedMessage mirrors server.py's NOT_IMPLEMENTED text exactly.
-const notImplementedMessage = "This Financial Datasets tool is not implemented by the Monid-backed " +
-	"server yet; the call was free and no data was fabricated."
-
-// notImplementedHandler answers the four ownership-state tools that
-// service.py never implemented (get_beneficial_owners,
-// get_beneficial_ownership, get_insider_ownership,
-// get_institutional_investors): a typed, zero-cost rejection with no Monid
-// call and no ledger row, mirroring server.py's hardcoded
-// {"error": "not_implemented", ...} stub for these four tools exactly
-// (see NOT_IMPLEMENTED in server.py). *providers.UnsupportedError is the
-// closest fit in this port's error taxonomy: the request is well formed
-// but this server cannot honestly answer it yet.
-func notImplementedHandler(_ *callCtx, _ map[string]any) (Result, error) {
-	return Result{}, &providers.UnsupportedError{Msg: notImplementedMessage}
+	"get_beneficial_owners":          (*callCtx).getBeneficialOwners,
+	"get_beneficial_ownership":       (*callCtx).getBeneficialOwnership,
+	"get_insider_ownership":          (*callCtx).getInsiderOwnership,
+	"get_institutional_investors":    (*callCtx).getInstitutionalInvestors,
 }
 
 // --- generic argument coercion ---

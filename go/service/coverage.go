@@ -10,10 +10,18 @@
 // --- Capabilities this port's brief explicitly does NOT build, and why ---
 //
 // As-reported statements: no XBRL/as-reported source in our allowlist, only normalized data.
-// IPOs: the allowlist has pre-IPO private raises, which is different data, not an IPO calendar.
-// Ownership state (beneficial/activist/insider/institutional-investor lists): the only beneficial-ownership endpoint is UK Companies House PSC data (wrong jurisdiction), and the reachable US 13D/13G feeds run months stale.
+// IPOs: now implemented via getIPOCalendar (ipocalendar.go), backed by stockanalysis's
+// /get_ipo_calendar route rather than the allowlist's pre-IPO private-raise data.
+// Ownership state (beneficial/activist/insider/institutional-investor lists): now implemented -
+// see beneficialownership.go, insiderownership.go, institutionalinvestors.go. A transport bug
+// that blocked the reachable US 13D/13G/insider/institutional-holder SECForm4 routes was fixed;
+// those feeds run months stale (see docs/compatibility.md), so every record they produce carries
+// its own filing/transaction date rather than being described as current.
 // Market-wide price snapshot: it would need a fan-out across thousands of tickers per request.
-// CIK-keyed routes and sector lists: the companies-list catalog carries neither a cik nor a sector field.
+// CIK-keyed routes: the companies-list catalog carries no cik field; CIKs are instead derived
+// per ticker from the SEC EDGAR URLs get_filings already returns (see ownershipshared.go's
+// resolveIssuerCIK). Sector lists: the companies-list catalog carries no sector field either,
+// but getKPISectors (kpisectors.go) now answers per-ticker sector lookups via finviz instead.
 package service
 
 import (

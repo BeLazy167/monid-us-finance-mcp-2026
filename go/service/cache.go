@@ -48,6 +48,18 @@ var ttlByEndpoint = map[string]time.Duration{
 	"/get_stock_screener":         600 * time.Second,
 	"/get_earnings_calendar":      300 * time.Second,
 	"/get_institution_holders":    600 * time.Second,
+	// The 13D/13G feed runs months stale (see docs/compatibility.md), so a
+	// long TTL costs no real freshness and saves repeat callers a $0.01 run.
+	"/get_13d_filings":                     3600 * time.Second,
+	"/get_13g_filings":                     3600 * time.Second,
+	"/get_company_insider_trading":         600 * time.Second,
+	"/get_hedge_fund_portfolio":            600 * time.Second,
+	"/get_ticker_sectors_with_performance": 3600 * time.Second,
+	"/get_ipo_calendar":                    300 * time.Second,
+	// Market movers/indices are explicitly current (as-of timestamped), so
+	// this TTL stays short, unlike the ownership-state endpoints above.
+	"/get_market_movers":  60 * time.Second,
+	"/get_market_indices": 60 * time.Second,
 }
 
 // cacheTTLFor returns the TTL for one endpoint: exact match first, then the

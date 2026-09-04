@@ -1,7 +1,7 @@
 [
  {
   "name": "get_beneficial_owners",
-  "description": "This server does not yet implement beneficial-owner discovery: every call returns a typed not-implemented error before any upstream request is made, so it never costs the caller and never returns invented data. Once live, it is meant to list the reporting persons behind SEC Schedule 13D/13G stakes (holders of more than 5% of a company's shares), pairing each with its SEC filer CIK, and to accept an optional name prefix so callers can locate the filer_cik that get_beneficial_ownership expects.",
+  "description": "Lists distinct reporting persons named in SEC Schedule 13D and 13G filings (holders of more than 5% of a company's shares), sourced from the SECForm4 feed, pairing each with its SEC filer CIK when the underlying filing provides one. Accepts an optional case-insensitive name prefix to narrow the list and locate the filer_cik that get_beneficial_ownership expects. The underlying feed runs several months behind the current date (measured live; see docs/compatibility.md), so treat this list as historical, not current, real-time, or the latest activity.",
   "inputSchema": {
    "type": "object",
    "properties": {
@@ -23,7 +23,7 @@
  },
  {
   "name": "get_beneficial_ownership",
-  "description": "This server does not yet implement beneficial-ownership lookups: every call returns a typed not-implemented error before any upstream request is made, so it never costs the caller and never returns invented data. Its intended interface mirrors SEC Schedules 13D and 13G, which cover stakes of more than 5% of a share class: 13D signals activist intent (proxy fights, board seats, pushing for a sale), while 13G stakes are passive, typically held by large asset managers. A caller would supply exactly one of ticker (which owners hold this company) or filer_cik (which stakes this owner holds); type would narrow to activist or passive; history, once implemented, would return a stake's full amendment trail instead of only its latest state. Coverage was scoped to begin January 2025.",
+  "description": "Retrieves beneficial-ownership stakes (SEC Schedules 13D and 13G: holders of more than 5% of a class of shares) from the SECForm4 feed. Schedule 13D stakes are activist (intent to influence control); Schedule 13G stakes are passive, typically held by large asset managers. Supply exactly one of ticker (who owns this company) or filer_cik (what stakes this filer holds). type narrows to activist or passive. history is accepted for schema parity, but every call that sets it to true is rejected: this feed carries only each stake's most recently reported state, never a full amendment chain. Every row carries its own filing_date and event_date so callers can judge recency themselves. The underlying feed runs several months behind the current date (measured live; see docs/compatibility.md), so treat this data as historical, not current, real-time, or the latest activity.",
   "inputSchema": {
    "type": "object",
    "properties": {
@@ -572,7 +572,7 @@
  },
  {
   "name": "get_insider_ownership",
-  "description": "This server does not yet implement insider-ownership statements: every call returns a typed not-implemented error before any upstream request is made, so it never costs the caller and never returns invented data. Its intended interface mirrors SEC Form 3 (an insider's day-one ownership statement) and Form 5 (the annual statement): what officers, directors, and 10%+ owners hold. Common shares, options, RSUs. As distinct from get_insider_trades, which is meant to cover the buy/sell events in between.",
+  "description": "Retrieves each insider's most recent post-transaction share count for a company, aggregated from the SECForm4 insider-trading history for that ticker. The server derives the SEC CIK that route needs from the company's own SEC filings, so no separate CIK lookup is required from the caller. This approximates a Form 3/5 ownership statement using trade history rather than the statements themselves, so form_type is accepted for schema parity but every call that sets it is rejected: this feed carries no Form 3/5 classification to filter by. Each row carries its own filing_date and as_of_date so callers can judge recency themselves; treat this data as historical, not current, real-time, or the latest holding.",
   "inputSchema": {
    "type": "object",
    "properties": {
@@ -680,7 +680,7 @@
  },
  {
   "name": "get_institutional_investors",
-  "description": "This server does not yet implement institutional-filer discovery: every call returns a typed not-implemented error before any upstream request is made, so it never costs the caller and never returns invented data. Once live, it is meant to list SEC 13F filers with their CIK and most recently reported name, with an optional name-prefix filter to help locate the filer_cik that get_institutional_holdings expects.",
+  "description": "Lists distinct SEC 13F filers (institutional investors) discovered in the SECForm4 institutional-holdings feed, with each filer's CIK when the feed provides one and its most recently reported name. Accepts an optional case-insensitive name prefix to narrow the list and locate the filer_cik that get_institutional_holdings expects. This directory reflects only the filers currently present in that feed, not a complete or guaranteed up-to-date universe of 13F filers, so do not treat it as a real-time or authoritative registry.",
   "inputSchema": {
    "type": "object",
    "properties": {

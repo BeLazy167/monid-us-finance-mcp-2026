@@ -245,26 +245,6 @@ func TestValidationBeforeCall_ZeroTransportCalls(t *testing.T) {
 	}
 }
 
-func TestOwnershipTools_ZeroCostUnsupported(t *testing.T) {
-	tools := []string{
-		"get_beneficial_owners", "get_beneficial_ownership",
-		"get_insider_ownership", "get_institutional_investors",
-	}
-	for _, tool := range tools {
-		t.Run(tool, func(t *testing.T) {
-			svc, transport := newTestService(t, map[string]fakeOutcome{})
-			_, err := svc.Call(context.Background(), "key", tool, map[string]any{"ticker": "AAPL"})
-			var unsupported *providers.UnsupportedError
-			if !errors.As(err, &unsupported) {
-				t.Fatalf("expected *providers.UnsupportedError, got %T: %v", err, err)
-			}
-			if transport.CallCount() != 0 {
-				t.Fatalf("expected zero transport calls, got %d", transport.CallCount())
-			}
-		})
-	}
-}
-
 func TestCacheHit_NoSecondCallAndNoLedgerRow(t *testing.T) {
 	transport := newFakeTransport(t, fullOutcomes())
 	httpClient := &http.Client{Transport: transport}

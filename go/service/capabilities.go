@@ -95,3 +95,24 @@ func (s *Service) GetAllFinancials(ctx context.Context, apiKey string, args map[
 func (s *Service) SearchLineItems(ctx context.Context, apiKey string, args map[string]any) (Result, error) {
 	return s.newCallCtx(ctx, apiKey, "search_line_items").searchLineItems(args)
 }
+
+// GetKPISectors batch-resolves the sector (and, when present, a
+// performance figure) for up to 100 tickers via finviz's
+// /get_ticker_sectors_with_performance route (kpisectors.go).
+func (s *Service) GetKPISectors(ctx context.Context, apiKey string, args map[string]any) (Result, error) {
+	return s.newCallCtx(ctx, apiKey, "get_kpi_sectors").getKPISectors(args)
+}
+
+// GetIPOCalendar returns the flattened this-week/next-week/later IPO
+// calendar via stockanalysis's /get_ipo_calendar route (ipocalendar.go).
+func (s *Service) GetIPOCalendar(ctx context.Context, apiKey string, args map[string]any) (Result, error) {
+	return s.newCallCtx(ctx, apiKey, "get_ipo_calendar").getIPOCalendar(args)
+}
+
+// GetMarketSnapshot returns nasdaq's current most-active-by-share-volume
+// snapshot via /get_market_movers (marketsnapshot.go). Unlike every other
+// capability in this file, its data is current as of the snapshot's own
+// data_as_of/last_trade_timestamp fields, not historical.
+func (s *Service) GetMarketSnapshot(ctx context.Context, apiKey string, args map[string]any) (Result, error) {
+	return s.newCallCtx(ctx, apiKey, "get_market_snapshot").getMarketSnapshot(args)
+}

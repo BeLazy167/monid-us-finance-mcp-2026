@@ -29,44 +29,35 @@ operator's. The server never logs or stores a caller's key. Get a key at
 
 ## Tool status
 
-Working tools (live Monid routes, contract-tested): `get_company_facts`, `get_income_statement`, `get_balance_sheet`, `get_cash_flow_statement`, `get_financial_metrics_snapshot`, `get_filings`, `get_stock_prices`, `get_stock_price`, `get_news`, `get_filing_items`, `list_filing_item_types`, `get_earnings`, `get_financial_metrics`, `get_insider_trades`, `screen_stocks`, `list_stock_screener_filters`.
+All 27 Financial Datasets MCP tools listed in `go/mcpserver/tool_schemas.json`
+are implemented against live Monid routes and contract-tested (see
+`go/service/tools.go`'s `toolHandlers` table). The four ownership-state
+tools (`get_beneficial_owners`, `get_beneficial_ownership`,
+`get_insider_ownership`, `get_institutional_investors`) were the last to
+land; see "Ownership-state data freshness" below for what they actually
+source and how current that data is.
 
-The remaining 11 tools are registered with their Financial Datasets parameters and answer `{"error": "not_implemented", ...}` at zero cost until their route and contract tests land.
+## Ownership-state data freshness
 
-| Dataset | MCP tool | Phase 1 path |
-|---|---|---|
-| Beneficial ownership | `get_beneficial_owners` | SEC 13D/13G aggregation |
-| Beneficial ownership | `get_beneficial_ownership` | SEC 13D/13G aggregation |
-| Company | `get_company_facts` | US company catalog (name, ticker) |
-| Earnings | `get_earnings` | filings plus statements composition |
-| Financial metrics | `get_financial_metrics` | statement and price-derived history |
-| Financial metrics | `get_financial_metrics_snapshot` | live market summary |
-| Financial statements | `get_income_statement` | normalized annual/quarterly/TTM statements |
-| Financial statements | `get_balance_sheet` | normalized annual/quarterly/TTM statements |
-| Financial statements | `get_cash_flow_statement` | normalized annual/quarterly/TTM statements |
-| Index funds | `get_index_fund` | issuer or filing-derived holdings |
-| Insider ownership | `get_insider_ownership` | SEC ownership statements where available |
-| Insider trades | `get_insider_trades` | SEC Form 4 transactions |
-| Institutional holdings | `get_institutional_investors` | SEC 13F filer discovery |
-| Institutional holdings | `get_institutional_holdings` | SEC 13F positions |
-| Interest rates | `get_interest_rates` | live central-bank snapshot from official sources |
-| Operating KPIs | `get_kpi_guidance` | filing-derived requested KPI guidance |
-| Operating KPIs | `get_kpi_metrics` | filing-derived requested KPI history |
-| Operating KPIs | `get_kpi_non_gaap` | filing-derived non-GAAP metrics |
-| News | `get_news` | entity-matched live news |
-| SEC filings | `get_filings` | live SEC filing index |
-| SEC filings | `get_filing_items` | filing section extraction |
-| SEC filings | `list_filing_item_types` | deterministic supported item catalog |
-| Segmented financials | `get_segmented_financials` | filing-derived product and geographic segments |
-| Stock prices | `get_stock_prices` | historical OHLCV with local interval aggregation |
-| Stock prices | `get_stock_price` | latest price snapshot |
-| Search | `screen_stocks` | financial and company filters |
-| Search | `list_stock_screener_filters` | deterministic filter catalog |
+Measured live on 2026-09-04: the newest record in SECForm4's
+`/get_13d_filings` feed (which backs `get_beneficial_owners` and
+`get_beneficial_ownership`) was filed 2026-03-06, roughly six months
+behind the date measured. This is not a live or real-time feed. Every
+beneficial-ownership row this server returns carries its own sourced
+`filing_date`/`event_date` (or is omitted rather than backfilled with a
+guess) so a caller can judge recency directly; the server itself never
+describes this data as current, real-time, or the latest activity.
 
-A tool becomes working only after a live endpoint probe and a contract test. Until then it returns `not_implemented` rather than fabricated data.
+The other two ownership-state routes (`get_insider_ownership`, backed by
+SECForm4's `/get_company_insider_trading`, and `get_institutional_investors`,
+backed by `/get_institution_holders`) were not independently timestamped
+the same way; treat them with the same caution until they are.
 
 ## Honest deviations from Financial Datasets behavior
 
+- `get_beneficial_owners`/`get_beneficial_ownership` dedupe filers by name from the 13D/13G feed; `filer_cik` is matched only against whichever CIK-like alias a row happens to carry, which the verified item shape does not include, so a `filer_cik` query legitimately returns an empty result rather than a guess. `history=true` is accepted for schema parity but rejected: the feed carries only each stake's latest reported state, never a full amendment chain.
+- `get_insider_ownership` derives its ticker's SEC CIK from the same filings lookup `get_filings` uses (reusing that call's cache), then aggregates SECForm4's insider-trading history down to each insider's most recent post-transaction share count. `form_type` is accepted for schema parity but rejected: this feed carries no Form 3/5 classification to filter by.
+- `get_institutional_investors` lists distinct filers from an unscoped `/get_institution_holders` call; it is a directory of whatever filers currently appear in that feed, not a guaranteed-complete or authoritative 13F filer registry.
 - `cik` parameters are accepted (contract parity) but answered with `bad_request`; only ticker lookup is routed. Company facts currently sources ticker and name only.
 - `get_news` requires `ticker`; market-wide news is not routed.
 - Statement `filing_date*` filters need the filings join; if that join fails with filters active, the call answers `upstream_error` instead of guessing.
