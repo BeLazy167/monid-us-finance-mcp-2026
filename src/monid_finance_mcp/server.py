@@ -7,6 +7,7 @@ Financial Datasets ErrorResponse shape at zero cost.
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from typing import Literal
 
 from mcp.server.fastmcp import FastMCP
@@ -25,6 +26,7 @@ def create_server(service: FinanceService | None = None) -> FastMCP:
         MonidClient(
             cli=os.getenv("MONID_CLI", "monid"),
             run_timeout_seconds=_run_timeout(),
+            allowlist_path=_allowlist_path(),
         )
     )
     server = FastMCP("Monid Finance MCP")
@@ -413,6 +415,14 @@ def create_server(service: FinanceService | None = None) -> FastMCP:
         list_stock_screener_filters,
     )
     return server
+
+
+def _allowlist_path() -> Path | None:
+    raw = os.getenv("MONID_ALLOWLIST_PATH")
+    if raw:
+        return Path(raw)
+    default = Path(__file__).resolve().parents[2] / "docs" / "monid_finance_discovery.json"
+    return default if default.exists() else None
 
 
 def _run_timeout() -> float:

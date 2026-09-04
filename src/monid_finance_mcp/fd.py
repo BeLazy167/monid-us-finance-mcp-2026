@@ -152,12 +152,13 @@ def filing_record(
 def price_record(
     *, day: str, open_: float, high: float, low: float, close: float, volume: float
 ) -> JsonObject:
+    integral_volume = int(volume) if float(volume).is_integer() else volume
     return {
         "open": open_,
         "close": close,
         "high": high,
         "low": low,
-        "volume": volume,
+        "volume": integral_volume,
         "time": day,
     }
 

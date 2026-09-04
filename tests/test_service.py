@@ -153,8 +153,12 @@ STATEMENTS: JsonObject = {
             },
         },
         "children": {
-            "annual": {"Non-Operating Items": ["Non-Operating Interest Expense"]},
-            "quarterly": {"Non-Operating Items": ["Non-Operating Interest Expense"]},
+            "annual": {
+                "Non-Operating Items": {"labels": ["Non-Operating Interest Expense"]}
+            },
+            "quarterly": {
+                "Non-Operating Items": {"labels": ["Non-Operating Interest Expense"]}
+            },
         },
     },
     "balanceSheet": {

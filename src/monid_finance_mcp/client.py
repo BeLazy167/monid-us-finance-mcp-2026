@@ -9,6 +9,7 @@ from contextlib import suppress
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from decimal import Decimal
+from pathlib import Path
 from typing import Protocol, cast
 from urllib.parse import urlparse
 
@@ -171,7 +172,11 @@ class MonidClient:
     artifact_timeout_seconds: float = 15
     runner: CommandRunner | None = None
     artifact_fetcher: ArtifactFetcher | None = None
+    allowlist_path: Path | None = None
     _call_lock: asyncio.Lock = field(init=False, repr=False)
+    _allowlist: frozenset[tuple[str, str]] | None = field(
+        init=False, repr=False, default=None
+    )
 
     def __post_init__(self) -> None:
         for name, value in (
@@ -205,6 +210,32 @@ class MonidClient:
                 path_params=path_params,
             )
 
+    def _allowlist_permits(self, provider: str, endpoint: str) -> bool:
+        if self.allowlist_path is None:
+            return False
+        if self._allowlist is None:
+            try:
+                loaded: object = json.loads(self.allowlist_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                self._allowlist = frozenset()
+                return False
+            pairs: set[tuple[str, str]] = set()
+            if isinstance(loaded, dict):
+                document = cast(JsonObject, loaded)
+                raw = document.get("endpoints")
+                if isinstance(raw, list):
+                    entries = cast(list[object], raw)
+                    for entry in entries:
+                        if not isinstance(entry, dict):
+                            continue
+                        record = cast(JsonObject, entry)
+                        entry_provider = record.get("provider")
+                        entry_endpoint = record.get("endpoint")
+                        if isinstance(entry_provider, str) and isinstance(entry_endpoint, str):
+                            pairs.add((entry_provider, entry_endpoint))
+            self._allowlist = frozenset(pairs)
+        return (provider, endpoint) in self._allowlist
+
     async def _run_locked(
         self,
         provider: str,
@@ -235,14 +266,24 @@ class MonidClient:
             raise MonidInvocationError(
                 provider, endpoint, f"Could not start Monid inspect: {error}"
             ) from error
-        inspect_payload = _parse_command_object(inspected, provider, endpoint, "inspect")
-        if (
-            inspect_payload.get("provider") != provider
-            or inspect_payload.get("endpoint") != endpoint
-        ):
-            raise MonidSchemaError(
-                provider, endpoint, "Monid inspect returned a different provider or endpoint."
-            )
+        try:
+            inspect_payload = _parse_command_object(inspected, provider, endpoint, "inspect")
+        except MonidInvocationError:
+            # The registry inspect command can fail while `monid run` still works.
+            # Fall back to the committed discovery allowlist so only endpoints that
+            # were live-validated during discovery can ever be executed.
+            if not self._allowlist_permits(provider, endpoint):
+                raise
+        else:
+            if (
+                inspect_payload.get("provider") != provider
+                or inspect_payload.get("endpoint") != endpoint
+            ):
+                raise MonidSchemaError(
+                    provider,
+                    endpoint,
+                    "Monid inspect returned a different provider or endpoint.",
+                )
 
         run_args: list[str] = [
             self.cli,

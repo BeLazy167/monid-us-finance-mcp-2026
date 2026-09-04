@@ -128,6 +128,10 @@ class ReceiptsLedger:
         self._handle.write(json.dumps(receipt.to_dict(), sort_keys=False) + "\n")
         self._handle.flush()
 
+    @property
+    def path(self) -> Path:
+        return self._path
+
     def close(self) -> None:
         if self._handle is not None:
             self._handle.close()

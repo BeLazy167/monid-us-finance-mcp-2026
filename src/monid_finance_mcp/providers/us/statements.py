@@ -197,7 +197,13 @@ def _parse_children(
     for parent, parent_block in children_block.items():
         if not isinstance(parent_block, dict):
             raise SchemaDriftError(f"{name} children must map parents to blocks")
-        child_labels_value = definitions.get(parent)
+        definition_value = definitions.get(parent)
+        if definition_value is None:
+            continue
+        if not isinstance(definition_value, dict):
+            raise SchemaDriftError(f"{name} child labels for {parent} must be a list")
+        definition = definition_value
+        child_labels_value = definition.get("labels")
         child_values_value = parent_block.get("values")
         if child_labels_value is None and child_values_value is None:
             continue

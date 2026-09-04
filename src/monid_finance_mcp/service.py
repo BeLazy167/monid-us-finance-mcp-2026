@@ -492,6 +492,7 @@ class FinanceService:
         summary = normalize_summary(run.output, symbol)
         gross_margin = _ratio(summary.get("gross_profit_ttm"), summary.get("revenue_ttm"))
         net_margin = _ratio(summary.get("net_income_ttm"), summary.get("revenue_ttm"))
+        operating_margin = _as_ratio(_num(summary.get("operating_profit_margin_ttm")))
         return metric_snapshot_record(
             ticker=symbol,
             market_cap=_num(summary.get("market_cap")),
@@ -501,7 +502,7 @@ class FinanceService:
             price_to_revenue=_num(summary.get("price_to_revenue")),
             ev_to_ebitda=_num(summary.get("enterprise_value_to_ebitda")),
             gross_margin_ttm=gross_margin,
-            operating_margin_ttm=_num(summary.get("operating_profit_margin_ttm")),
+            operating_margin_ttm=operating_margin,
             net_margin_ttm=net_margin,
         )
 
@@ -615,10 +616,15 @@ class FinanceService:
         symbol = validate_ticker(ticker)
         bounded_limit = validate_limit(limit, maximum=10)
         offset = decode_cursor(cursor)[0] if cursor is not None else 0
-        run = await self._call(
-            "get_news", NEWS_PROVIDER, NEWS_ENDPOINT,
-            query_params={"ticker": symbol},
-        )
+        news_body: JsonObject = {
+            "searchBy": {
+                "type": "entity",
+                "entity": {"type": "ticker", "ticker": symbol},
+            },
+            "sortBy": {"type": "newest"},
+            "limit": bounded_limit,
+        }
+        run = await self._call("get_news", NEWS_PROVIDER, NEWS_ENDPOINT, body=news_body)
         articles = normalize_news(run.output, limit=bounded_limit, start_date=None, end_date=None)
         records = [
             news_record(
@@ -823,6 +829,13 @@ def _bar_time(bar: JsonObject, interval: str) -> str:
     if interval == "day":
         return str(bar["date"])
     return str(bar["end_date"])
+
+
+def _as_ratio(value: float | None) -> float | None:
+    """DefiLlama reports some margins as percentages; FD expects ratios."""
+    if value is None:
+        return None
+    return value / 100 if abs(value) > 1.5 else value
 
 
 def _ratio(numerator: JsonValue, denominator: JsonValue) -> float | None:
