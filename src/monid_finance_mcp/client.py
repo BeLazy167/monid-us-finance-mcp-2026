@@ -173,7 +173,8 @@ class MonidClient:
     runner: CommandRunner | None = None
     artifact_fetcher: ArtifactFetcher | None = None
     allowlist_path: Path | None = None
-    _call_lock: asyncio.Lock = field(init=False, repr=False)
+    max_concurrent_runs: int = 8
+    _run_slots: asyncio.Semaphore = field(init=False, repr=False)
     _allowlist: frozenset[tuple[str, str]] | None = field(
         init=False, repr=False, default=None
     )
@@ -186,7 +187,9 @@ class MonidClient:
         ):
             if not math.isfinite(value) or value <= 0 or value > 300:
                 raise ValueError(f"{name} must be greater than 0 and at most 300.")
-        self._call_lock = asyncio.Lock()
+        if not math.isfinite(self.max_concurrent_runs) or self.max_concurrent_runs < 1:
+            raise ValueError("max_concurrent_runs must be at least 1.")
+        self._run_slots = asyncio.Semaphore(self.max_concurrent_runs)
         if self.runner is None:
             self.runner = AsyncCommandRunner()
         if self.artifact_fetcher is None:
@@ -201,7 +204,7 @@ class MonidClient:
         query_params: JsonObject | None = None,
         path_params: JsonObject | None = None,
     ) -> MonidRun:
-        async with self._call_lock:
+        async with self._run_slots:
             return await self._run_locked(
                 provider,
                 endpoint,
