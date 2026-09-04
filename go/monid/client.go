@@ -164,6 +164,11 @@ func (c *Client) Run(ctx context.Context, provider, endpoint string, input Input
 	if err != nil {
 		return nil, err
 	}
+	// A run may still be in flight; wait for it to settle before judging it.
+	run, err = c.awaitRun(ctx, run, provider, endpoint)
+	if err != nil {
+		return nil, err
+	}
 	if run.Status == "BLOCKED" {
 		return nil, &RunError{Kind: ErrBlocked, Message: "monid: run was blocked by a workspace control", Run: run, Provider: provider, Endpoint: endpoint}
 	}

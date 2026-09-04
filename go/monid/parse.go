@@ -25,6 +25,12 @@ type wireRun struct {
 			Unit     string   `json:"unit"`
 		} `json:"reportedCost"`
 	} `json:"billing"`
+	// Polled runs report the settled cost under "cost" instead of "billing".
+	Cost *struct {
+		Currency string   `json:"currency"`
+		Value    *float64 `json:"value"`
+		Unit     string   `json:"unit"`
+	} `json:"cost"`
 	Price *struct {
 		Amount *struct {
 			Value    *float64 `json:"value"`
@@ -98,6 +104,20 @@ func parseCost(wire wireRun, provider, endpoint string) (*Money, error) {
 			currency = "USD"
 		}
 		return &Money{Value: value, Currency: currency}, nil
+	}
+	if c := wire.Cost; c != nil && c.Value != nil {
+		factor, ok := costFactors[strings.ToUpper(c.Unit)]
+		if !ok {
+			factor = 1 // a polled run reports whole units when it omits one
+		}
+		value := *c.Value * factor
+		if !math.IsNaN(value) && !math.IsInf(value, 0) {
+			currency := c.Currency
+			if currency == "" {
+				currency = "USD"
+			}
+			return &Money{Value: value, Currency: currency}, nil
+		}
 	}
 	if wire.Price != nil && wire.Price.Amount != nil && wire.Price.Amount.Value != nil {
 		value := *wire.Price.Amount.Value

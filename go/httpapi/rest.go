@@ -33,34 +33,43 @@ const notImplementedMessage = "This Financial Datasets route is not implemented 
 	"server yet; the call was free and no data was fabricated."
 
 // notImplementedPaths are Financial Datasets REST routes this server does
-// not implement yet, ported verbatim from rest_api.py's stub list. Each
-// answers 200 {"error": "not_implemented", "message": ...} once
-// authorized, at zero cost.
+// not implement. Every path here was checked against go/service/tools.go
+// for a cheap, zero-cost coverage-list answer first (see
+// docs/openapi-notes.md); none of the eight has one, for the reason noted
+// beside it. Each answers 200 {"error": "not_implemented", "message": ...}
+// once authorized, at zero cost, and never reaches Caller.
 var notImplementedPaths = []string{
-	"/kpi/metrics",
+	// get_kpi_metrics has no fixed ticker/sector universe: it extracts
+	// on demand from whichever filing a ticker has, so there is no
+	// catalog to enumerate without either a paid call per candidate
+	// ticker or fabricating one.
 	"/kpi/metrics/tickers",
 	"/kpi/metrics/sectors",
-	"/kpi/guidance",
-	"/kpi/non-gaap",
-	"/macro/interest-rates",
-	"/macro/interest-rates/snapshot",
-	"/macro/interest-rates/banks",
-	"/financials/segments",
-	"/financials/income-statements/segments",
-	"/financials/balance-sheets/segments",
-	"/financials/cash-flow-statements/segments",
-	"/index-funds",
+	// get_index_fund resolves holdings via a live web search per ticker
+	// (indexfund.go); knownIssuerDomains is a search-ranking hint for a
+	// handful of tickers, not an exhaustive "tickers we can serve" list,
+	// so publishing it as a coverage catalog would overstate what this
+	// server actually supports.
 	"/index-funds/tickers",
-	"/institutional-holdings",
-	"/institutional-holdings/investors",
+	// get_institutional_holdings takes any ticker/CIK the SECForm4
+	// provider recognizes; this server holds no local list of covered
+	// tickers or investors to enumerate.
 	"/institutional-holdings/tickers",
+	"/institutional-holdings/investors",
+	// The four ownership-state tools these paths would call
+	// (get_insider_ownership, get_beneficial_ownership,
+	// get_beneficial_owners, get_institutional_investors) are themselves
+	// notImplementedHandler in go/service/tools.go: there is no working
+	// service method to wire yet.
 	"/insider-ownership",
 	"/beneficial-ownership",
 	"/activist-ownership",
 }
 
 // restRoutes builds the full REST route table, ported route-for-route from
-// src/monid_finance_mcp/rest_api.py.
+// src/monid_finance_mcp/rest_api.py, plus every route wired directly onto
+// a working go/service/tools.go handler once it was verified against that
+// handler and its tool schema (see docs/openapi-notes.md).
 func restRoutes(rt *restAPI) []restRoute {
 	routes := []restRoute{
 		{http.MethodGet, "/financials/income-statements", rt.statementRoute(
@@ -87,6 +96,37 @@ func restRoutes(rt *restAPI) []restRoute {
 		{http.MethodGet, "/financials/search/screener/filters", rt.screenerFilters},
 		{http.MethodGet, "/company/facts", rt.companyFacts},
 		{http.MethodGet, "/filings/items", rt.filingItems},
+
+		// ---- Segmented financials (get_segmented_financials) ----
+		{http.MethodGet, "/financials/segments", rt.segmentedFinancialsRoute(segmentVariantCombined)},
+		{http.MethodGet, "/financials/income-statements/segments", rt.segmentedFinancialsRoute(segmentVariantIncomeStatement)},
+		{http.MethodGet, "/financials/balance-sheets/segments", rt.segmentedFinancialsRoute(segmentVariantBalanceSheet)},
+		{http.MethodGet, "/financials/cash-flow-statements/segments", rt.segmentedFinancialsRoute(segmentVariantCashFlow)},
+
+		// ---- KPI extraction (get_kpi_metrics / get_kpi_guidance / get_kpi_non_gaap) ----
+		{http.MethodGet, "/kpi/metrics", rt.kpiRoute("get_kpi_metrics")},
+		{http.MethodGet, "/kpi/guidance", rt.kpiRoute("get_kpi_guidance")},
+		{http.MethodGet, "/kpi/non-gaap", rt.kpiRoute("get_kpi_non_gaap")},
+
+		// ---- Central bank interest rates (get_interest_rates) ----
+		// Both routes call the same zero-parameter tool and return the same
+		// live-scraped snapshot: this server has no historical time series,
+		// so /macro/interest-rates (FD's historical route) answers with
+		// today's rate per bank instead of a stub, and
+		// /macro/interest-rates/snapshot (FD's real-time route) answers with
+		// the same call, which is already "latest observation only".
+		{http.MethodGet, "/macro/interest-rates", rt.interestRates},
+		{http.MethodGet, "/macro/interest-rates/snapshot", rt.interestRates},
+		// /macro/interest-rates/banks needs no tool call: it is the static
+		// list of central banks bankSpecs (go/service/interestrates.go)
+		// scrapes, so it is served directly at zero cost.
+		{http.MethodGet, "/macro/interest-rates/banks", interestRateBanks},
+
+		// ---- Index fund holdings (get_index_fund) ----
+		{http.MethodGet, "/index-funds", rt.indexFunds},
+
+		// ---- 13F institutional holdings (get_institutional_holdings) ----
+		{http.MethodGet, "/institutional-holdings", rt.institutionalHoldings},
 	}
 	for _, path := range notImplementedPaths {
 		routes = append(routes, restRoute{http.MethodGet, path, notImplemented})
@@ -357,6 +397,276 @@ func (rt *restAPI) filingItems(w http.ResponseWriter, r *http.Request, id caller
 	putQueryString(args, q, "item")
 	putQueryString(args, q, "accession_number")
 	rt.callAndRespond(w, r, id, "get_filing_items", args, nil)
+}
+
+// ---- Segmented financials (get_segmented_financials) ----
+
+// segmentVariant selects how a get_segmented_financials record is shaped
+// for one of the four segments REST routes: the combined route returns
+// the tool's record unchanged; the three per-statement routes reshape it
+// to match Financial Datasets' flat per-statement schema (SegmentMetadata
+// plus that statement's own fields), never adding a field this server has
+// no data for.
+type segmentVariant int
+
+const (
+	// segmentVariantCombined matches /financials/segments: the tool's
+	// record (currently income_statement only; see segmentedfinancials.go)
+	// is returned as-is, matching SegmentedFinancialsResponse.
+	segmentVariantCombined segmentVariant = iota
+	// segmentVariantIncomeStatement matches /financials/income-statements/segments:
+	// the record's income_statement.revenue is hoisted to the top level,
+	// matching IncomeStatementSegments. operating_income and depreciation
+	// are declared for schema parity but always omitted: segmentedfinancials.go's
+	// extraction schema never asks for them.
+	segmentVariantIncomeStatement
+	// segmentVariantBalanceSheet matches /financials/balance-sheets/segments:
+	// go/service's segment extraction (segmentedfinancials.go) only ever
+	// asks the filing for product/geographic net sales (income-statement
+	// revenue), so assets/goodwill/long_lived_assets are declared for
+	// schema parity but always omitted, never fabricated.
+	segmentVariantBalanceSheet
+	// segmentVariantCashFlow matches /financials/cash-flow-statements/segments:
+	// same reasoning as segmentVariantBalanceSheet - capital_expenditure is
+	// declared but never sourced today.
+	segmentVariantCashFlow
+)
+
+// segmentBreakdown mirrors Financial Datasets' SegmentBreakdown schema
+// (label, value), matching go/service/segmentedfinancials.go's segmentRow.
+type segmentBreakdown struct {
+	Label string  `json:"label"`
+	Value float64 `json:"value"`
+}
+
+// segmentCategory mirrors Financial Datasets' SegmentCategory schema.
+type segmentCategory struct {
+	Product []segmentBreakdown `json:"product,omitempty"`
+	Segment []segmentBreakdown `json:"segment,omitempty"`
+}
+
+// segmentMetadataView mirrors the fields Financial Datasets' SegmentMetadata
+// schema declares that this server actually sources today (ticker,
+// report_period, fiscal_period, period, accession_number, filing_url); it
+// omits SegmentMetadata's "currency" field since nothing in this port ever
+// sets one.
+type segmentMetadataView struct {
+	Ticker          *string `json:"ticker,omitempty"`
+	ReportPeriod    *string `json:"report_period,omitempty"`
+	FiscalPeriod    *string `json:"fiscal_period,omitempty"`
+	Period          *string `json:"period,omitempty"`
+	AccessionNumber *string `json:"accession_number,omitempty"`
+	FilingURL       *string `json:"filing_url,omitempty"`
+}
+
+// incomeStatementSegmentsRow mirrors Financial Datasets' IncomeStatementSegments.
+type incomeStatementSegmentsRow struct {
+	segmentMetadataView
+	Revenue         *segmentCategory `json:"revenue,omitempty"`
+	OperatingIncome *segmentCategory `json:"operating_income,omitempty"`
+	Depreciation    *segmentCategory `json:"depreciation,omitempty"`
+}
+
+// balanceSheetSegmentsRow mirrors Financial Datasets' BalanceSheetSegments.
+type balanceSheetSegmentsRow struct {
+	segmentMetadataView
+	Assets          *segmentCategory `json:"assets,omitempty"`
+	Goodwill        *segmentCategory `json:"goodwill,omitempty"`
+	LongLivedAssets *segmentCategory `json:"long_lived_assets,omitempty"`
+}
+
+// cashFlowSegmentsRow mirrors Financial Datasets' CashFlowStatementSegments.
+type cashFlowSegmentsRow struct {
+	segmentMetadataView
+	CapitalExpenditure *segmentCategory `json:"capital_expenditure,omitempty"`
+}
+
+// incomeStatementSegmentsView is the shape reshapeSegmentRecord decodes a
+// get_segmented_financials record's "income_statement" object into.
+type incomeStatementSegmentsView struct {
+	Revenue         *segmentCategory `json:"revenue,omitempty"`
+	OperatingIncome *segmentCategory `json:"operating_income,omitempty"`
+	Depreciation    *segmentCategory `json:"depreciation,omitempty"`
+}
+
+func (rt *restAPI) segmentedFinancialsRoute(variant segmentVariant) routeHandler {
+	return func(w http.ResponseWriter, r *http.Request, id callerIdentity) {
+		q := r.URL.Query()
+		limit, err := queryInt(q, "limit", 4)
+		if err != nil {
+			writeFDError(w, http.StatusBadRequest, "bad_request", err.Error())
+			return
+		}
+		args := map[string]any{
+			"period": queryStringDefault(q, "period", "annual"),
+			"limit":  float64(limit),
+		}
+		putQueryString(args, q, "ticker")
+		for _, name := range statementDateFilterNames {
+			putQueryString(args, q, name)
+		}
+		result, err := rt.caller.Call(r.Context(), id.monidAPIKey, "get_segmented_financials", args)
+		if err != nil {
+			writeServiceError(w, err)
+			return
+		}
+		// Only the success list shape gets reshaped; a not_found FD error
+		// response (WrapperKey == "") passes straight through unchanged.
+		if variant != segmentVariantCombined && result.WrapperKey == "segmented_financials" {
+			result.Value = reshapeSegmentRecords(result.Value, variant)
+		}
+		respond(w, r, result, nil)
+	}
+}
+
+// reshapeSegmentRecords reshapes every record in a get_segmented_financials
+// list result for one of the three per-statement segments routes.
+func reshapeSegmentRecords(value any, variant segmentVariant) any {
+	items, ok := value.([]any)
+	if !ok {
+		return value
+	}
+	out := make([]any, len(items))
+	for i, item := range items {
+		out[i] = reshapeSegmentRecord(item, variant)
+	}
+	return out
+}
+
+// reshapeSegmentRecord decodes one get_segmented_financials record (via its
+// JSON encoding, since go/httpapi deliberately does not import go/service's
+// unexported record type - see router.go's Caller interface note) and
+// rebuilds it in the target statement-specific shape.
+func reshapeSegmentRecord(item any, variant segmentVariant) any {
+	raw, err := json.Marshal(item)
+	if err != nil {
+		return item
+	}
+	var meta segmentMetadataView
+	if err := json.Unmarshal(raw, &meta); err != nil {
+		return item
+	}
+	switch variant {
+	case segmentVariantIncomeStatement:
+		var wrapper struct {
+			IncomeStatement *incomeStatementSegmentsView `json:"income_statement"`
+		}
+		_ = json.Unmarshal(raw, &wrapper)
+		row := incomeStatementSegmentsRow{segmentMetadataView: meta}
+		if wrapper.IncomeStatement != nil {
+			row.Revenue = wrapper.IncomeStatement.Revenue
+			row.OperatingIncome = wrapper.IncomeStatement.OperatingIncome
+			row.Depreciation = wrapper.IncomeStatement.Depreciation
+		}
+		return row
+	case segmentVariantBalanceSheet:
+		return balanceSheetSegmentsRow{segmentMetadataView: meta}
+	case segmentVariantCashFlow:
+		return cashFlowSegmentsRow{segmentMetadataView: meta}
+	default:
+		return item
+	}
+}
+
+// ---- KPI extraction (get_kpi_metrics / get_kpi_guidance / get_kpi_non_gaap) ----
+
+// kpiRoute builds the shared handler for the three KPI extraction routes:
+// tool is the go/service tool name; the tool itself sets Result.WrapperKey
+// (kpi_metrics / kpi_guidance / kpi_non_gaap), so this handler need not
+// repeat it.
+func (rt *restAPI) kpiRoute(tool string) routeHandler {
+	return func(w http.ResponseWriter, r *http.Request, id callerIdentity) {
+		q := r.URL.Query()
+		limit, err := queryInt(q, "limit", 4)
+		if err != nil {
+			writeFDError(w, http.StatusBadRequest, "bad_request", err.Error())
+			return
+		}
+		args := map[string]any{
+			"period": queryStringDefault(q, "period", "quarterly"),
+			"limit":  float64(limit),
+		}
+		putQueryString(args, q, "ticker")
+		putQueryString(args, q, "metric_name")
+		putQueryString(args, q, "report_period_gte")
+		putQueryString(args, q, "report_period_lte")
+		rt.callAndRespond(w, r, id, tool, args, nil)
+	}
+}
+
+// ---- Central bank interest rates (get_interest_rates) ----
+
+func (rt *restAPI) interestRates(w http.ResponseWriter, r *http.Request, id callerIdentity) {
+	// get_interest_rates takes no parameters (see tool_schemas.json): it
+	// always scrapes and returns the current rate for every bank it can
+	// reach, so there is nothing to read off the query string here.
+	rt.callAndRespond(w, r, id, "get_interest_rates", map[string]any{}, nil)
+}
+
+// interestRateBankCodes are the central banks go/service/interestrates.go's
+// bankSpecs currently scrapes. Duplicated here (rather than imported) since
+// go/httpapi deliberately does not depend on go/service; keep this list in
+// sync with bankSpecs if a bank is ever added or removed there.
+var interestRateBankCodes = []string{"FED", "ECB", "BOE", "BOJ"}
+
+// interestRateBanks answers /macro/interest-rates/banks directly, with no
+// Caller.Call and no Monid spend: it is the static coverage list of banks
+// get_interest_rates can return a rate for.
+func interestRateBanks(w http.ResponseWriter, r *http.Request, id callerIdentity) {
+	banks := make([]any, len(interestRateBankCodes))
+	for i, code := range interestRateBankCodes {
+		banks[i] = code
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"resource": "interest_rates",
+		"banks":    banks,
+	})
+}
+
+// ---- Index fund holdings (get_index_fund) ----
+
+func (rt *restAPI) indexFunds(w http.ResponseWriter, r *http.Request, id callerIdentity) {
+	q := r.URL.Query()
+	limit, err := queryInt(q, "limit", 50)
+	if err != nil {
+		writeFDError(w, http.StatusBadRequest, "bad_request", err.Error())
+		return
+	}
+	offset, err := queryInt(q, "offset", 0)
+	if err != nil {
+		writeFDError(w, http.StatusBadRequest, "bad_request", err.Error())
+		return
+	}
+	args := map[string]any{
+		"limit":  float64(limit),
+		"offset": float64(offset),
+	}
+	putQueryString(args, q, "ticker")
+	putQueryString(args, q, "as_of")
+	putQueryString(args, q, "asset_class")
+	// get_index_fund has no "holding" (reverse lookup) parameter; a caller
+	// passing ?holding=... without ticker gets the tool's own
+	// "ticker is required" bad_request, matching every other route's
+	// behavior of validating only what the underlying tool schema defines.
+	rt.callAndRespond(w, r, id, "get_index_fund", args, nil)
+}
+
+// ---- 13F institutional holdings (get_institutional_holdings) ----
+
+func (rt *restAPI) institutionalHoldings(w http.ResponseWriter, r *http.Request, id callerIdentity) {
+	q := r.URL.Query()
+	limit, err := queryInt(q, "limit", 10)
+	if err != nil {
+		writeFDError(w, http.StatusBadRequest, "bad_request", err.Error())
+		return
+	}
+	args := map[string]any{"limit": float64(limit)}
+	putQueryString(args, q, "filer_cik")
+	putQueryString(args, q, "ticker")
+	putQueryString(args, q, "report_period")
+	putQueryString(args, q, "report_period_gte")
+	putQueryString(args, q, "report_period_lte")
+	rt.callAndRespond(w, r, id, "get_institutional_holdings", args, nil)
 }
 
 // ---- Shared call + response plumbing ----
