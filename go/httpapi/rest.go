@@ -33,17 +33,24 @@ const notImplementedMessage = "This Financial Datasets route is not implemented 
 	"server yet; the call was free and no data was fabricated."
 
 // notImplementedPaths are Financial Datasets REST routes this server does
-// not implement. Every path here was checked against go/service/tools.go
-// for a cheap, zero-cost coverage-list answer first (see
-// docs/openapi-notes.md); none of the eight has one, for the reason noted
-// beside it. Each answers 200 {"error": "not_implemented", "message": ...}
-// once authorized, at zero cost, and never reaches Caller.
+// not implement. /kpi/metrics/tickers and /institutional-holdings/tickers
+// used to stub here on the grounds that get_kpi_metrics/
+// get_institutional_holdings have no enumerable per-dataset universe;
+// they are now wired to the shared accept-universe coverage list instead
+// (Service.ListKPITickers/ListInstitutionalHoldingsTickers - see
+// go/service/coverage.go's doc comment), worded as the tickers the route
+// ACCEPTS, not a coverage claim. The six paths left here have no such
+// answer, for the reason noted beside each. Each answers 200
+// {"error": "not_implemented", "message": ...} once authorized, at zero
+// cost, and never reaches Caller.
 var notImplementedPaths = []string{
-	// get_kpi_metrics has no fixed ticker/sector universe: it extracts
-	// on demand from whichever filing a ticker has, so there is no
-	// catalog to enumerate without either a paid call per candidate
-	// ticker or fabricating one.
-	"/kpi/metrics/tickers",
+	// get_kpi_metrics itself has no fixed per-ticker/per-sector *data*
+	// universe (it extracts on demand from whichever filing a ticker
+	// has); /kpi/metrics/tickers now answers the accept-universe instead
+	// (see above). /kpi/metrics/sectors has no such accept-universe
+	// fallback: sector is not a dimension the shared catalog carries at
+	// all (catalogTickerUniverse: ticker/companyName/country/
+	// countryName only), so there is nothing honest to enumerate.
 	"/kpi/metrics/sectors",
 	// get_index_fund resolves holdings via a live web search per ticker
 	// (indexfund.go); knownIssuerDomains is a search-ranking hint for a
@@ -51,10 +58,10 @@ var notImplementedPaths = []string{
 	// so publishing it as a coverage catalog would overstate what this
 	// server actually supports.
 	"/index-funds/tickers",
-	// get_institutional_holdings takes any ticker/CIK the SECForm4
-	// provider recognizes; this server holds no local list of covered
-	// tickers or investors to enumerate.
-	"/institutional-holdings/tickers",
+	// get_institutional_holdings/tickers now answers the accept-universe
+	// (see above). /institutional-holdings/investors has no such
+	// fallback: this server holds no local list of investors (filer
+	// CIKs) to enumerate at all, accept-universe or otherwise.
 	"/institutional-holdings/investors",
 	// The four ownership-state tools these paths would call
 	// (get_insider_ownership, get_beneficial_ownership,
@@ -97,6 +104,24 @@ func restRoutes(rt *restAPI) []restRoute {
 		{http.MethodGet, "/company/facts", rt.companyFacts},
 		{http.MethodGet, "/filings/items", rt.filingItems},
 
+		// ---- All financials / line-item search (get_all_financials, search_line_items) ----
+		{http.MethodGet, "/financials", rt.allFinancials},
+		{http.MethodPost, "/financials/search/line-items", rt.searchLineItems},
+
+		// ---- Coverage lists: tickers each route ACCEPTS (see coverageRoute) ----
+		{http.MethodGet, "/company/facts/tickers", rt.coverageRoute("list_company_facts_tickers")},
+		{http.MethodGet, "/earnings/tickers", rt.coverageRoute("list_earnings_tickers")},
+		{http.MethodGet, "/filings/tickers", rt.coverageRoute("list_filings_tickers")},
+		{http.MethodGet, "/financial-metrics/snapshot/tickers", rt.coverageRoute("list_metrics_snapshot_tickers")},
+		{http.MethodGet, "/prices/tickers", rt.coverageRoute("list_prices_tickers")},
+		{http.MethodGet, "/prices/snapshot/tickers", rt.coverageRoute("list_price_snapshot_tickers")},
+		{http.MethodGet, "/institutional-holdings/tickers", rt.coverageRoute("list_institutional_holdings_tickers")},
+		{http.MethodGet, "/kpi/metrics/tickers", rt.coverageRoute("list_kpi_tickers")},
+
+		// ---- Static catalogs, zero paid calls (list_filing_types / list_filing_item_types) ----
+		{http.MethodGet, "/filings/types", rt.filingTypes},
+		{http.MethodGet, "/filings/items/types", rt.filingItemTypes},
+
 		// ---- Segmented financials (get_segmented_financials) ----
 		{http.MethodGet, "/financials/segments", rt.segmentedFinancialsRoute(segmentVariantCombined)},
 		{http.MethodGet, "/financials/income-statements/segments", rt.segmentedFinancialsRoute(segmentVariantIncomeStatement)},
@@ -117,10 +142,13 @@ func restRoutes(rt *restAPI) []restRoute {
 		// the same call, which is already "latest observation only".
 		{http.MethodGet, "/macro/interest-rates", rt.interestRates},
 		{http.MethodGet, "/macro/interest-rates/snapshot", rt.interestRates},
-		// /macro/interest-rates/banks needs no tool call: it is the static
-		// list of central banks bankSpecs (go/service/interestrates.go)
-		// scrapes, so it is served directly at zero cost.
-		{http.MethodGet, "/macro/interest-rates/banks", interestRateBanks},
+		// /macro/interest-rates/banks calls Service.ListInterestRateBanks
+		// (list_interest_rate_banks), which derives its answer from
+		// bankSpecs (go/service/interestrates.go) directly: this route
+		// used to hand-type its own copy of the bank code list, which
+		// could silently drift from bankSpecs if a bank were ever added
+		// or removed there. It still makes no Monid call.
+		{http.MethodGet, "/macro/interest-rates/banks", rt.interestRateBanks},
 
 		// ---- Index fund holdings (get_index_fund) ----
 		{http.MethodGet, "/index-funds", rt.indexFunds},
@@ -606,24 +634,13 @@ func (rt *restAPI) interestRates(w http.ResponseWriter, r *http.Request, id call
 	rt.callAndRespond(w, r, id, "get_interest_rates", map[string]any{}, nil)
 }
 
-// interestRateBankCodes are the central banks go/service/interestrates.go's
-// bankSpecs currently scrapes. Duplicated here (rather than imported) since
-// go/httpapi deliberately does not depend on go/service; keep this list in
-// sync with bankSpecs if a bank is ever added or removed there.
-var interestRateBankCodes = []string{"FED", "ECB", "BOE", "BOJ"}
-
-// interestRateBanks answers /macro/interest-rates/banks directly, with no
-// Caller.Call and no Monid spend: it is the static coverage list of banks
-// get_interest_rates can return a rate for.
-func interestRateBanks(w http.ResponseWriter, r *http.Request, id callerIdentity) {
-	banks := make([]any, len(interestRateBankCodes))
-	for i, code := range interestRateBankCodes {
-		banks[i] = code
-	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"resource": "interest_rates",
-		"banks":    banks,
-	})
+// interestRateBanks answers /macro/interest-rates/banks via
+// Service.ListInterestRateBanks (Caller.Capability, not Call): the static
+// coverage list of banks get_interest_rates can return a rate for,
+// derived from bankSpecs itself so this route can never drift from what
+// get_interest_rates actually scrapes. It still makes no Monid call.
+func (rt *restAPI) interestRateBanks(w http.ResponseWriter, r *http.Request, id callerIdentity) {
+	rt.callCapabilityAndRespond(w, r, id, "list_interest_rate_banks", map[string]any{}, nil)
 }
 
 // ---- Index fund holdings (get_index_fund) ----
@@ -672,6 +689,206 @@ func (rt *restAPI) institutionalHoldings(w http.ResponseWriter, r *http.Request,
 	rt.callAndRespond(w, r, id, "get_institutional_holdings", args, nil)
 }
 
+// ---- All financials (get_all_financials) ----
+
+// allFinancials mirrors statementRoute's own shape (as_reported rejected
+// at zero cost, period/limit/report_period* forwarded), since
+// get_all_financials shares get_income_statement/get_balance_sheet/
+// get_cash_flow_statement's own parseStatementArgs validation
+// (go/service/allfinancials.go). Like those three routes, cik and
+// filing_date* are not forwarded here either (see docs/openapi-notes.md's
+// documented REST-vs-tool deviations).
+func (rt *restAPI) allFinancials(w http.ResponseWriter, r *http.Request, id callerIdentity) {
+	q := r.URL.Query()
+	asReported, err := queryBool(q, "as_reported", false)
+	if err != nil {
+		writeFDError(w, http.StatusBadRequest, "bad_request", err.Error())
+		return
+	}
+	if asReported {
+		writeFDError(w, http.StatusBadRequest, "bad_request",
+			"as_reported is not supported; use the normalized financials endpoint")
+		return
+	}
+	limit, err := queryInt(q, "limit", 4)
+	if err != nil {
+		writeFDError(w, http.StatusBadRequest, "bad_request", err.Error())
+		return
+	}
+	args := map[string]any{
+		"period": queryStringDefault(q, "period", "annual"),
+		"limit":  float64(limit),
+	}
+	putQueryString(args, q, "ticker")
+	for _, name := range statementDateFilterNames {
+		putQueryString(args, q, name)
+	}
+	rt.callCapabilityAndRespond(w, r, id, "get_all_financials", args, nil)
+}
+
+// ---- Line-item search (search_line_items) ----
+
+// searchLineItemsRequest is the POST /financials/search/line-items body.
+// line_items/tickers have no server-side default (search_line_items
+// itself 400s when either is empty); period/limit mirror
+// search_line_items' own defaults ("ttm", 1) so an omitted field in the
+// JSON body still reaches the capability with the same default a caller
+// who never set the key would get.
+type searchLineItemsRequest struct {
+	LineItems []string `json:"line_items"`
+	Tickers   []string `json:"tickers"`
+	Period    string   `json:"period"`
+	Limit     int      `json:"limit"`
+}
+
+func (rt *restAPI) searchLineItems(w http.ResponseWriter, r *http.Request, id callerIdentity) {
+	req := searchLineItemsRequest{Period: "ttm", Limit: 1}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&req); err != nil {
+		writeFDError(w, http.StatusBadRequest, "bad_request", "request body must be valid JSON")
+		return
+	}
+	args := map[string]any{
+		"period": req.Period,
+		"limit":  float64(req.Limit),
+	}
+	// go/service's generic arg coercion reads array arguments as []any
+	// (matching how encoding/json decodes a JSON array into `any`), so
+	// the typed []string fields from req are re-boxed here, the same way
+	// screener re-boxes req.Filters.
+	if req.LineItems != nil {
+		lineItems := make([]any, len(req.LineItems))
+		for i, v := range req.LineItems {
+			lineItems[i] = v
+		}
+		args["line_items"] = lineItems
+	}
+	if req.Tickers != nil {
+		tickers := make([]any, len(req.Tickers))
+		for i, v := range req.Tickers {
+			tickers[i] = v
+		}
+		args["tickers"] = tickers
+	}
+	rt.callCapabilityAndRespond(w, r, id, "search_line_items", args, nil)
+}
+
+// ---- Coverage lists: tickers each route ACCEPTS, not a coverage claim ----
+//
+// All eight list*Tickers capabilities (go/service/coverage.go) answer from
+// the very same ~3,227-ticker US equity catalog: the tickers a route will
+// ACCEPT as input, never a claim that every one of them has data for that
+// particular dataset. Every response/description in this file and in
+// docs/openapi.json is worded that way deliberately.
+
+// coverageDefaultLimit/coverageMaxLimit mirror go/service/coverage.go's own
+// bounds (duplicated here as REST-facing input validation only; go/httpapi
+// deliberately does not import go/service - see router.go's Caller doc).
+// This layer always asks the capability for the full universe
+// (coverageMaxLimit, comfortably above the ~3,227-ticker universe) so it
+// can apply its own cursor pagination without ever asking "total" - which
+// must always be the full universe size - to move between pages.
+const (
+	coverageDefaultLimit = 1000
+	coverageMaxLimit     = 5000
+)
+
+// coverageBody decodes just enough of one coverage-list Capability
+// response ({"resource", "total", "tickers"}, go/service/coverage.go's
+// catalogListResponse) to repaginate it: go/httpapi deliberately does not
+// import go/service's unexported orderedJSONObject type, so this reflects
+// the shape via JSON the same way reshapeSegmentRecord does for
+// get_segmented_financials.
+type coverageBody struct {
+	Resource string   `json:"resource"`
+	Total    int      `json:"total"`
+	Tickers  []string `json:"tickers"`
+}
+
+// coverageRoute builds one of the eight list*Tickers coverage-list REST
+// handlers. limit/cursor are validated and applied entirely in this
+// layer: the underlying capability is always asked for the full universe
+// (see coverageMaxLimit above), which also means two coverage routes (or
+// two pages of the same route) requested inside the shared TTL cache
+// window cost exactly one Monid-adjacent catalog fetch between them.
+func (rt *restAPI) coverageRoute(capability string) routeHandler {
+	return func(w http.ResponseWriter, r *http.Request, id callerIdentity) {
+		q := r.URL.Query()
+		limit, err := queryInt(q, "limit", coverageDefaultLimit)
+		if err != nil {
+			writeFDError(w, http.StatusBadRequest, "bad_request", err.Error())
+			return
+		}
+		if limit < 1 || limit > coverageMaxLimit {
+			writeFDError(w, http.StatusBadRequest, "bad_request",
+				fmt.Sprintf("limit must be between 1 and %d", coverageMaxLimit))
+			return
+		}
+		offset, err := cursorOffset(q.Get("cursor"))
+		if err != nil {
+			writeFDError(w, http.StatusBadRequest, "invalid_cursor", "cursor is not a valid opaque pagination token")
+			return
+		}
+		result, err := rt.caller.Capability(r.Context(), id.monidAPIKey, capability, map[string]any{"limit": float64(coverageMaxLimit)})
+		if err != nil {
+			writeServiceError(w, err)
+			return
+		}
+		raw, merr := json.Marshal(result.Value)
+		if merr != nil {
+			writeFDError(w, http.StatusBadGateway, "upstream_schema_changed", "coverage-list response is not valid JSON")
+			return
+		}
+		var body coverageBody
+		if uerr := json.Unmarshal(raw, &body); uerr != nil {
+			writeFDError(w, http.StatusBadGateway, "upstream_schema_changed", "coverage-list response did not match the expected shape")
+			return
+		}
+		tickers := make([]any, len(body.Tickers))
+		for i, t := range body.Tickers {
+			tickers[i] = t
+		}
+		page, hasMore := paginateValue(tickers, offset, limit)
+		out := map[string]any{
+			"resource": body.Resource,
+			"total":    body.Total,
+			"tickers":  page,
+		}
+		if hasMore {
+			// Unlike nextPageURL (used by every other paginated route,
+			// where the REST page size is a fixed per-resource constant -
+			// see pageSizeFor), a coverage list's page size IS its own
+			// `limit` query parameter, so the continuation link must
+			// carry `limit` forward too: dropping it would silently
+			// reset the caller's page size back to coverageDefaultLimit
+			// on every follow-up request.
+			values := url.Values{"cursor": {encodeCursor(offset + limit)}, "limit": {strconv.Itoa(limit)}}
+			out["next_page_url"] = requestBaseURL(r) + r.URL.Path + "?" + values.Encode()
+		}
+		writeJSON(w, http.StatusOK, out)
+	}
+}
+
+// ---- Static catalogs, zero paid calls (list_filing_types / list_filing_item_types) ----
+
+// filingTypes answers /filings/types via Service.ListFilingTypes
+// (Caller.Capability, not Call): the static filing_type enum
+// get_filings/get_filing_items validate against. It makes no Monid call.
+func (rt *restAPI) filingTypes(w http.ResponseWriter, r *http.Request, id callerIdentity) {
+	rt.callCapabilityAndRespond(w, r, id, "list_filing_types", map[string]any{}, nil)
+}
+
+// filingItemTypes answers /filings/items/types via
+// Service.ListFilingItemTypes (Caller.Capability, not Call): the static
+// SEC form-instruction item catalog get_filing_items reads from
+// (go/providers/filingitems.go). filing_type is optional; when omitted,
+// all three supported forms (10-K/10-Q/8-K) are returned. It makes no
+// Monid call.
+func (rt *restAPI) filingItemTypes(w http.ResponseWriter, r *http.Request, id callerIdentity) {
+	args := map[string]any{}
+	putQueryString(args, r.URL.Query(), "filing_type")
+	rt.callCapabilityAndRespond(w, r, id, "list_filing_item_types", args, nil)
+}
+
 // ---- Shared call + response plumbing ----
 
 // callAndRespond runs tool with args, mapping a Caller error to an FD error
@@ -680,6 +897,21 @@ func (rt *restAPI) callAndRespond(
 	w http.ResponseWriter, r *http.Request, id callerIdentity, tool string, args map[string]any, extra map[string]any,
 ) {
 	result, err := rt.caller.Call(r.Context(), id.monidAPIKey, tool, args)
+	if err != nil {
+		writeServiceError(w, err)
+		return
+	}
+	respond(w, r, result, extra)
+}
+
+// callCapabilityAndRespond is callAndRespond's twin for the
+// Caller.Capability surface (go/service/capabilities.go's 13 non-tool
+// capabilities), used by every route in this file that is not one of the
+// 27 Financial Datasets MCP tools.
+func (rt *restAPI) callCapabilityAndRespond(
+	w http.ResponseWriter, r *http.Request, id callerIdentity, name string, args map[string]any, extra map[string]any,
+) {
+	result, err := rt.caller.Capability(r.Context(), id.monidAPIKey, name, args)
 	if err != nil {
 		writeServiceError(w, err)
 		return

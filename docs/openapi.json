@@ -4,7 +4,7 @@
     "title": "Monid Finance API",
     "version": "1.0.0",
     "summary": "A Financial Datasets-compatible finance REST API backed by Monid providers.",
-    "description": "US equities fundamentals, prices, filings, news, insider trades, and a stock screener, generated faithfully from this repository's Go source (go/httpapi/rest.go, go/service, go/fd). This server is drop-in compatible with the Financial Datasets REST and MCP interface: the same route shapes, the same query parameters, and response objects whose field names and field order match the Financial Datasets contract (docs/fd-contract-reference.json). It is an independent, Monid-backed implementation; it is not affiliated with or endorsed by Financial Datasets, and no Financial Datasets data or outputs are used.\n\n**Bring your own Monid API key.** Every request carries the caller's own key in the `X-API-KEY` header. Usage bills that caller's own Monid wallet; this server never stores or logs the key. Get a key at https://monid.ai.\n\n**Not every documented route is implemented.** Fifteen routes call live Monid providers; twenty more are registered for Financial Datasets route parity and always answer a zero-cost `{\"error\": \"not_implemented\", ...}` (tag: Not implemented). See docs/compatibility.md for the phased plan and docs/openapi-notes.md for how this document was derived.\n\n**Errors and soft failures.** Every failure — real HTTP error and zero-cost soft failure alike — uses the two-key body `{\"error\": <code>, \"message\": <detail>}`. Some routes answer `not_found` with HTTP 200 rather than a 4xx status (see each operation's description).\n\n**Pagination.** List routes return a wrapped envelope (e.g. `{\"income_statements\": [...], \"next_page_url\": \"...\"}`) with opaque, server-minted base64url `cursor` tokens. Pages hold 10 records (100 for /prices). `next_page_url` is an absolute URL on this deployment's own host, present only when more records remain.",
+    "description": "US equities fundamentals, prices, filings, news, insider trades, and a stock screener, generated faithfully from this repository's Go source (go/httpapi/rest.go, go/service, go/fd). This server is drop-in compatible with the Financial Datasets REST and MCP interface: the same route shapes, the same query parameters, and response objects whose field names and field order match the Financial Datasets contract (docs/fd-contract-reference.json). It is an independent, Monid-backed implementation; it is not affiliated with or endorsed by Financial Datasets, and no Financial Datasets data or outputs are used.\n\n**Bring your own Monid API key.** Every request carries the caller's own key in the `X-API-KEY` header. Usage bills that caller's own Monid wallet; this server never stores or logs the key. Get a key at https://monid.ai.\n\n**Not every documented route is implemented.** Thirty-nine routes are implemented - most call live Monid providers, and a handful (the static catalogs and the accept-universe coverage lists; see each operation's description) never call Monid at all. Six more are registered for Financial Datasets route parity and always answer a zero-cost `{\"error\": \"not_implemented\", ...}` (tag: Not implemented). See docs/compatibility.md for the phased plan and docs/openapi-notes.md for how this document was derived.\n\n**Errors and soft failures.** Every failure — real HTTP error and zero-cost soft failure alike — uses the two-key body `{\"error\": <code>, \"message\": <detail>}`. Some routes answer `not_found` with HTTP 200 rather than a 4xx status (see each operation's description).\n\n**Pagination.** List routes return a wrapped envelope (e.g. `{\"income_statements\": [...], \"next_page_url\": \"...\"}`) with opaque, server-minted base64url `cursor` tokens. Pages hold 10 records (100 for /prices). `next_page_url` is an absolute URL on this deployment's own host, present only when more records remain.\n\n**Ticker coverage lists are accept-universes, not data-coverage claims.** The eight `*/tickers` routes (e.g. /company/facts/tickers, /kpi/metrics/tickers) all answer from the same ~3,227-ticker US equity catalog: the tickers a route will ACCEPT as input, never a promise that every one of them has data for that particular dataset - this server has not measured per-dataset coverage. Their own `limit` (default 1000, max 5000) and `cursor` query parameters page through that shared universe independently of every other route's pagination convention above.",
     "contact": {
       "url": "https://monid-us-finance-mcp-2026.vercel.app"
     },
@@ -2010,37 +2010,80 @@
     },
     "/kpi/metrics/tickers": {
       "get": {
-        "operationId": "get_kpi_metrics_tickers_not_implemented",
+        "operationId": "list_kpi_tickers",
         "tags": [
-          "Not implemented"
+          "KPIs"
         ],
-        "summary": "/kpi/metrics/tickers (not implemented)",
-        "description": "Registered as a Financial Datasets-compatible route for parity, but not implemented by this deployment yet. Always answers HTTP 200 with a not_implemented ErrorResponse body, at zero cost and with no Monid call made — this is authenticated (X-API-KEY required) but otherwise free. See docs/compatibility.md for the phased implementation plan.",
-        "parameters": [],
+        "summary": "Tickers the KPI extraction routes accept",
+        "description": "Returns the tickers this route ACCEPTS as an input `ticker` for get_kpi_metrics/get_kpi_guidance/get_kpi_non_gaap - not a claim that every one of them has data for that dataset. All eight list*Tickers routes in this API (see the CoverageTickersResponse schema) draw from the exact same ~3,227-ticker US equity catalog (DefiLlama's /equities/v1/companies-list, country=US), because that catalog carries no per-dataset dimension to split on - only ticker/companyName/country/countryName. `total` is always the full accept-universe size, independent of `limit`/`cursor`. Every one of the eight routes shares the same 24h-cached catalog fetch, so requesting more than one inside that window costs at most one upstream fetch between them.",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 5000,
+              "default": 1000
+            },
+            "description": "Page size: how many tickers this page returns (default 1000, max 5000). Does not affect `total`, which is always the full accept-universe size."
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Opaque base64url pagination cursor from a previous response's next_page_url. Omit for the first page."
+          }
+        ],
         "responses": {
           "200": {
-            "description": "Zero-cost not_implemented stub.",
+            "description": "Illustrative example, truncated for readability and not a captured API sample: a real page holds up to `limit` (default 1000) tickers. `next_page_url` is present whenever more of the ~3,227-ticker universe remains beyond this page.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/NotImplementedResponse"
+                  "$ref": "#/components/schemas/CoverageTickersResponse"
                 },
                 "examples": {
                   "example": {
                     "value": {
-                      "error": "not_implemented",
-                      "message": "This Financial Datasets route is not implemented by the Monid-backed server yet; the call was free and no data was fabricated."
+                      "resource": "kpi",
+                      "total": 3227,
+                      "tickers": [
+                        "A",
+                        "AA",
+                        "AAPL",
+                        "AAT",
+                        "AB",
+                        "..."
+                      ],
+                      "next_page_url": "https://monid-finance-api.fly.dev/kpi/metrics/tickers?cursor=eyJvIjoxMDAwfQ&limit=1000"
                     }
                   }
                 }
               }
             }
           },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "402": {
+            "$ref": "#/components/responses/PaymentRequired"
+          },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "504": {
+            "$ref": "#/components/responses/GatewayTimeout"
           }
         }
       }
@@ -2484,7 +2527,7 @@
           "Macroeconomics"
         ],
         "summary": "Available central banks",
-        "description": "Returns the static list of central bank codes get_interest_rates can currently scrape a policy rate for (go/service/interestrates.go's bankSpecs: FED, ECB, BOE, BOJ). This is a fixed, hardcoded catalog, not a live query, so it never calls Monid and is served at zero cost.",
+        "description": "Returns the central banks get_interest_rates can currently scrape a policy rate for, derived directly from go/service/interestrates.go's bankSpecs (Service.ListInterestRateBanks) rather than a second, hand-typed copy of the bank list, so this route can never drift from what get_interest_rates actually reads. This is a fixed, hardcoded catalog, not a live query, so it never calls Monid and is served at zero cost.",
         "parameters": [],
         "responses": {
           "200": {
@@ -2497,12 +2540,24 @@
                 "examples": {
                   "example": {
                     "value": {
-                      "resource": "interest_rates",
+                      "resource": "interest_rate_banks",
                       "banks": [
-                        "FED",
-                        "ECB",
-                        "BOE",
-                        "BOJ"
+                        {
+                          "bank": "FED",
+                          "name": "Federal Reserve"
+                        },
+                        {
+                          "bank": "ECB",
+                          "name": "European Central Bank"
+                        },
+                        {
+                          "bank": "BOE",
+                          "name": "Bank of England"
+                        },
+                        {
+                          "bank": "BOJ",
+                          "name": "Bank of Japan"
+                        }
                       ]
                     }
                   }
@@ -3498,37 +3553,80 @@
     },
     "/institutional-holdings/tickers": {
       "get": {
-        "operationId": "get_institutional_holdings_tickers_not_implemented",
+        "operationId": "list_institutional_holdings_tickers",
         "tags": [
-          "Not implemented"
+          "Institutional holdings"
         ],
-        "summary": "/institutional-holdings/tickers (not implemented)",
-        "description": "Registered as a Financial Datasets-compatible route for parity, but not implemented by this deployment yet. Always answers HTTP 200 with a not_implemented ErrorResponse body, at zero cost and with no Monid call made — this is authenticated (X-API-KEY required) but otherwise free. See docs/compatibility.md for the phased implementation plan.",
-        "parameters": [],
+        "summary": "Tickers get_institutional_holdings accepts",
+        "description": "Returns the tickers this route ACCEPTS as an input `ticker` for get_institutional_holdings - not a claim that every one of them has data for that dataset. All eight list*Tickers routes in this API (see the CoverageTickersResponse schema) draw from the exact same ~3,227-ticker US equity catalog (DefiLlama's /equities/v1/companies-list, country=US), because that catalog carries no per-dataset dimension to split on - only ticker/companyName/country/countryName. `total` is always the full accept-universe size, independent of `limit`/`cursor`. Every one of the eight routes shares the same 24h-cached catalog fetch, so requesting more than one inside that window costs at most one upstream fetch between them.",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 5000,
+              "default": 1000
+            },
+            "description": "Page size: how many tickers this page returns (default 1000, max 5000). Does not affect `total`, which is always the full accept-universe size."
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Opaque base64url pagination cursor from a previous response's next_page_url. Omit for the first page."
+          }
+        ],
         "responses": {
           "200": {
-            "description": "Zero-cost not_implemented stub.",
+            "description": "Illustrative example, truncated for readability and not a captured API sample: a real page holds up to `limit` (default 1000) tickers. `next_page_url` is present whenever more of the ~3,227-ticker universe remains beyond this page.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/NotImplementedResponse"
+                  "$ref": "#/components/schemas/CoverageTickersResponse"
                 },
                 "examples": {
                   "example": {
                     "value": {
-                      "error": "not_implemented",
-                      "message": "This Financial Datasets route is not implemented by the Monid-backed server yet; the call was free and no data was fabricated."
+                      "resource": "institutional_holdings",
+                      "total": 3227,
+                      "tickers": [
+                        "A",
+                        "AA",
+                        "AAPL",
+                        "AAT",
+                        "AB",
+                        "..."
+                      ],
+                      "next_page_url": "https://monid-finance-api.fly.dev/institutional-holdings/tickers?cursor=eyJvIjoxMDAwfQ&limit=1000"
                     }
                   }
                 }
               }
             }
           },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "402": {
+            "$ref": "#/components/responses/PaymentRequired"
+          },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "504": {
+            "$ref": "#/components/responses/GatewayTimeout"
           }
         }
       }
@@ -3640,6 +3738,892 @@
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
+          }
+        }
+      }
+    },
+    "/company/facts/tickers": {
+      "get": {
+        "operationId": "list_company_facts_tickers",
+        "tags": [
+          "Company"
+        ],
+        "summary": "Tickers get_company_facts accepts",
+        "description": "Returns the tickers this route ACCEPTS as an input `ticker` for get_company_facts - not a claim that every one of them has data for that dataset. All eight list*Tickers routes in this API (see the CoverageTickersResponse schema) draw from the exact same ~3,227-ticker US equity catalog (DefiLlama's /equities/v1/companies-list, country=US), because that catalog carries no per-dataset dimension to split on - only ticker/companyName/country/countryName. `total` is always the full accept-universe size, independent of `limit`/`cursor`. Every one of the eight routes shares the same 24h-cached catalog fetch, so requesting more than one inside that window costs at most one upstream fetch between them.",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 5000,
+              "default": 1000
+            },
+            "description": "Page size: how many tickers this page returns (default 1000, max 5000). Does not affect `total`, which is always the full accept-universe size."
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Opaque base64url pagination cursor from a previous response's next_page_url. Omit for the first page."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Illustrative example, truncated for readability and not a captured API sample: a real page holds up to `limit` (default 1000) tickers. `next_page_url` is present whenever more of the ~3,227-ticker universe remains beyond this page.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CoverageTickersResponse"
+                },
+                "examples": {
+                  "example": {
+                    "value": {
+                      "resource": "company_facts",
+                      "total": 3227,
+                      "tickers": [
+                        "A",
+                        "AA",
+                        "AAPL",
+                        "AAT",
+                        "AB",
+                        "..."
+                      ],
+                      "next_page_url": "https://monid-finance-api.fly.dev/company/facts/tickers?cursor=eyJvIjoxMDAwfQ&limit=1000"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "402": {
+            "$ref": "#/components/responses/PaymentRequired"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "504": {
+            "$ref": "#/components/responses/GatewayTimeout"
+          }
+        }
+      }
+    },
+    "/earnings/tickers": {
+      "get": {
+        "operationId": "list_earnings_tickers",
+        "tags": [
+          "Earnings"
+        ],
+        "summary": "Tickers get_earnings accepts",
+        "description": "Returns the tickers this route ACCEPTS as an input `ticker` for get_earnings - not a claim that every one of them has data for that dataset. All eight list*Tickers routes in this API (see the CoverageTickersResponse schema) draw from the exact same ~3,227-ticker US equity catalog (DefiLlama's /equities/v1/companies-list, country=US), because that catalog carries no per-dataset dimension to split on - only ticker/companyName/country/countryName. `total` is always the full accept-universe size, independent of `limit`/`cursor`. Every one of the eight routes shares the same 24h-cached catalog fetch, so requesting more than one inside that window costs at most one upstream fetch between them.",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 5000,
+              "default": 1000
+            },
+            "description": "Page size: how many tickers this page returns (default 1000, max 5000). Does not affect `total`, which is always the full accept-universe size."
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Opaque base64url pagination cursor from a previous response's next_page_url. Omit for the first page."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Illustrative example, truncated for readability and not a captured API sample: a real page holds up to `limit` (default 1000) tickers. `next_page_url` is present whenever more of the ~3,227-ticker universe remains beyond this page.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CoverageTickersResponse"
+                },
+                "examples": {
+                  "example": {
+                    "value": {
+                      "resource": "earnings",
+                      "total": 3227,
+                      "tickers": [
+                        "A",
+                        "AA",
+                        "AAPL",
+                        "AAT",
+                        "AB",
+                        "..."
+                      ],
+                      "next_page_url": "https://monid-finance-api.fly.dev/earnings/tickers?cursor=eyJvIjoxMDAwfQ&limit=1000"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "402": {
+            "$ref": "#/components/responses/PaymentRequired"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "504": {
+            "$ref": "#/components/responses/GatewayTimeout"
+          }
+        }
+      }
+    },
+    "/filings/tickers": {
+      "get": {
+        "operationId": "list_filings_tickers",
+        "tags": [
+          "Filings"
+        ],
+        "summary": "Tickers get_filings accepts",
+        "description": "Returns the tickers this route ACCEPTS as an input `ticker` for get_filings - not a claim that every one of them has data for that dataset. All eight list*Tickers routes in this API (see the CoverageTickersResponse schema) draw from the exact same ~3,227-ticker US equity catalog (DefiLlama's /equities/v1/companies-list, country=US), because that catalog carries no per-dataset dimension to split on - only ticker/companyName/country/countryName. `total` is always the full accept-universe size, independent of `limit`/`cursor`. Every one of the eight routes shares the same 24h-cached catalog fetch, so requesting more than one inside that window costs at most one upstream fetch between them.",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 5000,
+              "default": 1000
+            },
+            "description": "Page size: how many tickers this page returns (default 1000, max 5000). Does not affect `total`, which is always the full accept-universe size."
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Opaque base64url pagination cursor from a previous response's next_page_url. Omit for the first page."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Illustrative example, truncated for readability and not a captured API sample: a real page holds up to `limit` (default 1000) tickers. `next_page_url` is present whenever more of the ~3,227-ticker universe remains beyond this page.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CoverageTickersResponse"
+                },
+                "examples": {
+                  "example": {
+                    "value": {
+                      "resource": "filings",
+                      "total": 3227,
+                      "tickers": [
+                        "A",
+                        "AA",
+                        "AAPL",
+                        "AAT",
+                        "AB",
+                        "..."
+                      ],
+                      "next_page_url": "https://monid-finance-api.fly.dev/filings/tickers?cursor=eyJvIjoxMDAwfQ&limit=1000"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "402": {
+            "$ref": "#/components/responses/PaymentRequired"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "504": {
+            "$ref": "#/components/responses/GatewayTimeout"
+          }
+        }
+      }
+    },
+    "/financial-metrics/snapshot/tickers": {
+      "get": {
+        "operationId": "list_metrics_snapshot_tickers",
+        "tags": [
+          "Financial metrics"
+        ],
+        "summary": "Tickers get_financial_metrics_snapshot accepts",
+        "description": "Returns the tickers this route ACCEPTS as an input `ticker` for get_financial_metrics_snapshot - not a claim that every one of them has data for that dataset. All eight list*Tickers routes in this API (see the CoverageTickersResponse schema) draw from the exact same ~3,227-ticker US equity catalog (DefiLlama's /equities/v1/companies-list, country=US), because that catalog carries no per-dataset dimension to split on - only ticker/companyName/country/countryName. `total` is always the full accept-universe size, independent of `limit`/`cursor`. Every one of the eight routes shares the same 24h-cached catalog fetch, so requesting more than one inside that window costs at most one upstream fetch between them.",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 5000,
+              "default": 1000
+            },
+            "description": "Page size: how many tickers this page returns (default 1000, max 5000). Does not affect `total`, which is always the full accept-universe size."
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Opaque base64url pagination cursor from a previous response's next_page_url. Omit for the first page."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Illustrative example, truncated for readability and not a captured API sample: a real page holds up to `limit` (default 1000) tickers. `next_page_url` is present whenever more of the ~3,227-ticker universe remains beyond this page.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CoverageTickersResponse"
+                },
+                "examples": {
+                  "example": {
+                    "value": {
+                      "resource": "financial_metrics_snapshot",
+                      "total": 3227,
+                      "tickers": [
+                        "A",
+                        "AA",
+                        "AAPL",
+                        "AAT",
+                        "AB",
+                        "..."
+                      ],
+                      "next_page_url": "https://monid-finance-api.fly.dev/financial-metrics/snapshot/tickers?cursor=eyJvIjoxMDAwfQ&limit=1000"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "402": {
+            "$ref": "#/components/responses/PaymentRequired"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "504": {
+            "$ref": "#/components/responses/GatewayTimeout"
+          }
+        }
+      }
+    },
+    "/prices/tickers": {
+      "get": {
+        "operationId": "list_prices_tickers",
+        "tags": [
+          "Prices"
+        ],
+        "summary": "Tickers get_stock_prices accepts",
+        "description": "Returns the tickers this route ACCEPTS as an input `ticker` for get_stock_prices - not a claim that every one of them has data for that dataset. All eight list*Tickers routes in this API (see the CoverageTickersResponse schema) draw from the exact same ~3,227-ticker US equity catalog (DefiLlama's /equities/v1/companies-list, country=US), because that catalog carries no per-dataset dimension to split on - only ticker/companyName/country/countryName. `total` is always the full accept-universe size, independent of `limit`/`cursor`. Every one of the eight routes shares the same 24h-cached catalog fetch, so requesting more than one inside that window costs at most one upstream fetch between them.",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 5000,
+              "default": 1000
+            },
+            "description": "Page size: how many tickers this page returns (default 1000, max 5000). Does not affect `total`, which is always the full accept-universe size."
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Opaque base64url pagination cursor from a previous response's next_page_url. Omit for the first page."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Illustrative example, truncated for readability and not a captured API sample: a real page holds up to `limit` (default 1000) tickers. `next_page_url` is present whenever more of the ~3,227-ticker universe remains beyond this page.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CoverageTickersResponse"
+                },
+                "examples": {
+                  "example": {
+                    "value": {
+                      "resource": "prices",
+                      "total": 3227,
+                      "tickers": [
+                        "A",
+                        "AA",
+                        "AAPL",
+                        "AAT",
+                        "AB",
+                        "..."
+                      ],
+                      "next_page_url": "https://monid-finance-api.fly.dev/prices/tickers?cursor=eyJvIjoxMDAwfQ&limit=1000"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "402": {
+            "$ref": "#/components/responses/PaymentRequired"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "504": {
+            "$ref": "#/components/responses/GatewayTimeout"
+          }
+        }
+      }
+    },
+    "/prices/snapshot/tickers": {
+      "get": {
+        "operationId": "list_price_snapshot_tickers",
+        "tags": [
+          "Prices"
+        ],
+        "summary": "Tickers get_stock_price accepts",
+        "description": "Returns the tickers this route ACCEPTS as an input `ticker` for get_stock_price - not a claim that every one of them has data for that dataset. All eight list*Tickers routes in this API (see the CoverageTickersResponse schema) draw from the exact same ~3,227-ticker US equity catalog (DefiLlama's /equities/v1/companies-list, country=US), because that catalog carries no per-dataset dimension to split on - only ticker/companyName/country/countryName. `total` is always the full accept-universe size, independent of `limit`/`cursor`. Every one of the eight routes shares the same 24h-cached catalog fetch, so requesting more than one inside that window costs at most one upstream fetch between them.",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 5000,
+              "default": 1000
+            },
+            "description": "Page size: how many tickers this page returns (default 1000, max 5000). Does not affect `total`, which is always the full accept-universe size."
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Opaque base64url pagination cursor from a previous response's next_page_url. Omit for the first page."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Illustrative example, truncated for readability and not a captured API sample: a real page holds up to `limit` (default 1000) tickers. `next_page_url` is present whenever more of the ~3,227-ticker universe remains beyond this page.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CoverageTickersResponse"
+                },
+                "examples": {
+                  "example": {
+                    "value": {
+                      "resource": "price_snapshot",
+                      "total": 3227,
+                      "tickers": [
+                        "A",
+                        "AA",
+                        "AAPL",
+                        "AAT",
+                        "AB",
+                        "..."
+                      ],
+                      "next_page_url": "https://monid-finance-api.fly.dev/prices/snapshot/tickers?cursor=eyJvIjoxMDAwfQ&limit=1000"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "402": {
+            "$ref": "#/components/responses/PaymentRequired"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "504": {
+            "$ref": "#/components/responses/GatewayTimeout"
+          }
+        }
+      }
+    },
+    "/filings/types": {
+      "get": {
+        "operationId": "list_filing_types",
+        "tags": [
+          "Filings"
+        ],
+        "summary": "Available filing types",
+        "description": "Returns the static filing_type enum get_filings/get_filing_items validate against (go/service/coverage.go's filingTypeOrder, Financial Datasets' own documented enum order: 10-K, 10-Q, 8-K, 20-F, 6-K). This is a fixed, hardcoded catalog derived from the same enum this server's own validation uses, not a live query, so it never calls Monid and is served at zero cost.",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The five filing types this server validates filing_type against.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FilingTypesResponse"
+                },
+                "examples": {
+                  "example": {
+                    "value": {
+                      "resource": "filing_types",
+                      "filing_types": [
+                        "10-K",
+                        "10-Q",
+                        "8-K",
+                        "20-F",
+                        "6-K"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          }
+        }
+      }
+    },
+    "/filings/items/types": {
+      "get": {
+        "operationId": "list_filing_item_types",
+        "tags": [
+          "Filings"
+        ],
+        "summary": "Available filing item types",
+        "description": "Returns the static SEC form-instruction item catalog get_filing_items reads `item` values from (go/providers/filingitems.go's Catalogs; CatalogScope: \"Static SEC form-instruction catalog; no Monid upstream call or claim.\"). Covers only the three forms get_filing_items extracts from (10-K, 10-Q, 8-K) - 20-F and 6-K are valid get_filings filing_type values but have no item catalog here. Omitting filing_type returns all three keys; passing one narrows to that key. This is a fixed, hardcoded catalog, not a live query, so it never calls Monid and is served at zero cost.",
+        "parameters": [
+          {
+            "name": "filing_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "10-K",
+                "10-Q",
+                "8-K"
+              ]
+            },
+            "description": "Narrow the catalog to one filing type. Omit to get all three. Case-insensitive; an unrecognized value answers 400 bad_request."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Illustrative example, truncated for readability and not a captured API sample: each form's real catalog carries every item that form's SEC instructions define.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FilingItemTypesResponse"
+                },
+                "examples": {
+                  "example": {
+                    "value": {
+                      "10-K": [
+                        {
+                          "name": "Item-1",
+                          "title": "Business",
+                          "description": "Business"
+                        },
+                        {
+                          "name": "Item-1A",
+                          "title": "Risk Factors",
+                          "description": "Risk Factors"
+                        },
+                        {
+                          "name": "Item-7",
+                          "title": "Management's Discussion and Analysis of Financial Condition and Results of Operations",
+                          "description": "Management's Discussion and Analysis of Financial Condition and Results of Operations"
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          }
+        }
+      }
+    },
+    "/financials": {
+      "get": {
+        "operationId": "get_all_financials",
+        "tags": [
+          "Financial statements"
+        ],
+        "summary": "Get all financial statements",
+        "description": "Fetches a company's income statement, balance sheet, and cash flow statement together in one call, composed into {\"financials\": {...}} (go/service/allfinancials.go). Shares get_income_statement/get_balance_sheet/get_cash_flow_statement's own period/limit/report_period* validation (parseStatementArgs) and the same annual-vs-ttm REST default note below, but fetches the shared /equities/v1/statements + /equities/v1/filings payload once and fans the three per-kind record builds out over goroutines, rather than three separate paid calls: composing this from the three individual routes would cost 3x.\n\nperiod default note: like the three individual statement routes, this REST route always fills a period value before calling the underlying capability, so an omitted `period` query parameter defaults to \"annual\" here, not the capability's own \"ttm\" default. Pass `period=ttm` explicitly for trailing-twelve-month rows.\n\ncik and filing_date* filtering are not forwarded by this REST route (see docs/openapi-notes.md's documented REST-vs-tool deviations for the three individual statement routes; the same gap applies here).",
+        "parameters": [
+          {
+            "name": "ticker",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Uppercase-normalized ticker symbol (1-20 letters/digits/dots/hyphens)."
+          },
+          {
+            "name": "period",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "annual",
+                "quarterly",
+                "ttm"
+              ],
+              "default": "annual"
+            },
+            "description": "Reporting period. REST-level default is \"annual\" (see description); the capability's own default is \"ttm\"."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 4
+            },
+            "description": "Report periods per statement kind, most recent first (default 4, max 100)."
+          },
+          {
+            "name": "as_reported",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false
+            },
+            "description": "Accepted for FD parameter parity but always rejected: as_reported=true answers 400 bad_request (\"as_reported is not supported; use the normalized financials endpoint\") at zero cost."
+          },
+          {
+            "name": "report_period",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Exact report_period date filter (YYYY-MM-DD)."
+          },
+          {
+            "name": "report_period_gte",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "report_period >= this date (YYYY-MM-DD, inclusive)."
+          },
+          {
+            "name": "report_period_lte",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "report_period <= this date (YYYY-MM-DD, inclusive)."
+          },
+          {
+            "name": "report_period_gt",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "report_period > this date (YYYY-MM-DD, exclusive)."
+          },
+          {
+            "name": "report_period_lt",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "report_period < this date (YYYY-MM-DD, exclusive)."
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Not used: this route is never paginated (see AllFinancialsResponse)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Composed income/balance/cash-flow statements for one ticker. Real AAPL FY2025 annual values captured from our own live API (docs/our-live-samples/income_statements.json, balance_sheets.json, cash_flow.json).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AllFinancialsResponse"
+                },
+                "examples": {
+                  "example": {
+                    "value": {
+                      "financials": {
+                        "income_statements": [
+                          {
+                            "ticker": "AAPL",
+                            "report_period": "2025-09-30",
+                            "fiscal_period": "FY2025",
+                            "period": "annual",
+                            "revenue": 416161000000,
+                            "cost_of_revenue": 220960000000,
+                            "gross_profit": 195201000000,
+                            "operating_expense": 62151000000,
+                            "research_and_development": 34550000000,
+                            "operating_income": 133050000000,
+                            "ebit": 133050000000,
+                            "income_tax_expense": 20719000000,
+                            "net_income": 112010000000,
+                            "net_income_common_stock": 112010000000,
+                            "earnings_per_share": 7.49,
+                            "earnings_per_share_diluted": 7.46,
+                            "weighted_average_shares": 14948500000,
+                            "weighted_average_shares_diluted": 14948500000
+                          }
+                        ],
+                        "balance_sheets": [
+                          {
+                            "ticker": "AAPL",
+                            "report_period": "2025-09-30",
+                            "fiscal_period": "FY2025",
+                            "period": "annual",
+                            "total_assets": 359241000000,
+                            "current_assets": 147957000000,
+                            "cash_and_equivalents": 35934000000,
+                            "inventory": 5718000000,
+                            "trade_and_non_trade_receivables": 39777000000,
+                            "non_current_assets": 211284000000,
+                            "total_liabilities": 285508000000,
+                            "current_liabilities": 165631000000,
+                            "current_debt": 20329000000,
+                            "non_current_liabilities": 119877000000,
+                            "non_current_debt": 78328000000,
+                            "shareholders_equity": 73733000000,
+                            "retained_earnings": -14264000000
+                          }
+                        ],
+                        "cash_flow_statements": [
+                          {
+                            "ticker": "AAPL",
+                            "report_period": "2025-09-30",
+                            "fiscal_period": "FY2025",
+                            "period": "annual",
+                            "net_cash_flow_from_operations": 111482000000,
+                            "net_cash_flow_from_investing": 27910000000,
+                            "dividends_and_other_cash_distributions": -15421000000,
+                            "net_cash_flow_from_financing": -120686000000,
+                            "change_in_cash_and_equivalents": 18706000000,
+                            "ending_cash_balance": 35934000000,
+                            "free_cash_flow": 98767000000
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "402": {
+            "$ref": "#/components/responses/PaymentRequired"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "504": {
+            "$ref": "#/components/responses/GatewayTimeout"
+          }
+        }
+      }
+    },
+    "/financials/search/line-items": {
+      "post": {
+        "operationId": "search_line_items",
+        "tags": [
+          "Financial statements"
+        ],
+        "summary": "Search financial statement line items across tickers",
+        "description": "Searches an arbitrary set of statement field names (from IncomeStatement/BalanceSheet/CashFlowStatement) across an arbitrary, capped set of tickers, merging one row per (ticker, report_period) (go/service/searchlineitems.go). Reuses the same statement-matrix parsing get_income_statement/get_balance_sheet/get_cash_flow_statement build on, fetching all three statement kinds for every requested ticker and returning only the caller's requested field names. `limit` bounds how many report periods each ticker contributes (most recent first) - Financial Datasets' own schema does not say whether limit is per-ticker or global, and per-ticker is what every other limit in this API means. `tickers` is capped at 5 entries: each ticker is its own paid /equities/v1/statements call, so without a cap one request could turn into an unbounded spend.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SearchLineItemsRequest"
+              },
+              "examples": {
+                "example": {
+                  "value": {
+                    "line_items": [
+                      "revenue",
+                      "free_cash_flow"
+                    ],
+                    "tickers": [
+                      "AAPL"
+                    ],
+                    "period": "annual",
+                    "limit": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "One row per (ticker, report_period). Real AAPL FY2025 revenue/free_cash_flow values captured from our own live API (docs/our-live-samples/income_statements.json, cash_flow.json). Never paginated (no next_page_url; use limit to bound the result set per ticker).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LineItemsSearchResponse"
+                },
+                "examples": {
+                  "example": {
+                    "value": {
+                      "search_results": [
+                        {
+                          "ticker": "AAPL",
+                          "report_period": "2025-09-30",
+                          "period": "annual",
+                          "revenue": 416161000000,
+                          "free_cash_flow": 98767000000
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "402": {
+            "$ref": "#/components/responses/PaymentRequired"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "504": {
+            "$ref": "#/components/responses/GatewayTimeout"
           }
         }
       }
@@ -5874,7 +6858,7 @@
       "InterestRateBanksResponse": {
         "type": "object",
         "title": "InterestRateBanksResponse",
-        "description": "Static coverage-list response for /macro/interest-rates/banks: the central bank codes get_interest_rates can currently scrape a rate for.",
+        "description": "Static coverage-list response for /macro/interest-rates/banks: the central banks get_interest_rates can currently scrape a rate for, derived directly from go/service/interestrates.go's bankSpecs (Service.ListInterestRateBanks) rather than a second, hand-typed copy, so this list can never drift from what get_interest_rates actually reads.",
         "properties": {
           "resource": {
             "type": "string",
@@ -5883,9 +6867,9 @@
           "banks": {
             "type": "array",
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/InterestRateBank"
             },
-            "description": "Central bank codes, in go/service/interestrates.go's bankSpecs order."
+            "description": "Central banks, in bankSpecs order."
           }
         },
         "required": [
@@ -6092,6 +7076,250 @@
         },
         "required": [
           "institutional_holdings"
+        ]
+      },
+      "InterestRateBank": {
+        "type": "object",
+        "title": "InterestRateBank",
+        "description": "One central bank get_interest_rates can scrape a policy rate for, from go/service/interestrates.go's bankSpecs.",
+        "properties": {
+          "bank": {
+            "type": "string",
+            "description": "Bank code (matches the `bank` field on InterestRate records)."
+          },
+          "name": {
+            "type": "string",
+            "description": "Full bank name."
+          }
+        },
+        "required": [
+          "bank",
+          "name"
+        ]
+      },
+      "CoverageTickersResponse": {
+        "type": "object",
+        "title": "CoverageTickersResponse",
+        "description": "Shared response shape for every list*Tickers coverage-list route (go/service/coverage.go's catalogListResponse). All eight routes draw from the exact same ~3,227-ticker US equity catalog (DefiLlama's /equities/v1/companies-list, country=US, deduped/upper-cased/sorted ascending): `tickers` and `total` describe the universe of tickers this particular route will ACCEPT as an input ticker, never a claim that every one of them has data for that specific dataset - this server has not measured per-dataset coverage. `total` is always the full matched universe size, independent of `limit`/`cursor`; `tickers` is the current page, sorted ascending.",
+        "properties": {
+          "resource": {
+            "type": "string",
+            "description": "Label identifying which route this catalog answers for (e.g. \"kpi\", \"institutional_holdings\") - not a per-dataset coverage claim, just this response's own identity."
+          },
+          "total": {
+            "type": "integer",
+            "description": "Full accept-universe size (~3,227 at last measurement), independent of `limit`/`cursor`."
+          },
+          "tickers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "This page's tickers, upper-cased and sorted ascending."
+          },
+          "next_page_url": {
+            "type": "string",
+            "format": "uri",
+            "description": "Present only when more tickers remain beyond this page."
+          }
+        },
+        "required": [
+          "resource",
+          "total",
+          "tickers"
+        ]
+      },
+      "FilingTypesResponse": {
+        "type": "object",
+        "title": "FilingTypesResponse",
+        "description": "Static enum response for /filings/types: the filing_type values get_filings/get_filing_items validate against (go/service/coverage.go's filingTypeOrder, Financial Datasets' own documented enum order). Makes no Monid call.",
+        "properties": {
+          "resource": {
+            "type": "string",
+            "description": "Label identifying what this catalog is a list of."
+          },
+          "filing_types": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "10-K",
+                "10-Q",
+                "8-K",
+                "20-F",
+                "6-K"
+              ]
+            },
+            "description": "Accepted filing_type values, in Financial Datasets' own documented enum order."
+          }
+        },
+        "required": [
+          "resource",
+          "filing_types"
+        ]
+      },
+      "FilingItemTypeEntry": {
+        "type": "object",
+        "title": "FilingItemTypeEntry",
+        "description": "One row of a filing type's item catalog (go/providers/filingitems.go's FilingItemTypeEntry). description duplicates title: the static SEC form-instruction catalogs have no separate description field.",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Item identifier as get_filing_items' `item` query parameter expects, e.g. \"Item-1\", \"Item-7\" (go/providers/filingitems.go's TenKItems/TenQItems/EightKItems)."
+          },
+          "title": {
+            "type": "string",
+            "description": "SEC form-instruction item title."
+          },
+          "description": {
+            "type": "string",
+            "description": "Duplicates title (see schema description)."
+          }
+        },
+        "required": [
+          "name",
+          "title",
+          "description"
+        ]
+      },
+      "FilingItemTypesResponse": {
+        "type": "object",
+        "title": "FilingItemTypesResponse",
+        "description": "Static SEC form-instruction item catalog for /filings/items/types (go/providers/filingitems.go's Catalogs; CatalogScope: \"Static SEC form-instruction catalog; no Monid upstream call or claim.\"). Keyed by filing type (\"10-K\", \"10-Q\", \"8-K\" - the only three forms get_filing_items extracts from; 20-F/6-K are not covered here even though they are valid get_filings filing_type values). Omitting `filing_type` returns all three keys; passing one returns only that key. Makes no Monid call.",
+        "additionalProperties": {
+          "type": "array",
+          "items": {
+            "$ref": "#/components/schemas/FilingItemTypeEntry"
+          }
+        }
+      },
+      "AllFinancialsResponse": {
+        "type": "object",
+        "title": "AllFinancialsResponse",
+        "description": "get_all_financials envelope: {\"financials\": {\"income_statements\": [...], \"balance_sheets\": [...], \"cash_flow_statements\": [...]}}. Never paginated (no next_page_url); use `limit` to bound each statement kind's record count. Composes the same three fetches get_income_statement/get_balance_sheet/get_cash_flow_statement each make individually, but fetches the shared /equities/v1/statements + /equities/v1/filings payload once and fans the three record builds out over goroutines, rather than three separate paid calls (go/service/allfinancials.go).",
+        "properties": {
+          "financials": {
+            "type": "object",
+            "properties": {
+              "income_statements": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/IncomeStatement"
+                }
+              },
+              "balance_sheets": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/BalanceSheet"
+                }
+              },
+              "cash_flow_statements": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/CashFlowStatement"
+                }
+              }
+            },
+            "required": [
+              "income_statements",
+              "balance_sheets",
+              "cash_flow_statements"
+            ]
+          }
+        },
+        "required": [
+          "financials"
+        ]
+      },
+      "SearchLineItemsRequest": {
+        "type": "object",
+        "title": "SearchLineItemsRequest",
+        "description": "POST body for /financials/search/line-items (search_line_items).",
+        "properties": {
+          "line_items": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "description": "Statement field names to search for (e.g. \"revenue\", \"total_assets\", \"free_cash_flow\") - any field name IncomeStatement/BalanceSheet/CashFlowStatement declare. Required; at least one entry."
+          },
+          "tickers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "maxItems": 5,
+            "description": "Tickers to search across. Required; 1-5 entries, no duplicates (each is its own paid /equities/v1/statements call, so this is capped to bound spend)."
+          },
+          "period": {
+            "type": "string",
+            "enum": [
+              "annual",
+              "quarterly",
+              "ttm"
+            ],
+            "default": "ttm",
+            "description": "Reporting period. Default \"ttm\", matching search_line_items' own default."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 1,
+            "description": "Report periods per ticker, most recent first (default 1, max 100)."
+          }
+        },
+        "required": [
+          "line_items",
+          "tickers"
+        ]
+      },
+      "LineItemSearchRow": {
+        "type": "object",
+        "title": "LineItemSearchRow",
+        "description": "One (ticker, report_period) row of a search_line_items result: ticker/report_period/period plus whichever requested line_items exist on that row, in the caller's requested order. A line item absent from a given ticker/period is left out rather than fabricated as null/0. currency is never set: DefiLlama's statements payload carries no currency field.",
+        "properties": {
+          "ticker": {
+            "type": "string"
+          },
+          "report_period": {
+            "type": "string",
+            "format": "date"
+          },
+          "period": {
+            "type": "string",
+            "enum": [
+              "annual",
+              "quarterly",
+              "ttm"
+            ]
+          }
+        },
+        "required": [
+          "ticker",
+          "report_period",
+          "period"
+        ],
+        "additionalProperties": {
+          "description": "Requested line_items present on this row (e.g. \"revenue\": 416161000000). Type varies by field; never fabricated when absent."
+        }
+      },
+      "LineItemsSearchResponse": {
+        "type": "object",
+        "title": "LineItemsSearchResponse",
+        "description": "search_line_items envelope: {\"search_results\": [...]}. Never paginated (no next_page_url; use limit to bound the result set per ticker).",
+        "properties": {
+          "search_results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LineItemSearchRow"
+            }
+          }
+        },
+        "required": [
+          "search_results"
         ]
       }
     },

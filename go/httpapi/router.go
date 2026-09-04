@@ -23,15 +23,32 @@ type Result struct {
 	Paginate bool
 }
 
-// Caller runs one FD tool with the caller's own Monid API key. Every Monid
-// call it makes bills that caller's wallet. apiKey is never logged.
+// Caller runs one FD tool, or one non-tool capability, with the caller's
+// own Monid API key.
 //
 // This is the narrow interface go/httpapi depends on instead of importing
 // go/service directly, so this package (and its tests) build without
 // go/service existing yet. cmd/server/main.go adapts the real
 // go/service.Service to this interface.
 type Caller interface {
+	// Call runs one of the 27 Financial Datasets MCP tools (the same
+	// tool names go/mcpserver validates tools/call against). Every Monid
+	// call a tool makes bills that caller's wallet. apiKey is never
+	// logged.
 	Call(ctx context.Context, apiKey, tool string, args map[string]any) (Result, error)
+
+	// Capability runs one of the coverage-list/composite capabilities
+	// go/service exposes as an exported Service method rather than a
+	// tool (go/service/capabilities.go: the eight list*Tickers coverage
+	// lists, list_filing_types, list_filing_item_types,
+	// list_interest_rate_banks, get_all_financials, search_line_items).
+	// name is never a valid Call tool name and vice versa: the two are
+	// deliberately separate namespaces, so a REST route can never
+	// confuse a capability for a billable MCP tool call. Three of these
+	// capabilities (list_filing_types, list_filing_item_types,
+	// list_interest_rate_banks) make no Monid call at all; the rest are
+	// billed the same way a Call tool is.
+	Capability(ctx context.Context, apiKey, name string, args map[string]any) (Result, error)
 }
 
 // Config wires one Router.

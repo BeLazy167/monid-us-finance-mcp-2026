@@ -7,6 +7,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -173,11 +174,57 @@ func (a callerAdapter) Call(ctx context.Context, apiKey, tool string, args map[s
 	if err != nil {
 		return httpapi.Result{}, err
 	}
+	return adaptResult(result), nil
+}
+
+// capabilityHandlers maps every httpapi.Caller.Capability name to the
+// go/service.Service exported method it runs. Every entry here is one of
+// the 13 capabilities go/service/capabilities.go exposes precisely
+// because it is NOT a Financial Datasets MCP tool name (so it is never a
+// valid Call argument, and none of these names appear in
+// go/mcpserver/tool_schemas.json): the two are separate namespaces by
+// construction, not just by convention. Each method value's signature
+// already matches this map's value type exactly (method expressions on
+// *service.Service), so no per-capability adapter function is needed.
+var capabilityHandlers = map[string]func(*service.Service, context.Context, string, map[string]any) (service.Result, error){
+	"list_company_facts_tickers":          (*service.Service).ListCompanyFactsTickers,
+	"list_earnings_tickers":               (*service.Service).ListEarningsTickers,
+	"list_filings_tickers":                (*service.Service).ListFilingsTickers,
+	"list_metrics_snapshot_tickers":       (*service.Service).ListMetricsSnapshotTickers,
+	"list_prices_tickers":                 (*service.Service).ListPricesTickers,
+	"list_price_snapshot_tickers":         (*service.Service).ListPriceSnapshotTickers,
+	"list_institutional_holdings_tickers": (*service.Service).ListInstitutionalHoldingsTickers,
+	"list_kpi_tickers":                    (*service.Service).ListKPITickers,
+	"list_filing_types":                   (*service.Service).ListFilingTypes,
+	"list_filing_item_types":              (*service.Service).ListFilingItemTypes,
+	"list_interest_rate_banks":            (*service.Service).ListInterestRateBanks,
+	"get_all_financials":                  (*service.Service).GetAllFinancials,
+	"search_line_items":                   (*service.Service).SearchLineItems,
+}
+
+// Capability satisfies httpapi.Caller's non-tool capability surface (see
+// httpapi.Caller's doc comment for why this is a separate method rather
+// than a Call tool name).
+func (a callerAdapter) Capability(ctx context.Context, apiKey, name string, args map[string]any) (httpapi.Result, error) {
+	handler, ok := capabilityHandlers[name]
+	if !ok {
+		return httpapi.Result{}, fmt.Errorf("unknown capability %q", name)
+	}
+	result, err := handler(a.svc, ctx, apiKey, args)
+	if err != nil {
+		return httpapi.Result{}, err
+	}
+	return adaptResult(result), nil
+}
+
+// adaptResult copies a go/service.Result field-for-field into
+// httpapi.Result, the one place the two shapes are bridged.
+func adaptResult(result service.Result) httpapi.Result {
 	return httpapi.Result{
 		Value:      result.Value,
 		WrapperKey: result.WrapperKey,
 		Paginate:   result.Paginate,
-	}, nil
+	}
 }
 
 // dispatcher satisfies mcpserver.Dispatcher: it extracts the caller's own

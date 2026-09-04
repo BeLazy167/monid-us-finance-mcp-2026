@@ -15,7 +15,7 @@ import (
 
 // ---- shared test fixtures ----
 
-// fakeCall records one Caller.Call invocation for assertions.
+// fakeCall records one Caller.Call/Capability invocation for assertions.
 type fakeCall struct {
 	apiKey string
 	tool   string
@@ -23,16 +23,27 @@ type fakeCall struct {
 }
 
 // fakeCaller is a network-free Caller stand-in: it never touches Monid, and
-// returns whatever the test configured per tool name.
+// returns whatever the test configured per tool/capability name. Call and
+// Capability are tracked on separate logs/result tables so a test can
+// assert which surface a route actually used (e.g. a coverage-list route
+// must only ever reach Capability, never Call).
 type fakeCaller struct {
-	mu      sync.Mutex
-	calls   []fakeCall
-	results map[string]Result
-	errs    map[string]error
+	mu               sync.Mutex
+	calls            []fakeCall
+	results          map[string]Result
+	errs             map[string]error
+	capabilityCalls  []fakeCall
+	capabilityResult map[string]Result
+	capabilityErrs   map[string]error
 }
 
 func newFakeCaller() *fakeCaller {
-	return &fakeCaller{results: map[string]Result{}, errs: map[string]error{}}
+	return &fakeCaller{
+		results:          map[string]Result{},
+		errs:             map[string]error{},
+		capabilityResult: map[string]Result{},
+		capabilityErrs:   map[string]error{},
+	}
 }
 
 func (f *fakeCaller) Call(ctx context.Context, apiKey, tool string, args map[string]any) (Result, error) {
@@ -48,6 +59,19 @@ func (f *fakeCaller) Call(ctx context.Context, apiKey, tool string, args map[str
 	return Result{}, fmt.Errorf("fakeCaller: no result configured for tool %q", tool)
 }
 
+func (f *fakeCaller) Capability(ctx context.Context, apiKey, name string, args map[string]any) (Result, error) {
+	f.mu.Lock()
+	f.capabilityCalls = append(f.capabilityCalls, fakeCall{apiKey: apiKey, tool: name, args: args})
+	f.mu.Unlock()
+	if err, ok := f.capabilityErrs[name]; ok {
+		return Result{}, err
+	}
+	if res, ok := f.capabilityResult[name]; ok {
+		return res, nil
+	}
+	return Result{}, fmt.Errorf("fakeCaller: no result configured for capability %q", name)
+}
+
 func (f *fakeCaller) lastCall() fakeCall {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -55,6 +79,15 @@ func (f *fakeCaller) lastCall() fakeCall {
 		return fakeCall{}
 	}
 	return f.calls[len(f.calls)-1]
+}
+
+func (f *fakeCaller) lastCapabilityCall() fakeCall {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if len(f.capabilityCalls) == 0 {
+		return fakeCall{}
+	}
+	return f.capabilityCalls[len(f.capabilityCalls)-1]
 }
 
 const testAPIKey = "test-monid-key"
@@ -728,8 +761,19 @@ func TestInterestRates_BothRoutesCallSameZeroArgTool(t *testing.T) {
 	}
 }
 
-func TestInterestRateBanks_StaticCoverageListNoCall(t *testing.T) {
+func TestInterestRateBanks_DerivedFromServiceCapabilityNoToolCall(t *testing.T) {
 	caller := newFakeCaller()
+	caller.capabilityResult["list_interest_rate_banks"] = Result{
+		Value: map[string]any{
+			"resource": "interest_rate_banks",
+			"banks": []any{
+				map[string]any{"bank": "FED", "name": "Federal Reserve"},
+				map[string]any{"bank": "ECB", "name": "European Central Bank"},
+				map[string]any{"bank": "BOE", "name": "Bank of England"},
+				map[string]any{"bank": "BOJ", "name": "Bank of Japan"},
+			},
+		},
+	}
 	rt := newTestRouter(caller, nil)
 	rec := doGet(t, rt, "/macro/interest-rates/banks", map[string]string{apiKeyHeader: testAPIKey})
 	if rec.Code != http.StatusOK {
@@ -745,15 +789,32 @@ func TestInterestRateBanks_StaticCoverageListNoCall(t *testing.T) {
 		t.Fatalf("banks = %#v, want exactly %v", banks, want)
 	}
 	for _, b := range banks {
-		if !want[b.(string)] {
-			t.Fatalf("unexpected bank code %v", b)
+		row, ok := b.(map[string]any)
+		if !ok {
+			t.Fatalf("bank row is not an object: %#v", b)
+		}
+		code, _ := row["bank"].(string)
+		if !want[code] {
+			t.Fatalf("unexpected bank code %v", row["bank"])
+		}
+		if _, ok := row["name"].(string); !ok {
+			t.Fatalf("bank row missing name: %#v", row)
 		}
 	}
-	if _, ok := body["resource"].(string); !ok {
-		t.Fatalf("resource missing/not a string: %#v", body)
+	if body["resource"] != "interest_rate_banks" {
+		t.Fatalf("resource = %#v, want interest_rate_banks", body["resource"])
 	}
+	// This route derives its answer from Service.ListInterestRateBanks
+	// (bankSpecs) rather than a hand-typed copy: it must reach the
+	// Capability surface exactly once and the tool/Call surface never.
 	if len(caller.calls) != 0 {
-		t.Fatalf("the banks coverage list must never reach the caller, got %d calls", len(caller.calls))
+		t.Fatalf("the banks coverage list must never reach Caller.Call, got %d calls", len(caller.calls))
+	}
+	if len(caller.capabilityCalls) != 1 {
+		t.Fatalf("the banks coverage list must reach Caller.Capability exactly once, got %d calls", len(caller.capabilityCalls))
+	}
+	if caller.lastCapabilityCall().tool != "list_interest_rate_banks" {
+		t.Fatalf("capability name = %q, want list_interest_rate_banks", caller.lastCapabilityCall().tool)
 	}
 }
 
@@ -889,5 +950,442 @@ func TestInstitutionalHoldings_LimitValidatedBeforeCall(t *testing.T) {
 	}
 	if len(caller.calls) != 0 {
 		t.Fatalf("bad limit must not reach the caller, got %d calls", len(caller.calls))
+	}
+}
+
+// ---- Coverage lists: tickers each route ACCEPTS (list*Tickers capabilities) ----
+
+// coverageRouteCases pairs every list*Tickers REST route with the
+// Capability name it must reach - all eight, including the two that used
+// to stub as not_implemented (/institutional-holdings/tickers,
+// /kpi/metrics/tickers) before this port's brief reframed them as
+// accept-universe lists.
+var coverageRouteCases = []struct {
+	path       string
+	capability string
+}{
+	{"/company/facts/tickers", "list_company_facts_tickers"},
+	{"/earnings/tickers", "list_earnings_tickers"},
+	{"/filings/tickers", "list_filings_tickers"},
+	{"/financial-metrics/snapshot/tickers", "list_metrics_snapshot_tickers"},
+	{"/prices/tickers", "list_prices_tickers"},
+	{"/prices/snapshot/tickers", "list_price_snapshot_tickers"},
+	{"/institutional-holdings/tickers", "list_institutional_holdings_tickers"},
+	{"/kpi/metrics/tickers", "list_kpi_tickers"},
+}
+
+// coverageFakeTickers is a small, deliberately-not-3227-sized fixture: big
+// enough (5) to exercise multi-page cursor pagination with a REST `limit`
+// of 2, small enough to hand-check every page.
+var coverageFakeTickers = []any{"AAPL", "GOOG", "MSFT", "NVDA", "TSLA"}
+
+func coverageFakeResult(resource string) Result {
+	return Result{Value: map[string]any{
+		"resource": resource,
+		"total":    float64(len(coverageFakeTickers)),
+		"tickers":  coverageFakeTickers,
+	}}
+}
+
+func TestCoverageTickers_ShapeAndCapabilitySurface(t *testing.T) {
+	for _, tc := range coverageRouteCases {
+		t.Run(tc.path, func(t *testing.T) {
+			caller := newFakeCaller()
+			caller.capabilityResult[tc.capability] = coverageFakeResult("some_resource")
+			rt := newTestRouter(caller, nil)
+			rec := doGet(t, rt, tc.path, map[string]string{apiKeyHeader: testAPIKey})
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
+			}
+			body := decodeBody(t, rec)
+			if body["resource"] != "some_resource" {
+				t.Fatalf("resource = %#v, want some_resource", body["resource"])
+			}
+			if body["total"] != float64(5) {
+				t.Fatalf("total = %#v, want 5", body["total"])
+			}
+			tickers, ok := body["tickers"].([]any)
+			if !ok || len(tickers) != 5 {
+				t.Fatalf("tickers = %#v, want all 5 (default limit 1000 > fixture size)", body["tickers"])
+			}
+			if _, has := body["next_page_url"]; has {
+				t.Fatalf("unexpected next_page_url with default limit: %#v", body["next_page_url"])
+			}
+			// This route is a coverage-list capability, never a billable
+			// MCP tool call.
+			if len(caller.calls) != 0 {
+				t.Fatalf("coverage list must never reach Caller.Call, got %d calls", len(caller.calls))
+			}
+			if len(caller.capabilityCalls) != 1 {
+				t.Fatalf("coverage list must reach Caller.Capability exactly once, got %d calls", len(caller.capabilityCalls))
+			}
+			if got := caller.lastCapabilityCall().tool; got != tc.capability {
+				t.Fatalf("capability name = %q, want %q", got, tc.capability)
+			}
+			// Every page always asks the capability for the full universe
+			// (coverageMaxLimit), regardless of the caller's own REST
+			// `limit`, so "total" never depends on pagination.
+			if got := caller.lastCapabilityCall().args["limit"]; got != float64(coverageMaxLimit) {
+				t.Fatalf("capability limit arg = %#v, want %d", got, coverageMaxLimit)
+			}
+		})
+	}
+}
+
+func TestCoverageTickers_LimitCursorPagination(t *testing.T) {
+	caller := newFakeCaller()
+	caller.capabilityResult["list_company_facts_tickers"] = coverageFakeResult("company_facts")
+	rt := newTestRouter(caller, nil)
+
+	rec := doGet(t, rt, "/company/facts/tickers?limit=2", map[string]string{apiKeyHeader: testAPIKey})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("page 1 status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	body := decodeBody(t, rec)
+	page1, _ := body["tickers"].([]any)
+	if len(page1) != 2 || page1[0] != "AAPL" || page1[1] != "GOOG" {
+		t.Fatalf("page 1 tickers = %#v, want [AAPL GOOG]", body["tickers"])
+	}
+	if body["total"] != float64(5) {
+		t.Fatalf("page 1 total = %#v, want 5 (full universe, independent of limit)", body["total"])
+	}
+	nextURL, ok := body["next_page_url"].(string)
+	if !ok || nextURL == "" {
+		t.Fatalf("page 1 missing next_page_url: %#v", body["next_page_url"])
+	}
+
+	req2 := httptest.NewRequest(http.MethodGet, nextURL, nil)
+	req2.Header.Set(apiKeyHeader, testAPIKey)
+	rec2 := httptest.NewRecorder()
+	rt.ServeHTTP(rec2, req2)
+	body2 := decodeBody(t, rec2)
+	page2, _ := body2["tickers"].([]any)
+	if len(page2) != 2 || page2[0] != "MSFT" || page2[1] != "NVDA" {
+		t.Fatalf("page 2 tickers = %#v, want [MSFT NVDA]", body2["tickers"])
+	}
+	if body2["total"] != float64(5) {
+		t.Fatalf("page 2 total = %#v, want 5", body2["total"])
+	}
+	nextURL2, ok := body2["next_page_url"].(string)
+	if !ok || nextURL2 == "" {
+		t.Fatalf("page 2 missing next_page_url: %#v", body2["next_page_url"])
+	}
+
+	req3 := httptest.NewRequest(http.MethodGet, nextURL2, nil)
+	req3.Header.Set(apiKeyHeader, testAPIKey)
+	rec3 := httptest.NewRecorder()
+	rt.ServeHTTP(rec3, req3)
+	body3 := decodeBody(t, rec3)
+	page3, _ := body3["tickers"].([]any)
+	if len(page3) != 1 || page3[0] != "TSLA" {
+		t.Fatalf("page 3 tickers = %#v, want [TSLA]", body3["tickers"])
+	}
+	if _, has := body3["next_page_url"]; has {
+		t.Fatalf("page 3 unexpectedly has next_page_url: %#v", body3["next_page_url"])
+	}
+
+	// Every page shares one capability call: the underlying capability
+	// only ever fetches the full universe once per REST request, and
+	// each page re-requests it with the identical args (limit=max),
+	// which the shared TTL cache upstream would collapse to one Monid
+	// fetch across all three pages.
+	if len(caller.capabilityCalls) != 3 {
+		t.Fatalf("expected 3 capability calls (one per REST page request), got %d", len(caller.capabilityCalls))
+	}
+}
+
+func TestCoverageTickers_LimitValidation(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		query string
+	}{
+		{"zero", "limit=0"},
+		{"negative", "limit=-1"},
+		{"above_max", "limit=5001"},
+		{"not_an_integer", "limit=abc"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			caller := newFakeCaller()
+			rt := newTestRouter(caller, nil)
+			rec := doGet(t, rt, "/company/facts/tickers?"+tc.query, map[string]string{apiKeyHeader: testAPIKey})
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want 400: %s", rec.Code, rec.Body.String())
+			}
+			if body := decodeBody(t, rec); body["error"] != "bad_request" {
+				t.Fatalf("error = %v, want bad_request", body["error"])
+			}
+			if len(caller.capabilityCalls) != 0 {
+				t.Fatalf("invalid limit must not reach the caller, got %d calls", len(caller.capabilityCalls))
+			}
+		})
+	}
+	t.Run("max_is_allowed", func(t *testing.T) {
+		caller := newFakeCaller()
+		caller.capabilityResult["list_company_facts_tickers"] = coverageFakeResult("company_facts")
+		rt := newTestRouter(caller, nil)
+		rec := doGet(t, rt, "/company/facts/tickers?limit=5000", map[string]string{apiKeyHeader: testAPIKey})
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
+		}
+	})
+}
+
+func TestCoverageTickers_InvalidCursorRejected(t *testing.T) {
+	caller := newFakeCaller()
+	rt := newTestRouter(caller, nil)
+	rec := doGet(t, rt, "/company/facts/tickers?cursor=not-valid-base64url!!", map[string]string{apiKeyHeader: testAPIKey})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400: %s", rec.Code, rec.Body.String())
+	}
+	body := decodeBody(t, rec)
+	if body["error"] != "invalid_cursor" {
+		t.Fatalf("error = %v, want invalid_cursor", body["error"])
+	}
+	if len(caller.capabilityCalls) != 0 {
+		t.Fatalf("invalid cursor must not reach the caller, got %d calls", len(caller.capabilityCalls))
+	}
+}
+
+func TestCoverageTickers_CapabilityErrorPropagates(t *testing.T) {
+	caller := newFakeCaller()
+	caller.capabilityErrs["list_company_facts_tickers"] = &providers.SchemaDriftError{Msg: "provider payload is not valid JSON"}
+	rt := newTestRouter(caller, nil)
+	rec := doGet(t, rt, "/company/facts/tickers", map[string]string{apiKeyHeader: testAPIKey})
+	if rec.Code != http.StatusBadGateway {
+		t.Fatalf("status = %d, want 502: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// ---- Static catalogs, zero paid calls (list_filing_types / list_filing_item_types) ----
+
+func TestFilingTypes_ZeroCallStaticCatalog(t *testing.T) {
+	caller := newFakeCaller()
+	caller.capabilityResult["list_filing_types"] = Result{Value: map[string]any{
+		"resource":     "filing_types",
+		"filing_types": []any{"10-K", "10-Q", "8-K", "20-F", "6-K"},
+	}}
+	rt := newTestRouter(caller, nil)
+	rec := doGet(t, rt, "/filings/types", map[string]string{apiKeyHeader: testAPIKey})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	body := decodeBody(t, rec)
+	if body["resource"] != "filing_types" {
+		t.Fatalf("resource = %#v, want filing_types", body["resource"])
+	}
+	types, ok := body["filing_types"].([]any)
+	if !ok || len(types) != 5 {
+		t.Fatalf("filing_types = %#v, want 5 entries", body["filing_types"])
+	}
+	if len(caller.calls) != 0 {
+		t.Fatalf("/filings/types must issue zero Caller.Call (tool) invocations, got %d", len(caller.calls))
+	}
+	if len(caller.capabilityCalls) != 1 {
+		t.Fatalf("/filings/types must reach Caller.Capability exactly once, got %d", len(caller.capabilityCalls))
+	}
+	if caller.lastCapabilityCall().tool != "list_filing_types" {
+		t.Fatalf("capability name = %q, want list_filing_types", caller.lastCapabilityCall().tool)
+	}
+}
+
+func TestFilingItemTypes_ZeroCallStaticCatalogAndOptionalFilter(t *testing.T) {
+	caller := newFakeCaller()
+	caller.capabilityResult["list_filing_item_types"] = Result{Value: map[string]any{
+		"10-K": []any{map[string]any{"name": "item_1", "title": "Business", "description": "Business"}},
+	}}
+	rt := newTestRouter(caller, nil)
+
+	rec := doGet(t, rt, "/filings/items/types?filing_type=10-K", map[string]string{apiKeyHeader: testAPIKey})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	body := decodeBody(t, rec)
+	if _, ok := body["10-K"]; !ok {
+		t.Fatalf("body missing 10-K: %#v", body)
+	}
+	if len(caller.calls) != 0 {
+		t.Fatalf("/filings/items/types must issue zero Caller.Call (tool) invocations, got %d", len(caller.calls))
+	}
+	if len(caller.capabilityCalls) != 1 {
+		t.Fatalf("/filings/items/types must reach Caller.Capability exactly once, got %d", len(caller.capabilityCalls))
+	}
+	if got := caller.lastCapabilityCall().args["filing_type"]; got != "10-K" {
+		t.Fatalf("filing_type arg = %#v, want 10-K", got)
+	}
+
+	// filing_type is optional: omitting it must not add the key at all
+	// (mirroring putQueryString's own present-only-if-non-empty contract).
+	rec2 := doGet(t, rt, "/filings/items/types", map[string]string{apiKeyHeader: testAPIKey})
+	if rec2.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", rec2.Code, rec2.Body.String())
+	}
+	if _, has := caller.lastCapabilityCall().args["filing_type"]; has {
+		t.Fatalf("filing_type must be absent when omitted from the query string: %#v", caller.lastCapabilityCall().args)
+	}
+}
+
+// ---- All financials (get_all_financials) ----
+
+func TestAllFinancials_AsReportedRejectedZeroCost(t *testing.T) {
+	caller := newFakeCaller()
+	rt := newTestRouter(caller, nil)
+	rec := doGet(t, rt, "/financials?ticker=AAPL&as_reported=true", map[string]string{apiKeyHeader: testAPIKey})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400: %s", rec.Code, rec.Body.String())
+	}
+	if body := decodeBody(t, rec); body["error"] != "bad_request" {
+		t.Fatalf("error = %v, want bad_request", body["error"])
+	}
+	if len(caller.calls) != 0 || len(caller.capabilityCalls) != 0 {
+		t.Fatalf("as_reported=true must not reach the caller, got %d Call + %d Capability", len(caller.calls), len(caller.capabilityCalls))
+	}
+}
+
+func TestAllFinancials_UnwrappedShapeAndDefaults(t *testing.T) {
+	caller := newFakeCaller()
+	caller.capabilityResult["get_all_financials"] = Result{Value: map[string]any{"financials": map[string]any{
+		"income_statements":    []any{map[string]any{"ticker": "AAPL"}},
+		"balance_sheets":       []any{},
+		"cash_flow_statements": []any{},
+	}}}
+	rt := newTestRouter(caller, nil)
+	rec := doGet(t, rt, "/financials?ticker=AAPL", map[string]string{apiKeyHeader: testAPIKey})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	body := decodeBody(t, rec)
+	financials, ok := body["financials"].(map[string]any)
+	if !ok {
+		t.Fatalf("financials missing/not an object: %#v", body)
+	}
+	if _, ok := financials["income_statements"]; !ok {
+		t.Fatalf("financials.income_statements missing: %#v", financials)
+	}
+	if len(caller.calls) != 0 {
+		t.Fatalf("get_all_financials is a capability, not a tool: got %d Call invocations", len(caller.calls))
+	}
+	args := caller.lastCapabilityCall().args
+	if args["period"] != "annual" {
+		t.Fatalf("period default = %#v, want annual", args["period"])
+	}
+	if args["limit"] != float64(4) {
+		t.Fatalf("limit default = %#v, want 4", args["limit"])
+	}
+	if args["ticker"] != "AAPL" {
+		t.Fatalf("ticker = %#v, want AAPL", args["ticker"])
+	}
+}
+
+func TestAllFinancials_ForwardsPeriodLimitAndReportPeriodFilters(t *testing.T) {
+	caller := newFakeCaller()
+	caller.capabilityResult["get_all_financials"] = Result{Value: map[string]any{"financials": map[string]any{}}}
+	rt := newTestRouter(caller, nil)
+	rec := doGet(t, rt,
+		"/financials?ticker=AAPL&period=quarterly&limit=8&report_period_gte=2020-01-01&report_period_lte=2024-12-31",
+		map[string]string{apiKeyHeader: testAPIKey})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	args := caller.lastCapabilityCall().args
+	if args["period"] != "quarterly" {
+		t.Fatalf("period = %#v, want quarterly", args["period"])
+	}
+	if args["limit"] != float64(8) {
+		t.Fatalf("limit = %#v, want 8", args["limit"])
+	}
+	if args["report_period_gte"] != "2020-01-01" || args["report_period_lte"] != "2024-12-31" {
+		t.Fatalf("report_period filters not forwarded: %#v", args)
+	}
+}
+
+// ---- Line-item search (search_line_items) ----
+
+func TestSearchLineItems_PostWrapsSearchResultsAndForwardsBody(t *testing.T) {
+	caller := newFakeCaller()
+	caller.capabilityResult["search_line_items"] = Result{
+		Value:      []map[string]any{{"ticker": "AAPL", "report_period": "2024-12-31", "period": "ttm", "revenue": 1.0}},
+		WrapperKey: "search_results",
+	}
+	rt := newTestRouter(caller, nil)
+	rec := doPost(t, rt, "/financials/search/line-items", map[string]any{
+		"line_items": []string{"revenue", "net_income"},
+		"tickers":    []string{"AAPL", "MSFT"},
+		"period":     "annual",
+		"limit":      2,
+	}, map[string]string{apiKeyHeader: testAPIKey})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	body := decodeBody(t, rec)
+	results, ok := body["search_results"].([]any)
+	if !ok || len(results) != 1 {
+		t.Fatalf("search_results = %#v", body["search_results"])
+	}
+	if len(caller.calls) != 0 {
+		t.Fatalf("search_line_items is a capability, not a tool: got %d Call invocations", len(caller.calls))
+	}
+	args := caller.lastCapabilityCall().args
+	lineItems, ok := args["line_items"].([]any)
+	if !ok || len(lineItems) != 2 || lineItems[0] != "revenue" || lineItems[1] != "net_income" {
+		t.Fatalf("line_items = %#v, want [revenue net_income]", args["line_items"])
+	}
+	tickers, ok := args["tickers"].([]any)
+	if !ok || len(tickers) != 2 || tickers[0] != "AAPL" || tickers[1] != "MSFT" {
+		t.Fatalf("tickers = %#v, want [AAPL MSFT]", args["tickers"])
+	}
+	if args["period"] != "annual" || args["limit"] != float64(2) {
+		t.Fatalf("period/limit = %#v/%#v, want annual/2", args["period"], args["limit"])
+	}
+}
+
+func TestSearchLineItems_DefaultsPeriodAndLimitWhenOmitted(t *testing.T) {
+	caller := newFakeCaller()
+	caller.capabilityResult["search_line_items"] = Result{Value: []map[string]any{}, WrapperKey: "search_results"}
+	rt := newTestRouter(caller, nil)
+	rec := doPost(t, rt, "/financials/search/line-items", map[string]any{
+		"line_items": []string{"revenue"},
+		"tickers":    []string{"AAPL"},
+	}, map[string]string{apiKeyHeader: testAPIKey})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	args := caller.lastCapabilityCall().args
+	if args["period"] != "ttm" {
+		t.Fatalf("period default = %#v, want ttm", args["period"])
+	}
+	if args["limit"] != float64(1) {
+		t.Fatalf("limit default = %#v, want 1", args["limit"])
+	}
+}
+
+func TestSearchLineItems_MalformedBodyRejectedZeroCost(t *testing.T) {
+	caller := newFakeCaller()
+	rt := newTestRouter(caller, nil)
+	req := httptest.NewRequest(http.MethodPost, "/financials/search/line-items", bytes.NewReader([]byte("{not json")))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(apiKeyHeader, testAPIKey)
+	rec := httptest.NewRecorder()
+	rt.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400: %s", rec.Code, rec.Body.String())
+	}
+	if len(caller.capabilityCalls) != 0 {
+		t.Fatalf("malformed body must not reach the caller, got %d calls", len(caller.capabilityCalls))
+	}
+}
+
+func TestSearchLineItems_ValidationErrorPropagates(t *testing.T) {
+	caller := newFakeCaller()
+	caller.capabilityErrs["search_line_items"] = &providers.InputError{Msg: "tickers must include at most 5 entries"}
+	rt := newTestRouter(caller, nil)
+	rec := doPost(t, rt, "/financials/search/line-items", map[string]any{
+		"line_items": []string{"revenue"},
+		"tickers":    []string{"A", "B", "C", "D", "E", "F"},
+	}, map[string]string{apiKeyHeader: testAPIKey})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400: %s", rec.Code, rec.Body.String())
+	}
+	if body := decodeBody(t, rec); body["error"] != "bad_request" {
+		t.Fatalf("error = %v, want bad_request", body["error"])
 	}
 }
