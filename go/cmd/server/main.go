@@ -208,6 +208,7 @@ var capabilityHandlers = map[string]func(*service.Service, context.Context, stri
 	"list_filings_ciks":                   (*service.Service).ListFilingsCIKs,
 	"list_company_facts_ciks":             (*service.Service).ListCompanyFactsCIKs,
 	"get_ipos":                            (*service.Service).GetIPOs,
+	"get_as_reported":                     (*service.Service).GetAsReported,
 }
 
 // Capability satisfies httpapi.Caller's non-tool capability surface (see

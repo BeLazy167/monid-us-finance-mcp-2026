@@ -1,104 +1,115 @@
 ---
 title: "Coverage"
-description: "What is implemented, what is stubbed, and every known gap against the Financial Datasets contract."
+description: "What is implemented, what deviates, and every known gap against the Financial Datasets contract."
 ---
 
-"Compatible" on this site means the request and response shapes match the Financial Datasets interface closely enough that an existing client can switch base URLs and keep working. It does not mean every route is implemented, and it does not mean the two servers behave identically everywhere they overlap. This page is the itemized version of that claim.
+"Compatible" on this site means the request and response shapes match the Financial Datasets interface closely enough that an existing client can switch base URLs and keep working. It does not mean the two servers behave identically everywhere they overlap. This page is the itemized version of that claim.
 
 Monid Finance MCP is an independent, Monid-backed implementation. It is not affiliated with or endorsed by Financial Datasets, and no Financial Datasets data or code is used.
 
+Every claim below was checked on 2026-09-04 by sending the same request to both APIs and diffing the responses field by field.
+
 ## Tool status
 
-All 27 MCP tool names are registered and answer a well-formed call. They split into three groups.
+All 27 Financial Datasets MCP tool names are implemented against live Monid routes and contract tested. The advertised names, descriptions and input schemas are diffed against the captured Financial Datasets surface by test, so the two cannot silently drift.
+
+Call any of them over MCP at `/mcp` or `/api`.
+
+## REST coverage
+
+50 of the 54 Financial Datasets REST paths are registered. 48 return data. Two answer a zero-cost `not_implemented` stub, and four are not registered at all.
 
 <Tabs>
-  <Tab title="Live, 16 tools">
-    Implemented, unit tested, and confirmed against production Monid with real paid calls.
+  <Tab title="Stubbed, 2 routes">
+    Registered for interface parity. Both answer HTTP 200 with a `not_implemented` body, make no Monid call, and cost nothing.
 
-    `get_company_facts`, `get_income_statement`, `get_balance_sheet`, `get_cash_flow_statement`, `get_financial_metrics_snapshot`, `get_financial_metrics`, `get_filings`, `get_filing_items`, `list_filing_item_types`, `get_stock_prices`, `get_stock_price`, `get_news`, `get_earnings`, `get_insider_trades`, `screen_stocks`, `list_stock_screener_filters`
+    `/kpi/metrics/sectors` — sector is not a dimension the shared ticker catalog carries, so there is nothing honest to enumerate. Financial Datasets returns its own curated 77-slug KPI taxonomy here, which is theirs, not a public list.
+
+    `/index-funds/tickers` — `get_index_fund` resolves holdings by live web search per ticker. Publishing the search-ranking hint list as a coverage catalog would overstate what this server supports.
   </Tab>
-  <Tab title="Implemented, unverified live, 7 tools">
-    These call real Monid providers and return real data. The unit test suite covers them against mocked provider responses, but no paid production call has confirmed their output yet the way it has for the 16 tools above.
+  <Tab title="Not registered, 4 routes">
+    The four `as-reported` statement routes: `/financials/as-reported`, `/financials/income-statements/as-reported`, `/financials/balance-sheets/as-reported`, `/financials/cash-flow-statements/as-reported`.
 
-    `get_segmented_financials`, `get_kpi_metrics`, `get_kpi_guidance`, `get_kpi_non_gaap`, `get_interest_rates`, `get_index_fund`, `get_institutional_holdings`
-
-    <Note>
-      These are working tools, not stubs. Call them over MCP. Their REST paths are not wired yet, which is a routing gap, not an implementation gap. See the table below.
-    </Note>
-  </Tab>
-  <Tab title="Not implemented, 4 tools">
-    Registered with their Financial Datasets parameters. Every call answers a typed error at zero cost. No Monid call is made.
-
-    `get_beneficial_owners`, `get_beneficial_ownership`, `get_insider_ownership`, `get_institutional_investors`
+    These return as-filed XBRL with a nested `line_items` tree, which means parsing a filing's rendered statement files rather than reading a normalized feed.
   </Tab>
 </Tabs>
 
-## REST covers less than MCP
+## Deviations that will change a client's behavior
 
-The REST facade wires 15 of the 27 tools to a path. The rest, including `list_filing_item_types` and the 7 tools listed above, are MCP only right now. Their REST paths exist for interface parity and always answer the zero-cost `not_implemented` stub, even for the 7 tools that work over MCP.
+These routes work, but not the way Financial Datasets does. Read them before pointing an existing integration here.
 
-| REST path | Behavior | MCP tool that works today |
-|---|---|---|
-| `/kpi/metrics`, `/kpi/metrics/tickers`, `/kpi/metrics/sectors`, `/kpi/guidance`, `/kpi/non-gaap` | Stub, HTTP 200 | `get_kpi_metrics`, `get_kpi_guidance`, `get_kpi_non_gaap` |
-| `/macro/interest-rates*` | Stub | `get_interest_rates` |
-| `/financials/segments`, `/financials/*/segments` | Stub | `get_segmented_financials` |
-| `/index-funds*` | Stub | `get_index_fund` |
-| `/institutional-holdings`, `/institutional-holdings/tickers` | Stub | `get_institutional_holdings` |
-| `/institutional-holdings/investors` | Stub | None, `get_institutional_investors` is a real stub |
-| `/insider-ownership`, `/beneficial-ownership`, `/activist-ownership` | Stub | None, the underlying tools are real stubs |
+| Route | Deviation |
+|---|---|
+| `/ipos` | Requires `ticker`. The filings feed behind it is keyed on one issuer and cannot list registrations market-wide. `classification` is rejected rather than silently ignored. Cover-page fields (`exchange`, `is_ipo_grade`, price range) are omitted. |
+| `/institutional-holdings/investors` | Requires `ticker`. The 13F feed needs an issuer CIK on every call, so it answers "who holds this issuer" rather than "every filer we know of". |
+| `/company/facts/ciks` | Returns 8,005 CIKs against Financial Datasets' 21,005. Ours is the SEC ticker-file universe; theirs also covers filers with no listed ticker. Every CIK we return is in their list too. |
+| `/macro/interest-rates/banks` | Four banks (FED, ECB, BOE, BOJ) against Financial Datasets' ten. We list only banks we actually scrape. |
+| `/news` | Requires `ticker`. Market-wide news is not routed. |
+| `/prices/snapshot/market` | Nasdaq's most-active set, not the whole market. Record shape matches exactly. |
 
-If a REST route answers `not_implemented`, check [MCP Tools](/mcp-tools/overview) before assuming the data does not exist. It may only mean the REST path is not wired yet.
+## A known upstream data defect
+
+Measured 2026-09-04 against Apple's FY2025 10-K. The normalized statements feed behind `/financials/cash-flow-statements` reports **Net Cash From Investing Activities as 27,910,000,000**. The filing says **15,195,000,000**. The gap is exactly Apple's property-plant-and-equipment purchase of 12,715,000,000, which that feed omits from the investing subtotal while still using it to compute Free Cash Flow correctly.
+
+The error propagates to `change_in_cash_and_equivalents`. Operating and financing activities match the filing exactly.
+
+This is an upstream aggregation defect, not a parsing bug on our side, and it will be wrong for any company with material capital expenditure. Treat the investing and net-change lines from this route as unreliable until it is re-sourced. Operating cash flow, free cash flow and the income statement are unaffected.
 
 ## REST and MCP disagree on defaults
 
 The same tool can return different data depending on which transport called it, if you rely on a default instead of passing the parameter.
 
-`get_income_statement`, `get_balance_sheet`, `get_cash_flow_statement`, and `get_financial_metrics` default `period` to `ttm` in the MCP tool schema, matching the published Financial Datasets schema. The REST route for the same data defaults an omitted `period` to `annual` instead, because the REST handler always fills a value before calling the tool. Pass `period` explicitly on both transports.
+`get_income_statement`, `get_balance_sheet`, `get_cash_flow_statement`, and `get_financial_metrics` default `period` to `ttm` in the MCP tool schema, matching the published Financial Datasets schema. The REST route for the same data defaults an omitted `period` to `annual`, because the REST handler always fills a value before calling the tool. Pass `period` explicitly on both transports.
 
 `get_filings` defaults `limit` to `100` over MCP and to `10` over REST, for the same reason.
 
 ## Response contract
 
-A success response contains only Financial Datasets schema keys, in schema property order. A field the server cannot source is left out, never set to null or guessed. Every failure uses the Financial Datasets `{"error": <code>, "message": <text>}` shape, covered in full in [Errors](/guides/errors). Pagination follows the pattern in [Pagination](/guides/how-to-use-pagination). Cost and provenance never appear in a response body. They go to an internal receipts ledger, one row per Monid call.
+A success response contains only Financial Datasets schema keys, in schema property order. A field the server cannot source is left out, never set to null or guessed. Every failure uses the Financial Datasets `{"error": <code>, "message": <text>}` shape, covered in [Errors](/guides/errors). Pagination follows [Pagination](/guides/how-to-use-pagination). Cost and provenance never appear in a response body. They go to a receipts ledger, one row per Monid call, recording the provider, endpoint, run id and measured cost.
 
 ## Known gaps, endpoint by endpoint
 
 <AccordionGroup>
   <Accordion title="Company lookup is ticker only">
-    `cik` is accepted for parity but answers `bad_request`. `get_company_facts` currently sources ticker and name only.
-  </Accordion>
-  <Accordion title="News needs a ticker">
-    `get_news` requires `ticker`. Market-wide news is not routed.
+    `cik` is accepted for parity but answers `bad_request`. `get_company_facts` sources ticker and name only.
   </Accordion>
   <Accordion title="TTM statements are computed, not sourced">
-    Trailing-twelve-month rows are built locally from four consecutive quarters. Flow fields are summed, weighted-average shares are averaged, and balance-sheet fields carry over from the final quarter rather than being recomputed. TTM rows omit `fiscal_period` and `currency`.
+    Trailing-twelve-month rows are built locally from four consecutive quarters. Flow fields are summed, weighted-average shares averaged, and balance-sheet fields carry over from the final quarter. TTM rows omit `fiscal_period` and `currency`, and omit filing identity, since a TTM window spans more than one filing.
   </Accordion>
   <Accordion title="Prices: ascending order, local aggregation, single interval multiplier">
-    `get_stock_prices` returns ascending time order. Week, month, and year bars are aggregated locally from daily bars. `time` is the bar's end date in UTC. `interval_multiplier` must be `1`.
+    `get_stock_prices` returns ascending time order. Week, month and year bars are aggregated locally from daily bars. `time` is the bar's end date in UTC. `interval_multiplier` must be `1`.
   </Accordion>
   <Accordion title="Filing exhibits are not sourced">
-    `get_filing_items` accepts `include_exhibits` for parity, but a `true` value answers `bad_request`. Exhibit content is not implemented.
+    `get_filing_items` accepts `include_exhibits` for parity, but `true` answers `bad_request`.
   </Accordion>
-  <Accordion title="Filing type is a closed list">
-    `get_filings` validates `filing_type` against `10-K`, `10-Q`, `8-K`, `20-F`, `6-K`. Other Financial Datasets filing types, like `DEF 14A`, are rejected.
+  <Accordion title="Filing items are extracted synchronously">
+    `/filings/items` runs the extraction inline and returns items on the same response. It never issues a request id, so `/filings/items/requests/{request_id}` answers `not_found` for any id rather than reporting a request as pending that will never complete.
   </Accordion>
   <Accordion title="Earnings composition is narrower">
-    `get_earnings` composes records from 10-K and 10-Q filing events only. 8-K earnings releases and the market-wide, no-ticker feed are not routed. Records omit any block whose period is not present in the underlying statements matrix.
+    `get_earnings` composes records from 10-K and 10-Q filing events only. 8-K earnings releases and the market-wide, no-ticker feed are not routed. Records omit any block whose period is absent from the underlying statements matrix.
   </Accordion>
   <Accordion title="Financial metrics omit market-derived valuation fields">
-    `get_financial_metrics` leaves out fields that need a historical market price we do not have: `enterprise_value`, `price_to_*` ratios, EV multiples, `free_cash_flow_yield`, `peg_ratio`, `return_on_invested_capital`, `currency`, `filing_datetime`. TTM rows also omit filing identity, since a TTM window spans more than one filing.
+    `get_financial_metrics` leaves out fields needing a historical market price we do not have: `enterprise_value`, `price_to_*` ratios, EV multiples, `free_cash_flow_yield`, `peg_ratio`, `return_on_invested_capital`, `currency`, `filing_datetime`.
   </Accordion>
   <Accordion title="Insider trades are capped at 15 rows">
-    Financial Datasets allows up to 5000 rows. This server caps at 15, the size of the validated SEC Form 4 feed it reads. `form_type` filtering is rejected, because the underlying route does not report form types. `name` is the raw insider relationship text, not a normalized name. `title`, `transaction_code`, `security_title`, and `shares_owned_before_transaction` are omitted.
+    Financial Datasets allows up to 5000. This server caps at 15, the size of the validated SEC Form 4 feed it reads. `form_type` filtering is rejected, because the underlying route reports no form types. `name` is the raw insider relationship text, which carries the person's job title where Financial Datasets returns the name alone. `title`, `transaction_code`, `security_title` and `shares_owned_before_transaction` are omitted.
+  </Accordion>
+  <Accordion title="Ownership state data runs months behind">
+    Measured 2026-09-04: the newest record in the 13D feed behind `/beneficial-ownership` and `/activist-ownership` was filed 2026-03-06, roughly six months back. This is not a real-time feed. Every row carries its own `filing_date` and `event_date` so recency is readable directly. Insider ownership is a different case and tracked filings within days.
+  </Accordion>
+  <Accordion title="Beneficial ownership reports fewer fields">
+    Financial Datasets returns 26 fields per stake; this server sources 11. The voting and dispositive power columns, `issuer_cik`, `issuer_cusip`, `accession_number` and the amendment fields are absent from the 13D/13G feed this reads, so they are omitted. `share_change` and `share_change_percent` are extra, and genuinely sourced.
+  </Accordion>
+  <Accordion title="Insider ownership reports fewer fields">
+    Financial Datasets returns 21 fields; this server sources 9. `title`, `is_officer`, `is_board_director`, `is_ten_percent_owner` and the derivative-security block need a Form 3/4/5 XML parse this route does not do. `form_type` filtering is rejected: the feed carries no Form 3/5 classification.
   </Accordion>
   <Accordion title="Screener supports two fields">
-    `screen_stocks` executes `exchange` and `market_cap` filters with the `eq` operator, through the Nasdaq screener. Any other field or operator answers `bad_request` before any Monid call runs. `list_stock_screener_filters` lists only these two filters, not the full Financial Datasets catalog.
-  </Accordion>
-  <Accordion title="Some fields are always omitted">
-    CIK, currency, and EBITDA on income statements are examples. These fields are schema-legal and optional in Financial Datasets, so omitting them is a valid response, not a broken one.
+    `screen_stocks` executes `exchange` and `market_cap` with the `eq` operator through the Nasdaq screener. Any other field or operator answers `bad_request` before any Monid call. `list_stock_screener_filters` lists only those two, not the full Financial Datasets catalog of 113 filterable fields.
   </Accordion>
 </AccordionGroup>
 
 ## Should you migrate an existing integration
 
-If your integration only touches the 16 live tools and does not depend on the omitted fields above, pointing your base URL and key here is close to a drop-in swap. If you depend on `cik` lookups, market-wide news, `as_reported` statements, or any of the 4 stubbed ownership tools, this API will not cover you yet. File an issue on [GitHub](https://github.com/BeLazy167/monid-us-finance-mcp-2026) if you need one of those.
+If your integration reads normalized statements, metrics, prices, filings, news, earnings, ownership or KPI data, and does not depend on the omitted fields above, pointing your base URL and key here is close to a drop-in swap.
+
+Do not migrate yet if you depend on `as_reported` statements, `cik`-keyed company lookup, market-wide news, an unscoped IPO or investor listing, or the cash-flow investing line described above. File an issue on [GitHub](https://github.com/BeLazy167/monid-us-finance-mcp-2026) if you need one of those.

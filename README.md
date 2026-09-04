@@ -90,25 +90,42 @@ contract-tested; see the `toolHandlers` table in `go/service/tools.go`. The adve
 tool names, descriptions and input schemas are diffed against the captured Financial
 Datasets surface by test, so the two cannot silently drift.
 
-### REST routes: 44 implemented, 2 zero-cost stubs
+### REST routes: 48 implemented, 2 zero-cost stubs
 
-Two routes are registered for parity but answer `{"error": "not_implemented"}` at HTTP
-200, with no Monid call and no charge:
+50 of Financial Datasets' 54 REST paths are registered. Two answer
+`{"error": "not_implemented"}` at HTTP 200, with no Monid call and no charge:
 
-- `/kpi/metrics/sectors` — sector is not a dimension the shared ticker catalog carries,
-  so there is nothing honest to enumerate.
-- `/index-funds/tickers` — `get_index_fund` resolves holdings by live web search per
-  ticker; publishing the search-ranking hint list as a coverage catalog would overstate
-  what this server supports.
+- `/kpi/metrics/sectors` — sector is not a dimension the shared ticker catalog
+  carries, so there is nothing honest to enumerate.
+- `/index-funds/tickers` — `get_index_fund` resolves holdings by live web search
+  per ticker; publishing the search-ranking hint list as a coverage catalog
+  would overstate what this server supports.
 
-Eight Financial Datasets routes are not registered at all. The four `as-reported`
-statement routes need an XBRL/as-filed source that no allowlisted Monid provider
-offers; `/ipos` needs an SEC S-1 filings feed, `/company/facts/ciks` and `/filings/ciks`
-need CIK enumeration, and `/filings/items/requests/{request_id}` needs an async request
-store. None are faked.
+The four `as-reported` statement routes are not registered. They return as-filed
+XBRL with a nested line-item tree, which means parsing a filing's rendered
+statement files rather than reading a normalized feed.
 
-Route-by-route parameter and field notes, including every deliberate deviation, are in
-[docs/openapi-notes.md](docs/openapi-notes.md) and [docs/compatibility.md](docs/compatibility.md).
+Several registered routes deviate deliberately, each forced by its source and
+each documented: `/ipos` and `/institutional-holdings/investors` require a
+ticker, `/company/facts/ciks` covers 8,005 CIKs against Financial Datasets'
+21,005, and `/macro/interest-rates/banks` lists the four central banks this
+server actually scrapes rather than ten. Route-by-route notes are in
+[docs/openapi-notes.md](docs/openapi-notes.md) and
+[docs/compatibility.md](docs/compatibility.md).
+
+### A known upstream data defect
+
+Measured 2026-09-04 against Apple's FY2025 10-K: the normalized statements feed
+behind `/financials/cash-flow-statements` reports investing activities as
+27,910,000,000 where the filing says 15,195,000,000. The gap is exactly Apple's
+12,715,000,000 capital expenditure, which that feed omits from the investing
+subtotal while still using it to compute Free Cash Flow correctly. The error
+carries into `change_in_cash_and_equivalents`. Operating and financing match the
+filing exactly.
+
+This is an upstream aggregation defect, not a parsing bug here, and it will be
+wrong for any company with material capex. It is written down rather than
+quietly carried.
 
 ### Data freshness is measured, not assumed
 

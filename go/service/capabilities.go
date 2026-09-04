@@ -136,3 +136,12 @@ func (s *Service) GetIPOCalendar(ctx context.Context, apiKey string, args map[st
 func (s *Service) GetMarketSnapshot(ctx context.Context, apiKey string, args map[string]any) (Result, error) {
 	return s.newCallCtx(ctx, apiKey, "get_market_snapshot").getMarketSnapshot(args)
 }
+
+// GetAsReported serves all four as-reported statement routes from SEC
+// EDGAR's rendered statement files (see asreported.go). The "statement"
+// argument selects the variant, so one capability backs four routes that
+// differ only in which statement they read and which envelope key they
+// answer with.
+func (s *Service) GetAsReported(ctx context.Context, apiKey string, args map[string]any) (Result, error) {
+	return s.newCallCtx(ctx, apiKey, "get_as_reported").getAsReported(args)
+}

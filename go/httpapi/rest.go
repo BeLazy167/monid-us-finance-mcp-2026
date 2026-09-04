@@ -165,6 +165,12 @@ func restRoutes(rt *restAPI) []restRoute {
 
 		// ---- Asynchronous filing-item requests (see filingItemsRequest) ----
 		{http.MethodGet, "/filings/items/requests/{request_id}", rt.filingItemsRequest},
+
+		// ---- As-filed statement hierarchies (get_as_reported) ----
+		{http.MethodGet, "/financials/as-reported", rt.asReportedRoute("all")},
+		{http.MethodGet, "/financials/income-statements/as-reported", rt.asReportedRoute("income")},
+		{http.MethodGet, "/financials/balance-sheets/as-reported", rt.asReportedRoute("balance")},
+		{http.MethodGet, "/financials/cash-flow-statements/as-reported", rt.asReportedRoute("cash")},
 	}
 	for _, path := range notImplementedPaths {
 		routes = append(routes, restRoute{http.MethodGet, path, notImplemented})

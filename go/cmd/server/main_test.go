@@ -55,7 +55,7 @@ func TestCapabilityNamesNeverCollideWithMCPToolNames(t *testing.T) {
 	// is unreachable from every surface, and that failure is silent at
 	// build time. Bump this deliberately when wiring a new capability;
 	// never to make a red test green.
-	const wiredCapabilities = 17
+	const wiredCapabilities = 18
 	if len(capabilityHandlers) != wiredCapabilities {
 		t.Fatalf("capabilityHandlers has %d entries, want %d; if you added a capability, confirm a route reaches it and bump this count",
 			len(capabilityHandlers), wiredCapabilities)
