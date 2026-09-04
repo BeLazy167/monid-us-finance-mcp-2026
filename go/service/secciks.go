@@ -1,18 +1,22 @@
 // This file builds the two CIK enumeration capabilities, list_filings_ciks
 // and list_company_facts_ciks, from SEC EDGAR's own published company
-// ticker file rather than from any Monid provider.
+// ticker file (https://www.sec.gov/files/company_tickers.json).
 //
-// Why this file makes a direct HTTP call, uniquely in this package: the
-// source is https://www.sec.gov/files/company_tickers.json, which SEC
-// publishes free and without authentication. Routing it through a paid
-// Monid provider would bill the caller for data the SEC gives away, so
-// this capability costs the caller nothing and writes no receipt (there
-// is no measured cost to record). It is the only place go/service reaches
-// the network outside monid.Client; every billable call still goes
-// through callCtx.run.
+// The file is fetched through Monid's context.dev scraper rather than by
+// a direct HTTP call, for the same reasons every other upstream call in
+// this package goes through Monid: the request is billed to the caller's
+// own wallet, it writes a receipts-ledger entry, and it is checked
+// against the discovery allowlist. A direct fetch would bypass all three.
+// It also removes an operator burden: sec.gov answers 403 to any
+// User-Agent without a contact email, so a direct fetch made every
+// deployment declare one. The scraper handles that.
 //
-// Provenance, measured 2026-09-04: Financial Datasets' /filings/ciks
-// response was captured live and compared against this file. The two are
+// Measured 2026-09-04: the scraper returned the file byte-intact, 922KB
+// with every row and cik_str preserved, for $0.0009. It returns raw
+// content rather than rendered markdown, so the JSON parses unchanged.
+//
+// Provenance: Financial Datasets' /filings/ciks response was captured
+// live the same day and compared against this file. The two are
 // byte-identical - same 10,412 entries, same order, same unpadded
 // formatting - which is why this port can reproduce that route exactly
 // without redistributing any Financial Datasets data.
@@ -27,12 +31,8 @@ package service
 import (
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
-	"os"
 	"sort"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -47,32 +47,7 @@ const (
 	// secCatalogTTL bounds how long one fetched copy is reused. The file
 	// changes at most daily.
 	secCatalogTTL = 6 * time.Hour
-	// secMaxBody caps the download; the real file is around 800KB.
-	secMaxBody = 16 << 20
 )
-
-// secUserAgent returns the operator-declared User-Agent, or an error
-// naming exactly what to set.
-//
-// SEC's access policy requires a User-Agent carrying a real contact
-// address, and it is enforced: measured 2026-09-04, sec.gov answered 403
-// to a descriptive UA and to one carrying only a repository URL, and 200
-// only once an email address was present.
-//
-// This deliberately has no default. Baking a placeholder address into an
-// open-source server would send SEC an unreachable contact from every
-// deployment that ever runs it, and make all of them indistinguishable in
-// SEC's logs. Declaring a real address is the operator's call, the same
-// way the Monid key is, so an unset value fails loudly with instructions
-// rather than quietly misattributing traffic.
-func secUserAgent() (string, error) {
-	if v := strings.TrimSpace(os.Getenv("SEC_USER_AGENT")); v != "" {
-		return v, nil
-	}
-	return "", fmt.Errorf("SEC_USER_AGENT is not set: SEC requires a User-Agent containing a real contact " +
-		"email before it will serve its public files (it answers 403 otherwise). " +
-		`Set it to something like "Your Project Name you@example.com" and retry`)
-}
 
 // secTickerRow is one entry of SEC's company_tickers.json. The file is a
 // JSON object keyed by row index, not an array.
@@ -111,33 +86,21 @@ func (c *callCtx) fetchSECCatalog() ([]secTickerRow, error) {
 		return secCatalogCache.rows, nil
 	}
 
-	req, err := http.NewRequestWithContext(c.ctx, http.MethodGet, secCompanyTickersURL, nil)
-	if err != nil {
-		return nil, fmt.Errorf("could not build the SEC company-ticker request")
-	}
-	userAgent, err := secUserAgent()
+	run, err := c.run(contextDev, scrapeHTMLEndpoint, nil, map[string]any{"url": secCompanyTickersURL})
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("User-Agent", userAgent)
-	req.Header.Set("Accept", "application/json")
-
-	client := c.svc.http
-	if client == nil {
-		client = &http.Client{Timeout: 60 * time.Second}
+	var envelope struct {
+		Success bool   `json:"success"`
+		HTML    string `json:"html"`
 	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("SEC company-ticker file could not be fetched: %w", err)
+	if err := json.Unmarshal(run.Output, &envelope); err != nil {
+		return nil, &providers.SchemaDriftError{Msg: "context.dev scrape payload must be an object"}
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("SEC company-ticker file returned HTTP %d", resp.StatusCode)
+	if !envelope.Success || envelope.HTML == "" {
+		return nil, &providers.SchemaDriftError{Msg: "context.dev returned no content for the SEC company-ticker file"}
 	}
-	body, err := io.ReadAll(io.LimitReader(resp.Body, secMaxBody))
-	if err != nil {
-		return nil, fmt.Errorf("SEC company-ticker file could not be read")
-	}
+	body := []byte(envelope.HTML)
 
 	// The file is an object keyed by row index ("0", "1", ...). Go maps
 	// have no order, so rows are re-sorted by that numeric key to recover

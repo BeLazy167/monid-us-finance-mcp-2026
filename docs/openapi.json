@@ -4297,7 +4297,7 @@
           "Company"
         ],
         "summary": "Available CIKs for company facts",
-        "description": "The CIK universe this server can resolve company facts for: SEC's company-ticker file, deduplicated, zero-padded to 10 digits, sorted ascending. This is deliberately NOT full parity. Financial Datasets returns 21,005 distinct CIKs here (measured 2026-09-04) because it also covers filers with no listed ticker; this server returns the 8,005 it can actually source, every one of which is present in Financial Datasets' list too. Free, and requires SEC_USER_AGENT, for the same reasons as /filings/ciks.",
+        "description": "The CIK universe this server can resolve company facts for: SEC's company-ticker file, deduplicated, zero-padded to 10 digits, sorted ascending. This is deliberately NOT full parity. Financial Datasets returns 21,005 distinct CIKs here (measured 2026-09-04) because it also covers filers with no listed ticker; this server returns the 8,005 it can actually source, every one of which is present in Financial Datasets' list too. Fetched through Monid's context.dev scraper, and cached, for the same reasons as /filings/ciks.",
         "parameters": [],
         "responses": {
           "200": {
@@ -4504,7 +4504,7 @@
           "Filings"
         ],
         "summary": "Available CIKs for SEC filings",
-        "description": "Every CIK in SEC EDGAR's published company-ticker file, in SEC's own row order and unpadded. Verified byte-identical to Financial Datasets' live /filings/ciks response on 2026-09-04: same 10,412 entries, same order, same formatting. Duplicates are intentional - a company with several share classes appears once per ticker, exactly as it does upstream. Sourced free from SEC, so this route makes no Monid call and costs nothing. Requires the SEC_USER_AGENT environment variable: SEC serves its public files only to a User-Agent carrying a real contact email, and this server declines to ship a placeholder address on every deployment's behalf.",
+        "description": "Every CIK in SEC EDGAR's published company-ticker file, in SEC's own row order and unpadded. Verified byte-identical to Financial Datasets' live /filings/ciks response on 2026-09-04: same 10,412 entries, same order, same formatting. Duplicates are intentional - a company with several share classes appears once per ticker, exactly as it does upstream. Sourced free from SEC, so this route makes no Monid call and costs nothing. The file is fetched through Monid's context.dev scraper rather than by a direct HTTP call, so the request is billed to the caller's wallet, writes a receipts-ledger entry and is checked against the discovery allowlist like every other upstream call. Measured cost $0.0009, cached for six hours.",
         "parameters": [],
         "responses": {
           "200": {
@@ -4899,6 +4899,169 @@
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
+          }
+        }
+      }
+    },
+    "/ipos": {
+      "get": {
+        "operationId": "get_ipos",
+        "tags": [
+          "Filings"
+        ],
+        "summary": "Get IPO filings",
+        "description": "Returns the S-1 and S-1/A registration statements one issuer has filed, newest first, from the same filings feed get_filings reads (go/service/ipos.go). ticker is REQUIRED: that feed is keyed on a single issuer and cannot list registrations across the whole market, so an omitted ticker answers a bad_request naming the reason rather than a guess. This is a documented deviation - Financial Datasets answers this route unscoped. classification is accepted for parameter parity but every call that sets it answers HTTP 200 with a bad_request ErrorResponse body: this server reports the filings SEC publishes and does not classify them as ipo, spac, shell_company or resale, and silently ignoring the filter would return a set the caller did not ask for.",
+        "parameters": [
+          {
+            "name": "ticker",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Ticker of the issuer whose registration statements to list, for example RDDT. Required."
+          },
+          {
+            "name": "cik",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "SEC CIK of the filer. Accepted for Financial Datasets parameter parity; this route resolves the CIK from the filing itself."
+          },
+          {
+            "name": "classification",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "ipo",
+                "shell_company",
+                "spac",
+                "resale",
+                "other"
+              ]
+            },
+            "description": "Accepted for parameter parity, but every call that sets it answers a bad_request ErrorResponse body; this server does not classify registration filings."
+          },
+          {
+            "name": "filing_date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Restricts to registrations whose filing_date exactly equals this date (YYYY-MM-DD)."
+          },
+          {
+            "name": "filing_date_gte",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Restricts to registrations filed on or after this date (YYYY-MM-DD)."
+          },
+          {
+            "name": "filing_date_lte",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Restricts to registrations filed on or before this date (YYYY-MM-DD)."
+          },
+          {
+            "name": "filing_date_gt",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Restricts to registrations filed strictly after this date (YYYY-MM-DD)."
+          },
+          {
+            "name": "filing_date_lt",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Restricts to registrations filed strictly before this date (YYYY-MM-DD)."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000,
+              "default": 10
+            },
+            "description": "Number of records to retrieve (default: 10, max: 1000)."
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Opaque base64url pagination cursor from a previous response's next_page_url."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Registration statements for the issuer, newest first.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IposResponse"
+                },
+                "examples": {
+                  "example": {
+                    "value": {
+                      "ipos": [
+                        {
+                          "accession_number": "0001628280-24-006294",
+                          "cik": "1713445",
+                          "form_type": "S-1",
+                          "filing_date": "2024-02-22",
+                          "filing_url": "https://www.sec.gov/Archives/edgar/data/0001713445/000162828024006294/reddits-1q423.htm",
+                          "ticker": "RDDT"
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "402": {
+            "$ref": "#/components/responses/PaymentRequired"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "504": {
+            "$ref": "#/components/responses/GatewayTimeout"
           }
         }
       }
@@ -8155,6 +8318,62 @@
         },
         "required": [
           "ciks"
+        ]
+      },
+      "Ipo": {
+        "type": "object",
+        "title": "Ipo",
+        "description": "One SEC registration statement (S-1 or S-1/A) filed by an issuer. Sourced from the same filings feed get_filings reads. The Financial Datasets Ipo contract also declares company_name, accepted_datetime, classification, is_ipo_grade, exchange, expected_offering_price, price_range_low and price_range_high; those live in the registration statement's own cover page, which this route does not parse, so they are omitted rather than guessed.",
+        "properties": {
+          "accession_number": {
+            "type": "string",
+            "description": "SEC accession number of the registration statement."
+          },
+          "cik": {
+            "type": "string",
+            "description": "SEC Central Index Key of the filer, read from the filing's EDGAR URL."
+          },
+          "form_type": {
+            "type": "string",
+            "enum": [
+              "S-1",
+              "S-1/A"
+            ],
+            "description": "S-1 for an initial registration statement, S-1/A for an amendment."
+          },
+          "filing_date": {
+            "type": "string",
+            "format": "date",
+            "description": "Date the registration was filed with the SEC."
+          },
+          "filing_url": {
+            "type": "string",
+            "description": "URL of the filing on SEC EDGAR."
+          },
+          "ticker": {
+            "type": "string",
+            "description": "Uppercase ticker symbol of the filer."
+          }
+        }
+      },
+      "IposResponse": {
+        "type": "object",
+        "title": "IposResponse",
+        "description": "List envelope: {\"ipos\": [...]}, with next_page_url present only when more records remain.",
+        "properties": {
+          "ipos": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Ipo"
+            }
+          },
+          "next_page_url": {
+            "type": "string",
+            "description": "Absolute URL of the next page. Present only when more records remain."
+          }
+        },
+        "required": [
+          "ipos"
         ]
       }
     },

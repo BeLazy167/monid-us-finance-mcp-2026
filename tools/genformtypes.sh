@@ -7,9 +7,15 @@
 # single entry. Retired forms (10-K405, 10KSB) only appear in old quarters,
 # which is why the sweep reaches back to 1995.
 #
-# SEC serves these files only to a User-Agent carrying a real contact
-# email, so set SEC_USER_AGENT before running:
+# This is offline tooling, run by hand when the catalog needs refreshing,
+# so it fetches sec.gov directly rather than through Monid. sec.gov serves
+# its files only to a User-Agent carrying a real contact email, so declare
+# one:
 #   SEC_USER_AGENT="Your Project you@example.com" tools/genformtypes.sh
+#
+# The server itself never does this. Its one SEC fetch (the company-ticker
+# file behind the CIK routes) goes through Monid's scraper like every other
+# upstream call. See go/service/secciks.go.
 set -euo pipefail
 
 : "${SEC_USER_AGENT:?set SEC_USER_AGENT to \"Your Project you@example.com\"; SEC 403s without a contact email}"

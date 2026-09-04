@@ -43,6 +43,7 @@ const (
 	contextDev              = "context.dev"
 	newsEndpoint            = "/news/search"
 	scrapeEndpoint          = "/web/scrape/markdown"
+	scrapeHTMLEndpoint      = "/web/scrape/html"
 	indexFundSearchEndpoint = "/web/search"
 	secform4                = "secform4"
 	insiderEndpoint         = "/search"
