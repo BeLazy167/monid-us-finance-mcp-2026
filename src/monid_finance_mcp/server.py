@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from typing import Literal
 
 from mcp.server.fastmcp import FastMCP
 
@@ -102,6 +103,32 @@ def create_server(service: FinanceService | None = None) -> FastMCP:
             filing_date_lte=filing_date_lte,
         )
 
+    @server.tool(name="get_filing_items")
+    async def get_filing_items(
+        ticker: str,
+        filing_type: Literal["10-K", "10-Q", "8-K"],
+        year: int,
+        quarter: int | None = None,
+        item: str | None = None,
+        accession_number: str | None = None,
+        include_exhibits: bool = False,
+    ) -> EnvelopeDict:
+        """Extract one or all supported sections from a selected US SEC filing."""
+        return await finance.get_filing_items(
+            ticker,
+            filing_type,
+            year,
+            quarter=quarter,
+            item=item,
+            accession_number=accession_number,
+            include_exhibits=include_exhibits,
+        )
+
+    @server.tool(name="list_filing_item_types")
+    async def list_filing_item_types(filing_type: str | None = None) -> EnvelopeDict:
+        """List the static, SEC-sourced item catalog without making a paid call."""
+        return await finance.list_filing_item_types(filing_type)
+
     @server.tool(name="get_stock_prices")
     async def get_stock_prices(
         ticker: str,
@@ -144,6 +171,8 @@ def create_server(service: FinanceService | None = None) -> FastMCP:
         get_cash_flow_statement,
         get_financial_metrics_snapshot,
         get_filings,
+        get_filing_items,
+        list_filing_item_types,
         get_stock_prices,
         get_stock_price,
         get_news,

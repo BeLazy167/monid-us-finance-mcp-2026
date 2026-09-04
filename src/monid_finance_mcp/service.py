@@ -22,6 +22,18 @@ from monid_finance_mcp.models import (
     PartialError,
     Provenance,
 )
+from monid_finance_mcp.providers.us.filing_items import (
+    CATALOG_SCOPE,
+    FilingType,
+    catalog_payload,
+    normalize_accession,
+    parse_filing_sections,
+    parse_scrape_payload,
+    select_filing,
+    validate_catalog_filing_type,
+    validate_filing_item_request,
+    validate_sec_url,
+)
 from monid_finance_mcp.providers.us.normalize import (
     InputError,
     SchemaDriftError,
@@ -51,6 +63,8 @@ STATEMENTS_ENDPOINT = "/equities/v1/statements"
 FILINGS_ENDPOINT = "/equities/v1/filings"
 OHLCV_ENDPOINT = "/equities/v1/ohlcv"
 NEWS_ENDPOINT = "/news/search"
+SCRAPE_MARKDOWN_ENDPOINT = "/web/scrape/markdown"
+SCRAPE_TIMEOUT_MS = 30_000
 
 
 @dataclass(frozen=True, slots=True)
@@ -276,6 +290,184 @@ class FinanceService:
                 if not filings:
                     envelope.warnings.append(f"DefiLlama returned no filings for {symbol}.")
         return envelope.to_dict()
+
+    async def get_filing_items(
+        self,
+        ticker: str,
+        filing_type: FilingType,
+        year: int,
+        quarter: int | None = None,
+        item: str | None = None,
+        accession_number: str | None = None,
+        include_exhibits: bool = False,
+    ) -> EnvelopeDict:
+        data: JsonObject = {
+            "ticker": ticker,
+            "filing_type": filing_type,
+            "year": year,
+            "quarter": quarter,
+            "requested_item": item,
+            "include_exhibits": include_exhibits,
+            "filing": None,
+            "sections": [],
+            "scrape": None,
+        }
+        try:
+            symbol, normalized_type, normalized_year, normalized_quarter, selected_item = (
+                validate_filing_item_request(ticker, filing_type, year, quarter, item)
+            )
+            normalized_accession = normalize_accession(accession_number)
+        except InputError as error:
+            return _invalid(data, error)
+
+        data.update(
+            {
+                "ticker": symbol,
+                "filing_type": normalized_type,
+                "year": normalized_year,
+                "quarter": normalized_quarter,
+                "requested_item": selected_item.name if selected_item is not None else None,
+                "accession_number": normalized_accession,
+            }
+        )
+        if include_exhibits:
+            return _local_error(
+                data,
+                code="capability_unavailable",
+                message=(
+                    "include_exhibits is not supported because the validated route does not "
+                    "safely identify and fetch filing exhibits"
+                ),
+            )
+
+        filing_outcome = await self._call(
+            DEFILLAMA,
+            FILINGS_ENDPOINT,
+            query_params={"ticker": symbol, "country": "US"},
+        )
+        envelope = Envelope(data)
+        filing_run = self._take_result(
+            envelope,
+            filing_outcome,
+            units="filing records",
+            data_quality="DefiLlama beta filing index used only for deterministic selection",
+        )
+        if filing_run is None:
+            return envelope.to_dict()
+        try:
+            selection = select_filing(
+                filing_run.output,
+                filing_type=normalized_type,
+                year=normalized_year,
+                quarter=normalized_quarter,
+                accession_number=normalized_accession,
+            )
+        except SchemaDriftError as error:
+            _add_schema_error(envelope, filing_run, error)
+            return envelope.to_dict()
+        if selection.filing is None:
+            envelope.add_error(
+                PartialError(
+                    code="filing_not_found",
+                    message=(
+                        f"No {normalized_type} filing matched {symbol}, year {normalized_year}"
+                        + (
+                            f", quarter {normalized_quarter}"
+                            if normalized_quarter is not None
+                            else ""
+                        )
+                        + (
+                            f", accession {normalized_accession}"
+                            if normalized_accession is not None
+                            else ""
+                        )
+                        + "."
+                    ),
+                    provider=filing_run.provider,
+                    endpoint=filing_run.endpoint,
+                    run_id=filing_run.run_id,
+                    provider_http_status=filing_run.provider_http_status,
+                )
+            )
+            return envelope.to_dict()
+
+        filing = selection.filing
+        data["filing"] = filing.to_dict()
+        _update_last_provenance(envelope, as_of=filing.filing_date)
+        if selection.matching_count > 1:
+            envelope.warnings.append(
+                f"{selection.matching_count} filings matched; selected the latest filing date, "
+                "report date, accession, and URL in that order."
+            )
+        try:
+            source_url = validate_sec_url(filing.source_url)
+        except ValueError as error:
+            envelope.add_error(
+                PartialError(
+                    code="invalid_source_url",
+                    message=str(error),
+                    provider=filing_run.provider,
+                    endpoint=filing_run.endpoint,
+                    run_id=filing_run.run_id,
+                    provider_http_status=filing_run.provider_http_status,
+                )
+            )
+            return envelope.to_dict()
+
+        scrape_outcome = await self._call(
+            CONTEXT,
+            SCRAPE_MARKDOWN_ENDPOINT,
+            query_params={
+                "url": source_url,
+                "includeLinks": False,
+                "includeImages": False,
+                "useMainContentOnly": True,
+                "timeoutMS": SCRAPE_TIMEOUT_MS,
+            },
+        )
+        scrape_run = self._take_result(
+            envelope,
+            scrape_outcome,
+            units="markdown characters",
+            data_quality="Context.dev deterministic webpage-to-markdown extraction",
+        )
+        if scrape_run is None:
+            return envelope.to_dict()
+        try:
+            markdown, scrape_metadata = parse_scrape_payload(scrape_run.output, source_url)
+            sections = parse_filing_sections(markdown, normalized_type, selected_item)
+        except SchemaDriftError as error:
+            _add_schema_error(envelope, scrape_run, error)
+            return envelope.to_dict()
+        data["scrape"] = scrape_metadata
+        data["sections"] = sections
+        _update_last_provenance(envelope, as_of=filing.filing_date)
+        if not sections:
+            missing = selected_item.name if selected_item is not None else "any supported item"
+            envelope.add_error(
+                PartialError(
+                    code="section_not_found",
+                    message=f"The filing markdown did not contain body content for {missing}.",
+                    provider=scrape_run.provider,
+                    endpoint=scrape_run.endpoint,
+                    run_id=scrape_run.run_id,
+                    provider_http_status=scrape_run.provider_http_status,
+                )
+            )
+        return envelope.to_dict()
+
+    async def list_filing_item_types(self, filing_type: str | None = None) -> EnvelopeDict:
+        data: JsonObject = {
+            "catalogs": [],
+            "catalog_scope": CATALOG_SCOPE,
+        }
+        try:
+            normalized_type = (
+                validate_catalog_filing_type(filing_type) if filing_type is not None else None
+            )
+        except InputError as error:
+            return _invalid(data, error)
+        return Envelope(catalog_payload(normalized_type)).to_dict()
 
     async def get_stock_prices(
         self,
@@ -528,8 +720,12 @@ class FinanceService:
 
 
 def _invalid(data: JsonObject, error: InputError) -> EnvelopeDict:
+    return _local_error(data, code="invalid_input", message=str(error))
+
+
+def _local_error(data: JsonObject, *, code: str, message: str) -> EnvelopeDict:
     envelope = Envelope(data)
-    envelope.add_error(PartialError(code="invalid_input", message=str(error)))
+    envelope.add_error(PartialError(code=code, message=message))
     return envelope.to_dict()
 
 

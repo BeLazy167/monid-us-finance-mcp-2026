@@ -12,13 +12,15 @@ Phase 1 serves US equities and ETFs. It matches published MCP tool names and wor
 4. Poll bounded asynchronous runs.
 5. Check lifecycle status and provider HTTP status separately.
 6. Normalize provider output into a stable tool response.
-7. Return provenance, run IDs, measured cost, warnings, and partial errors.
+7. For filing sections, validate the selected SEC URL before the scrape call.
+8. Parse canonical SEC item headings locally and prefer body spans over table-of-contents spans.
+9. Return provenance, run IDs, measured cost, warnings, and partial errors.
 
 ## Boundaries
 
 - `client.py` owns Monid CLI execution and run-state handling.
 - `models.py` owns stable envelopes and validation.
-- `providers/us/` owns upstream adapters and normalization.
+- `providers/us/` owns upstream adapters, static SEC item maps, and local section parsing.
 - `service.py` composes adapters into financial workflows.
 - `server.py` exposes the compatibility tools through FastMCP.
 
