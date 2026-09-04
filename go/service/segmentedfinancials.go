@@ -11,6 +11,7 @@ package service
 import (
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/belazy/monid-finance/providers"
@@ -67,7 +68,31 @@ func segmentExtractSchema() map[string]any {
 const segmentInstructions = "Extract the segment information note from this SEC filing: net sales " +
 	"by product or service line, and net sales by geographic reportable " +
 	"segment, for every fiscal year shown. Use only numbers stated in the " +
-	"filing; leave fields null when the filing does not state them."
+	"filing; leave fields null when the filing does not state them. Report " +
+	"each value exactly as printed and put the table's stated scale in unit " +
+	"(for example \"millions\" or \"thousands\"), or null if the table " +
+	"states none."
+
+// segmentScale converts a figure from the scale the filing's table states
+// to whole units. Tables in a 10-K almost always print "in millions" or
+// "in thousands"; copying such a figure through unscaled reported Apple's
+// FY2025 iPhone revenue as 209586 where the filing means 209,586,000,000
+// (measured 2026-09-04 against Financial Datasets' own output). A null or
+// unrecognised unit is taken as whole units, which is what a table with no
+// stated scale means.
+func segmentScale(unit any) float64 {
+	text, _ := unit.(string)
+	switch {
+	case strings.Contains(strings.ToLower(text), "billion"):
+		return 1e9
+	case strings.Contains(strings.ToLower(text), "million"):
+		return 1e6
+	case strings.Contains(strings.ToLower(text), "thousand"):
+		return 1e3
+	default:
+		return 1
+	}
+}
 
 type segmentRow struct {
 	Label string  `json:"label"`
@@ -141,7 +166,7 @@ func normalizeSegmentedFinancials(data map[string]any, ticker, filingURL string,
 					periods[key] = period
 					order = append(order, key)
 				}
-				row := segmentRow{Label: name, Value: numeric}
+				row := segmentRow{Label: name, Value: numeric * segmentScale(item["unit"])}
 				if isProducts {
 					period.products = append(period.products, row)
 				} else {
