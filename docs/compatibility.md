@@ -39,14 +39,27 @@ source and how current that data is.
 
 ## REST route status
 
-44 routes are implemented and 2 answer a zero-cost `not_implemented` stub
-(`/kpi/metrics/sectors`, `/index-funds/tickers`), for the reasons noted
-beside each in `notImplementedPaths` (`go/httpapi/rest.go`). Eight
-Financial Datasets routes are not registered at all: the four
-`as-reported` statement routes (no XBRL/as-filed source exists in the
-allowlisted Monid registry), `/ipos` (no SEC S-1 filings feed),
-`/company/facts/ciks` and `/filings/ciks` (no CIK enumeration), and
-`/filings/items/requests/{request_id}` (no async request store).
+50 of Financial Datasets' 54 REST paths are registered. 48 return data.
+Two answer a zero-cost `not_implemented` stub (`/kpi/metrics/sectors`,
+`/index-funds/tickers`), for the reasons noted beside each in
+`notImplementedPaths` (`go/httpapi/rest.go`). The four `as-reported`
+statement routes are not registered: they return as-filed XBRL with a
+nested line-item tree, which needs a filing's rendered statement files
+parsed rather than a normalized feed read.
+
+Deliberate deviations, each forced by its source and each stated on the
+route itself:
+
+- `/ipos` and `/institutional-holdings/investors` require a `ticker`.
+  Their feeds are keyed on one issuer and cannot enumerate across the
+  market; Financial Datasets answers both unscoped.
+- `/company/facts/ciks` returns the 8,005-CIK SEC ticker-file universe
+  against Financial Datasets' 21,005, which also covers filers with no
+  listed ticker. Every CIK returned is present in theirs.
+- `/macro/interest-rates/banks` lists the four central banks this server
+  scrapes, not Financial Datasets' ten.
+- `/filings/items/requests/{request_id}` answers `not_found` for any id.
+  Filing-item extraction runs inline, so no request id is ever issued.
 
 Two envelope-key details are worth naming, because both are places where
 reusing one implementation across two routes would have been wrong.
@@ -58,32 +71,20 @@ while the same values are `filer_cik`/`filer_name` on
 `InstitutionalHolding`; this server follows whichever spelling belongs to
 the endpoint being served.
 
-## Ownership-state data freshness
+## Known upstream data defect: cash-flow investing activities
 
-Measured live on 2026-09-04: the newest record in SECForm4's
-`/get_13d_filings` feed (which backs `get_beneficial_owners` and
-`get_beneficial_ownership`) was filed 2026-03-06, roughly six months
-behind the date measured. This is not a live or real-time feed. Every
-beneficial-ownership row this server returns carries its own sourced
-`filing_date`/`event_date` (or is omitted rather than backfilled with a
-guess) so a caller can judge recency directly; the server itself never
-describes this data as current, real-time, or the latest activity.
+Measured 2026-09-04 against Apple's FY2025 10-K. The normalized statements
+feed behind `get_cash_flow_statement` reports investing activities as
+27,910,000,000; the filing says 15,195,000,000. The gap is exactly Apple's
+12,715,000,000 capital expenditure, which that feed omits from the
+investing subtotal while still using it to compute Free Cash Flow
+correctly. The error carries into `change_in_cash_and_equivalents`.
+Operating and financing activities match the filing exactly.
 
-`get_insider_ownership` is a different case, measured the same day. The
-newest row SECForm4's `/get_company_insider_trading` returned for AAPL was
-a 2026-09-01 transaction reported 2026-09-03, so that feed tracks filings
-within days. The six-month caveat above applies to the 13D/13G feeds, not
-to insider ownership.
-
-`get_institutional_investors`, backed by `/get_institution_holders`, has
-not been independently timestamped; treat its recency as unverified until
-it is.
-
-Dedupe note: the insider feed's displayed name carries the person's title,
-and titles change between filings (the same officer appeared as both "SVP,
-GC and Secretary" and "SVP, GC and Government Affairs"). Insiders are
-therefore keyed on the stable id in their profile URL, so one person yields
-one row at their most recent holding rather than one row per title.
+This is an upstream aggregation defect, not a parsing bug in this port,
+and it will be wrong for any company with material capex. It is recorded
+here rather than carried quietly. Operating cash flow, free cash flow and
+the income statement are unaffected.
 
 ## Honest deviations from Financial Datasets behavior
 
@@ -91,6 +92,7 @@ one row at their most recent holding rather than one row per title.
 - `get_insider_ownership` derives its ticker's SEC CIK from the same filings lookup `get_filings` uses (reusing that call's cache), then aggregates SECForm4's insider-trading history down to each insider's most recent post-transaction share count. `form_type` is accepted for schema parity but rejected: this feed carries no Form 3/5 classification to filter by.
 - `get_institutional_investors` lists distinct filers from an unscoped `/get_institution_holders` call; it is a directory of whatever filers currently appear in that feed, not a guaranteed-complete or authoritative 13F filer registry.
 - `cik` parameters are accepted (contract parity) but answered with `bad_request`; only ticker lookup is routed. Company facts currently sources ticker and name only.
+- `filing_type` accepts any of the 715 SEC EDGAR form types swept from EDGAR's own quarterly indexes (`go/service/filingtypes_gen.go`), covering all 500 Financial Datasets publishes. An earlier five-entry enum rejected real forms like `S-1` and `DEF 14A`.
 - `get_news` requires `ticker`; market-wide news is not routed.
 - Statement `filing_date*` filters need the filings join; if that join fails with filters active, the call answers `upstream_error` instead of guessing.
 - TTM statements derive locally from four consecutive quarters (flows summed, weighted-average shares averaged, balances point-in-time). TTM records omit `fiscal_period` and `currency`.

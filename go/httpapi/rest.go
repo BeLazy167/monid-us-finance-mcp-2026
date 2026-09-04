@@ -72,15 +72,15 @@ func restRoutes(rt *restAPI) []restRoute {
 	routes := []restRoute{
 		{http.MethodGet, "/financials/income-statements", rt.statementRoute(
 			"get_income_statement",
-			"as_reported is not supported; use the normalized income-statements endpoint",
+			"as_reported is not a parameter of this route; the as-filed hierarchy lives at /financials/income-statements/as-reported",
 		)},
 		{http.MethodGet, "/financials/balance-sheets", rt.statementRoute(
 			"get_balance_sheet",
-			"as_reported is not supported; use the normalized balance-sheets endpoint",
+			"as_reported is not a parameter of this route; the as-filed hierarchy lives at /financials/balance-sheets/as-reported",
 		)},
 		{http.MethodGet, "/financials/cash-flow-statements", rt.statementRoute(
 			"get_cash_flow_statement",
-			"as_reported is not supported; use the normalized cash-flow-statements endpoint",
+			"as_reported is not a parameter of this route; the as-filed hierarchy lives at /financials/cash-flow-statements/as-reported",
 		)},
 		{http.MethodGet, "/financial-metrics", rt.financialMetrics},
 		{http.MethodGet, "/financial-metrics/snapshot", rt.financialMetricsSnapshot},
@@ -874,6 +874,39 @@ func (rt *restAPI) marketSnapshot(w http.ResponseWriter, r *http.Request, id cal
 	rt.callCapabilityAndRespond(w, r, id, "get_market_snapshot", map[string]any{}, nil)
 }
 
+// ---- As-filed statement hierarchies (get_as_reported) ----
+
+// asReportedRoute serves the four as-reported statement routes. They share
+// one capability and differ only in the statement argument, which also
+// decides the envelope key go/service answers with (asreported.go).
+//
+// period defaults to annual and limit to 1: an as-reported record is one
+// filing's own hierarchy, and a caller who names no period wants the
+// latest annual report, not a series. Each extra period costs sec.gov
+// fetches rather than a paid provider call, so a large limit is slow
+// before it is expensive.
+func (rt *restAPI) asReportedRoute(statement string) routeHandler {
+	return func(w http.ResponseWriter, r *http.Request, id callerIdentity) {
+		q := r.URL.Query()
+		limit, err := queryInt(q, "limit", 1)
+		if err != nil {
+			writeFDError(w, http.StatusBadRequest, "bad_request", err.Error())
+			return
+		}
+		args := map[string]any{
+			"statement": statement,
+			"period":    queryStringDefault(q, "period", "annual"),
+			"limit":     float64(limit),
+		}
+		putQueryString(args, q, "ticker")
+		putQueryString(args, q, "cik")
+		for _, name := range statementDateFilterNames {
+			putQueryString(args, q, name)
+		}
+		rt.callCapabilityAndRespond(w, r, id, "get_as_reported", args, nil)
+	}
+}
+
 // ---- All financials (get_all_financials) ----
 
 // allFinancials mirrors statementRoute's own shape (as_reported rejected
@@ -892,7 +925,7 @@ func (rt *restAPI) allFinancials(w http.ResponseWriter, r *http.Request, id call
 	}
 	if asReported {
 		writeFDError(w, http.StatusBadRequest, "bad_request",
-			"as_reported is not supported; use the normalized financials endpoint")
+			"as_reported is not a parameter of this route; the as-filed hierarchies live at /financials/as-reported")
 		return
 	}
 	limit, err := queryInt(q, "limit", 4)
