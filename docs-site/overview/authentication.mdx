@@ -1,0 +1,57 @@
+---
+title: "Authentication"
+description: "The X-API-KEY header, and why usage bills your own Monid wallet."
+---
+
+Authentication on this API is one header on every request, REST or MCP.
+
+```
+X-API-KEY: <your-monid-api-key>
+```
+
+The value is your own Monid API key. It is not a key we issue. The server takes the header off your request and passes it straight through to Monid on the underlying provider call, so Monid bills your wallet for that call. We never write the key to a log or a database, and there is no separate account or billing relationship with us.
+
+<Steps>
+  <Step title="Create a Monid account">
+    Sign up at [monid.ai](https://monid.ai).
+  </Step>
+  <Step title="Generate an API key">
+    Get a key from the Monid dashboard.
+  </Step>
+  <Step title="Fund your wallet">
+    Add credit to your Monid wallet. That balance is what individual calls draw against, usually a fraction of a cent each.
+  </Step>
+  <Step title="Send it on every request">
+    Set `X-API-KEY` on each REST call and each MCP client config.
+
+    ```bash curl
+    curl -s 'https://monid-finance-api.fly.dev/prices/snapshot?ticker=AAPL' \
+      -H 'X-API-KEY: <your-api-key>'
+    ```
+  </Step>
+</Steps>
+
+## What a rejected key looks like
+
+An empty, missing, or malformed `X-API-KEY` header gets a `401` before the request reaches Monid.
+
+```json
+{
+  "error": "unauthorized",
+  "message": "Missing or invalid API key."
+}
+```
+
+A key that is well formed but that Monid itself rejects, revoked or otherwise invalid on Monid's side, answers the same `401` and the same `unauthorized` code, once the call reaches Monid.
+
+<Warning>
+  A key that Monid accepts but whose wallet is empty or blocked answers `402` with `{"error": "payment_required", ...}`. That is not a bug in your request. Check your Monid wallet balance.
+</Warning>
+
+## MCP uses the same header
+
+The MCP transport at `/mcp` (and its alias `/api`) reads `X-API-KEY` the same way REST does. Set it as a header on the client's HTTP transport config. See [MCP Server](/integrations/mcp-server) for exact client configs.
+
+<Note>
+  Each key is rate limited to 60 requests per minute by default. See [Rate limits](/guides/rate-limits).
+</Note>

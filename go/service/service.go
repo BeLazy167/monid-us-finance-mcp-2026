@@ -34,18 +34,21 @@ import (
 // --- provider/endpoint constants (mirrors service.py's module constants) ---
 
 const (
-	defillama                = "defillama"
-	catalogEndpoint          = "/equities/v1/companies-list"
-	summaryEndpoint          = "/equities/v1/summary"
-	statementsEndpoint       = "/equities/v1/statements"
-	filingsEndpoint          = "/equities/v1/filings"
-	ohlcvEndpoint            = "/equities/v1/ohlcv"
-	contextDev               = "context.dev"
-	newsEndpoint             = "/news/search"
-	scrapeEndpoint           = "/web/scrape/markdown"
-	indexFundSearchEndpoint  = "/web/search"
-	secform4                 = "secform4"
-	insiderEndpoint          = "/search"
+	defillama               = "defillama"
+	catalogEndpoint         = "/equities/v1/companies-list"
+	summaryEndpoint         = "/equities/v1/summary"
+	statementsEndpoint      = "/equities/v1/statements"
+	filingsEndpoint         = "/equities/v1/filings"
+	ohlcvEndpoint           = "/equities/v1/ohlcv"
+	contextDev              = "context.dev"
+	newsEndpoint            = "/news/search"
+	scrapeEndpoint          = "/web/scrape/markdown"
+	indexFundSearchEndpoint = "/web/search"
+	secform4                = "secform4"
+	insiderEndpoint         = "/search"
+
+	// insiderMaxRows is the most rows the Form 4 feed returns for one query.
+	insiderMaxRows           = 15
 	institutionalEndpoint    = "/get_institution_holders"
 	nasdaq                   = "nasdaq"
 	screenerEndpoint         = "/get_stock_screener"

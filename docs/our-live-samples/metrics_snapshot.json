@@ -1,0 +1,14 @@
+{
+  "snapshot": {
+    "ticker": "AAPL",
+    "market_cap": 4674544794120,
+    "enterprise_value": 4698970959518,
+    "price_to_earnings_ratio": 36.26,
+    "price_to_book_ratio": 43.48,
+    "price_to_sales_ratio": 10.01,
+    "enterprise_value_to_ebitda_ratio": 27.98,
+    "gross_margin": 0.4865291555900202,
+    "operating_margin": 0.3317,
+    "net_margin": 0.27618604910212224
+  }
+}

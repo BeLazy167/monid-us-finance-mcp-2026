@@ -1,0 +1,53 @@
+---
+title: "Filings"
+description: "SEC filing index and extracted filing sections."
+openapi: "api-reference/openapi.json GET /filings"
+---
+
+Two routes cover filings. [`GET /filings`](/api-reference/filings/get-sec-filings) lists a company's SEC filings, sourced from Monid's DefiLlama `/equities/v1/filings` endpoint: accession number, filing type, report date, filing date, and a link to the filing on SEC EDGAR. [`GET /filings/items`](/api-reference/filings/get-extracted-sec-filing-sections) goes further. It resolves one specific filing, scrapes it, and extracts a named section, "Item 1A Risk Factors" for example, as text.
+
+Filing-section extraction uses rule-based parsing against known SEC section boundaries. There is no LLM guessing where a section starts and ends, which is why the extracted text matches the filing verbatim rather than a summary of it.
+
+## What this answers
+
+- Which 10-Ks, 10-Qs, and 8-Ks a company has filed recently, and where to read them on EDGAR.
+- What a specific filing actually says in one section, without downloading and parsing the filing yourself.
+
+## Coverage
+
+| | |
+|---|---|
+| Provider chain | `/filings`: DefiLlama `/equities/v1/filings`. `/filings/items`: the same filing index, plus Monid Context.dev `/web/scrape/markdown` to fetch and parse the filing |
+| Measured cost | `/filings`: $0.0006 per call. `/filings/items`: $0.0015 per call (index lookup plus scrape) |
+| Cache TTL | 600 seconds, see [Caching](/guides/caching) |
+
+## Query rules
+
+`/filings` requires `ticker`. `cik` is accepted for parameter parity but always answers `400 bad_request`, only ticker lookup is routed. `filing_type` can repeat in the query string (`?filing_type=10-K&filing_type=10-Q`) and is checked against a fixed list: `10-K`, `10-Q`, `8-K`, `20-F`, `6-K`. That is a stricter list than Financial Datasets' free-text example, so a value like `"DEF 14A"` is rejected here.
+
+`/filings/items` requires `ticker`, `filing_type`, and `year`. This is stricter than the Financial Datasets schema, which lets `year` be omitted so the server resolves the latest matching filing on its own, a capability that exists only over MCP for this server, not on this REST route. `include_exhibits=true` always answers `400 bad_request`, exhibit content is not implemented. `item` takes one item code per request here, not the array the Financial Datasets schema declares.
+
+When no filing matches the request, `/filings/items` answers `HTTP 200` with an `ErrorResponse` body rather than a `404`, at no additional cost.
+
+## Worked example
+
+```bash curl
+curl -s 'https://monid-finance-api.fly.dev/filings?ticker=AAPL&filing_type=10-K&limit=3' \
+  -H 'X-API-KEY: <your-api-key>'
+```
+
+```json Response, trimmed
+{
+  "filings": [
+    {
+      "cik": 320193,
+      "accession_number": "0000320193-25-000079",
+      "filing_type": "10-K",
+      "report_date": "2025-09-27",
+      "filing_date": "2025-10-31",
+      "ticker": "AAPL",
+      "url": "https://www.sec.gov/Archives/edgar/data/320193/000032019325000079/aapl-20250927.htm"
+    }
+  ]
+}
+```

@@ -1,0 +1,53 @@
+---
+title: "Insider Trades"
+description: "SEC Form 4 insider trading transactions."
+openapi: "api-reference/openapi.json GET /insider-trades"
+---
+
+This route returns individual SEC Form 4 transactions, officers, directors, and major shareholders buying or selling shares, sourced from the SECForm4 provider's search route. Each row is one transaction: who, what type, how many shares, at what price, filed when.
+
+## What this answers
+
+- Whether a company's insiders have been buying or selling recently, and how large those transactions were.
+
+## Coverage
+
+| | |
+|---|---|
+| Provider chain | SECForm4 `/search` |
+| Row cap | 15 rows total, regardless of `limit` |
+| Measured cost | $0.01 per call, the most expensive route on this API |
+| Cache TTL | 600 seconds, see [Caching](/guides/caching) |
+
+## Query rules
+
+`ticker` is required. `limit` defaults to `10` and caps at `15`, well below the Financial Datasets schema's documented 5000-row maximum, because the validated feed behind this route only returns 15 rows.
+
+`form_type` filtering from the Financial Datasets schema is not exposed here, because the underlying route does not report form types. There is nothing to filter on. `name` is the raw insider relationship text as it appears in the source filing, not a normalized person name. `title`, `transaction_code`, `security_title`, and `shares_owned_before_transaction` are never sourced and always omitted from the response.
+
+## Worked example
+
+```bash curl
+curl -s 'https://monid-finance-api.fly.dev/insider-trades?ticker=AAPL&limit=1' \
+  -H 'X-API-KEY: <your-api-key>'
+```
+
+```json Response
+{
+  "insider_trades": [
+    {
+      "ticker": "AAPL",
+      "issuer": "Apple Inc.",
+      "name": "Cook Timothy D",
+      "is_board_director": true,
+      "filing_date": "2026-08-15",
+      "transaction_date": "2026-08-13",
+      "transaction_type": "SALE",
+      "transaction_shares": 90000.0,
+      "transaction_price_per_share": 312.45,
+      "transaction_value": 28120500.0,
+      "shares_owned_after_transaction": 3235000.0
+    }
+  ]
+}
+```

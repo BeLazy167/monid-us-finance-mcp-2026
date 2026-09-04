@@ -1,0 +1,58 @@
+---
+title: "Errors"
+description: "Every HTTP status and error code this API returns, and what triggers each one."
+---
+
+A REST failure returns the Financial Datasets `ErrorResponse` shape.
+
+```json
+{ "error": "<code>", "message": "<human-readable detail>" }
+```
+
+## Status and code reference
+
+| HTTP status | `error` code | What triggers it |
+|---|---|---|
+| `400` | `bad_request` | The request is malformed, or a parameter combination this server cannot honor was supplied, for example `as_reported=true`, or a required field is missing. This check runs before any Monid call, so a `400` never costs you anything. |
+| `400` | `unsupported` | The request is well formed but describes something this deployment cannot answer honestly, for example an unsupported filter combination. Also free. |
+| `400` | `invalid_cursor` | The `cursor` query parameter is not a token this server minted. See [Pagination](/guides/pagination). |
+| `401` | `unauthorized` | `X-API-KEY` is missing, malformed, or rejected by Monid. See [Authentication](/overview/authentication). |
+| `402` | `payment_required` | Monid accepted your key but blocked the call, usually because the wallet is empty or restricted. |
+| `429` | `rate_limited` | You went over the per-key rate limit. See [Rate limits](/guides/rate-limits). |
+| `502` | `upstream_error` | A Monid provider call failed for a reason not covered by a more specific code. |
+| `502` | `upstream_schema_changed` | A Monid provider returned a payload shape this server does not recognize. The server reports this rather than guessing at a value. |
+| `504` | `upstream_timeout` | The upstream Monid provider call timed out. |
+| `200` | `not_implemented` | The route or tool is registered, matching the Financial Datasets interface, but not implemented here yet. No Monid call is made, so this is always free. See [Coverage](/overview/coverage). |
+| `200` | `not_found` | The request was valid and reached a provider, but no matching record exists, for example an unknown ticker, or no 10-K on file. Financial Datasets answers "not found" the same way, as a `200` with an error body, not a `404`. |
+
+If you branch on HTTP status alone, add a check for the `error` field too. `not_found` and `not_implemented` both come back as `200`.
+
+## Example: a route that is not implemented yet
+
+```bash curl
+curl -s 'https://monid-finance-api.fly.dev/institutional-holdings?ticker=AAPL' \
+  -H 'X-API-KEY: <your-api-key>'
+```
+
+```json Response
+{
+  "error": "not_implemented",
+  "message": "This Financial Datasets route is not implemented by the Monid-backed server yet; the call was free and no data was fabricated."
+}
+```
+
+## MCP errors take a different shape
+
+REST always answers the shape at the top of this page. MCP tool failures surface as a JSON-RPC error object on the `tools/call` response instead, since MCP is a JSON-RPC protocol.
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "error": { "code": -32603, "message": "ticker is required" }
+}
+```
+
+The `message` field carries the same reason a REST `message` would. It sits inside JSON-RPC's own error envelope instead: `-32602` for a malformed call or an unknown tool name, `-32603` for a validation or upstream failure once the tool starts running.
+
+A validation error never costs you anything, on either transport. It happens before any provider call, so no Monid run is made and nothing is written to the cost ledger.

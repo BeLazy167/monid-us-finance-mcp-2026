@@ -1,0 +1,49 @@
+---
+title: "Company"
+description: "Basic company identity for a ticker: name and ticker, from the US company catalog."
+openapi: "api-reference/openapi.json GET /company/facts"
+---
+
+This route looks up a ticker against a US company catalog and returns identifying facts. The Financial Datasets `CompanyFacts` schema has a dozen optional fields, market cap, sector, industry, exchange, SIC codes, and more, but this route currently sources only two of them: `ticker` and `name`. The rest are schema-legal to include and are always left out today. They are absent from the response, not set to null.
+
+## What this answers
+
+- What a ticker's company name is, and whether it exists in the covered catalog at all.
+
+## Coverage
+
+| | |
+|---|---|
+| Provider chain | DefiLlama `/equities/v1/companies-list` |
+| Fields sourced | `ticker`, `name` |
+| Measured cost | $0.0006 per call |
+| Cache TTL | 300 seconds, see [Caching](/guides/caching) |
+
+## Query rules
+
+`ticker` is required. `cik` is accepted for parameter parity but always answers `400 bad_request`, only ticker lookup is routed.
+
+When a ticker has no catalog record, this route answers `HTTP 200` with an `ErrorResponse` body, `{"error": "not_found", ...}`, rather than a `404`, at no additional cost. See [Errors](/guides/errors) for why Financial Datasets-style "not found" responses use `200`.
+
+## Worked example
+
+```bash curl
+curl -s 'https://monid-finance-api.fly.dev/company/facts?ticker=AAPL' \
+  -H 'X-API-KEY: <your-api-key>'
+```
+
+```json Response
+{
+  "company_facts": {
+    "ticker": "AAPL",
+    "name": "Apple Inc."
+  }
+}
+```
+
+```json Unknown ticker
+{
+  "error": "not_found",
+  "message": "No US company record exists for ticker ZZZZ."
+}
+```

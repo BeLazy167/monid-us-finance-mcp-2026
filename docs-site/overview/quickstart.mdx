@@ -1,0 +1,156 @@
+---
+title: "Quickstart"
+description: "Authenticate, call the REST API, and connect the MCP server."
+---
+
+<Steps>
+  <Step title="Get your API key">
+    Create an account and get an API key from your [monid.ai](https://monid.ai) dashboard. This is your own key, not ours. Every request authenticates with it in the `X-API-KEY` header, and every call bills your own Monid wallet. We never store or log it.
+
+    ```bash Terminal
+    export MONID_API_KEY=<your-api-key>
+    ```
+  </Step>
+
+  <Step title="Note the base URL">
+    REST and MCP are served from one host.
+
+    ```bash Terminal
+    export BASE_URL=https://monid-finance-api.fly.dev
+    ```
+  </Step>
+
+  <Step title="Make your first REST request">
+    Pull Apple's most recent annual income statement.
+
+    Route: `GET /financials/income-statements`
+
+    <CodeGroup>
+    ```bash curl
+    curl -s 'https://monid-finance-api.fly.dev/financials/income-statements?ticker=AAPL&period=annual&limit=1' \
+      -H 'X-API-KEY: <your-api-key>'
+    ```
+
+    ```python Python (requests)
+    import requests
+
+    BASE_URL = "https://monid-finance-api.fly.dev"
+    API_KEY = "<your-api-key>"
+
+    resp = requests.get(
+        f"{BASE_URL}/financials/income-statements",
+        params={"ticker": "AAPL", "period": "annual", "limit": 1},
+        headers={"X-API-KEY": API_KEY},
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    print(data["income_statements"][0]["revenue"])
+    ```
+
+    ```javascript JavaScript (fetch)
+    const BASE_URL = "https://monid-finance-api.fly.dev";
+    const API_KEY = "<your-api-key>";
+
+    const url = new URL(`${BASE_URL}/financials/income-statements`);
+    url.search = new URLSearchParams({ ticker: "AAPL", period: "annual", limit: "1" });
+
+    const res = await fetch(url, { headers: { "X-API-KEY": API_KEY } });
+    if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
+    const data = await res.json();
+    console.log(data.income_statements[0].revenue);
+    ```
+
+    ```go Go (net/http)
+    package main
+
+    import (
+    	"fmt"
+    	"io"
+    	"net/http"
+    )
+
+    func main() {
+    	req, err := http.NewRequest(
+    		"GET",
+    		"https://monid-finance-api.fly.dev/financials/income-statements?ticker=AAPL&period=annual&limit=1",
+    		nil,
+    	)
+    	if err != nil {
+    		panic(err)
+    	}
+    	req.Header.Set("X-API-KEY", "<your-api-key>")
+
+    	resp, err := http.DefaultClient.Do(req)
+    	if err != nil {
+    		panic(err)
+    	}
+    	defer resp.Body.Close()
+
+    	body, _ := io.ReadAll(resp.Body)
+    	fmt.Println(string(body))
+    }
+    ```
+    </CodeGroup>
+
+    This exact call measured $0.0006 on Monid the last time it was run. Here is the response shape, trimmed to the fields worth pointing at:
+
+    ```json Response (abridged)
+    {
+      "income_statements": [
+        {
+          "ticker": "AAPL",
+          "report_period": "2025-09-27",
+          "fiscal_period": "FY2025",
+          "period": "annual",
+          "currency": "USD",
+          "accession_number": "0000320193-25-000079",
+          "form_type": "10-K",
+          "filing_url": "https://www.sec.gov/Archives/edgar/data/320193/000032019325000079/0000320193-25-000079-index.htm",
+          "filing_date": "2025-10-31",
+          "revenue": 416161000000.0,
+          "net_income": 112010000000.0,
+          "earnings_per_share": 7.49,
+          "earnings_per_share_diluted": 7.46
+        }
+      ],
+      "next_page_url": null
+    }
+    ```
+
+    `period` defaults to `annual` and `limit` defaults to `4` on this REST route when you omit them. The example sets both so the request is unambiguous. See the [API Reference](/api-reference) for the full parameter list per endpoint, and note that the MCP tool for this same data defaults `period` differently, covered in [MCP Tools](/mcp-tools/overview).
+  </Step>
+
+  <Step title="Connect the MCP server">
+    `https://monid-finance-api.fly.dev/mcp` is a streamable-HTTP MCP endpoint exposing all 27 Financial Datasets-named tools. Give the client the same `X-API-KEY` header.
+
+    ```json Claude Desktop / Cursor mcp.json
+    {
+      "mcpServers": {
+        "monid-finance": {
+          "url": "https://monid-finance-api.fly.dev/mcp",
+          "headers": { "X-API-KEY": "<your-api-key>" }
+        }
+      }
+    }
+    ```
+
+    See [MCP setup](/integrations/mcp-server) for Claude Code, Cursor, and the full tool catalog.
+  </Step>
+</Steps>
+
+## What's next
+
+<CardGroup cols={2}>
+  <Card title="Authentication" icon="key" href="/overview/authentication">
+    How `X-API-KEY` billing and key scoping work.
+  </Card>
+  <Card title="Pagination" icon="list" href="/guides/pagination">
+    What the cursor holds and how paging through a list works.
+  </Card>
+  <Card title="Errors" icon="triangle-alert" href="/guides/errors">
+    Every status code and error code this API returns.
+  </Card>
+  <Card title="Compatibility" icon="git-compare" href="/overview/coverage">
+    What's implemented, what isn't, and every known gap.
+  </Card>
+</CardGroup>

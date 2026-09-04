@@ -1,0 +1,23 @@
+{
+  "balance_sheets": [
+    {
+      "ticker": "AAPL",
+      "report_period": "2025-09-30",
+      "fiscal_period": "FY2025",
+      "period": "annual",
+      "total_assets": 359241000000,
+      "current_assets": 147957000000,
+      "cash_and_equivalents": 35934000000,
+      "inventory": 5718000000,
+      "trade_and_non_trade_receivables": 39777000000,
+      "non_current_assets": 211284000000,
+      "total_liabilities": 285508000000,
+      "current_liabilities": 165631000000,
+      "current_debt": 20329000000,
+      "non_current_liabilities": 119877000000,
+      "non_current_debt": 78328000000,
+      "shareholders_equity": 73733000000,
+      "retained_earnings": -14264000000
+    }
+  ]
+}

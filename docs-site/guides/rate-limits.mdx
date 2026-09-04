@@ -1,0 +1,29 @@
+---
+title: "Rate limits"
+description: "60 requests per minute per API key, enforced with a token bucket."
+---
+
+Every request, REST or MCP, is rate limited per caller identity using a token bucket. The default rate is 60 requests per minute, and it refills continuously rather than resetting on a fixed one-minute clock.
+
+## How the bucket fills
+
+Each caller starts with 60 tokens. A request consumes one token. Tokens refill at a steady rate of one per second, up to the 60-token cap. That means a caller who has been idle can burst up to 60 requests immediately, then settles into roughly one request per second sustained. A caller sending exactly one request per second never gets rate limited, because the bucket never empties.
+
+## Bucket identity
+
+For REST, and for MCP calls that include a key, the bucket is keyed on your `X-API-KEY` value. Two different keys never share a bucket. Two requests with the same key always share one, no matter which endpoint each request hits.
+
+For MCP calls with no key presented, requests fall into a shared `anonymous` bucket. The rate limit check happens before the tool dispatcher looks at the key, so an anonymous MCP call can still get rate limited even though it would fail authentication anyway.
+
+## What a limited request gets back
+
+```json
+{
+  "error": "rate_limited",
+  "message": "Rate limit exceeded. Retry shortly."
+}
+```
+
+There is no `X-RateLimit-*` header and no `Retry-After` header on this response today. Back off for a second or two and retry rather than polling immediately, since the bucket refills at one token per second.
+
+A `429` happens before any Monid call, so it costs you nothing.

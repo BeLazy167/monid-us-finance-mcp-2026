@@ -1,0 +1,46 @@
+---
+title: "Prices"
+description: "Historical OHLCV bars and a live price snapshot."
+openapi: "api-reference/openapi.json GET /prices"
+---
+
+[`GET /prices`](/api-reference/prices/get-historical-ohlcv-prices) returns OHLCV bars for a ticker over a date range, sourced from Monid's DefiLlama `/equities/v1/ohlcv` endpoint. The provider gives daily bars. Week, month, and year bars are aggregated locally from those daily bars, and `time` on every bar is the bar's end date in UTC. [`GET /prices/snapshot`](/api-reference/prices/get-the-latest-price-snapshot) returns the most recent price and day change for a ticker, sourced from the same summary endpoint the financial metrics snapshot uses.
+
+## What this answers
+
+- What a stock's open, high, low, close, and volume were on a given day, or across a range of days.
+- What a stock is trading at right now, and how much it moved today.
+
+## Coverage
+
+| | |
+|---|---|
+| Provider chain | DefiLlama `/equities/v1/ohlcv` for history, `/equities/v1/summary` for the snapshot |
+| Bar order | Ascending time, oldest bar first |
+| Measured cost | `/prices`: $0.0006 per call. `/prices/snapshot`: $0.0006 per call |
+| Cache TTL | 60 seconds, see [Caching](/guides/caching) |
+
+## Query rules
+
+`/prices` requires `ticker`, `start_date`, and `end_date`. This is stricter than the Financial Datasets schema, which lets both dates default (one year before `end_date`, and today, respectively) when omitted. This server does not compute those defaults, so both are required here.
+
+`interval` accepts `day`, `week`, `month`, or `year`. Second- and minute-level intervals from the Financial Datasets schema are not implemented and answer `400`. `interval_multiplier` must be `1`, multi-bar intervals like "every 5 days" are not implemented.
+
+`/prices/snapshot` requires only `ticker`.
+
+## Worked example
+
+```bash curl
+curl -s 'https://monid-finance-api.fly.dev/prices?ticker=AAPL&start_date=2026-08-25&end_date=2026-08-28' \
+  -H 'X-API-KEY: <your-api-key>'
+```
+
+```json Response, trimmed
+{
+  "ticker": "AAPL",
+  "prices": [
+    { "open": 310.79, "close": 309.9, "high": 313.59, "low": 308.21, "volume": 25869807, "time": "2026-08-25" },
+    { "open": 316.85, "close": 319.7, "high": 322.37, "low": 315.45, "volume": 38649398, "time": "2026-08-28" }
+  ]
+}
+```

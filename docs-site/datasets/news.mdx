@@ -1,0 +1,44 @@
+---
+title: "News"
+description: "Recent news articles entity-matched to a ticker."
+openapi: "api-reference/openapi.json GET /news"
+---
+
+This route returns recent news articles matched to a specific company, sourced from Monid's Context.dev `/news/search` endpoint, sorted newest first. Matching is entity-based, on the company rather than on a keyword search of the ticker string, so it should not return articles that merely mention the ticker in passing.
+
+## What this answers
+
+- What has been written about a company recently, with a source, a headline, and a link.
+
+## Coverage
+
+| | |
+|---|---|
+| Provider chain | Context.dev `/news/search` |
+| Measured cost | $0.0009 per call |
+| Cache TTL | 60 seconds, see [Caching](/guides/caching) |
+
+## Query rules
+
+`ticker` is required. The Financial Datasets schema for `get_news` describes an optional ticker with market-wide news as the fallback. The implementation behind this route always answers `400 bad_request` when `ticker` is missing, so in practice `ticker` is required here even though the schema marks it optional. `limit` defaults to `5` and caps at `10`.
+
+## Worked example
+
+```bash curl
+curl -s 'https://monid-finance-api.fly.dev/news?ticker=AAPL&limit=1' \
+  -H 'X-API-KEY: <your-api-key>'
+```
+
+```json Response
+{
+  "news": [
+    {
+      "ticker": "AAPL",
+      "title": "Apple shares rise after strong iPhone demand signals",
+      "source": "Reuters",
+      "date": "2026-08-28T14:32:00Z",
+      "url": "https://www.reuters.com/technology/apple-shares-rise-iphone-demand"
+    }
+  ]
+}
+```

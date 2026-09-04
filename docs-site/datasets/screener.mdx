@@ -1,0 +1,42 @@
+---
+title: "Screener"
+description: "Filter stocks by exchange and market cap, and list which filters are actually executable."
+openapi: "api-reference/openapi.json POST /financials/search/screener"
+---
+
+[`POST /financials/search/screener`](/api-reference/screener/screen-stocks-by-exchange-and-market-cap) filters stocks through Monid's Nasdaq `/get_stock_screener` endpoint. The Financial Datasets screener supports a wide catalog of financial and valuation filters. This route executes two of them: `exchange` and `market_cap`, both with the `eq` operator only. [`GET /financials/search/screener/filters`](/api-reference/screener/list-executable-screener-filters) returns that exact executable catalog, field names, operators, and allowed values, so a client can check what is filterable before building a request.
+
+## What this answers
+
+- Which NASDAQ-, NYSE-, or AMEX-listed stocks fall into a given market cap bucket, mega through nano.
+
+## Coverage
+
+| | |
+|---|---|
+| Provider chain | Nasdaq `/get_stock_screener` for the search, no Monid call for the filter catalog |
+| Executable filters | `exchange` (`NASDAQ`, `NYSE`, `AMEX`), `market_cap` (`mega`, `large`, `mid`, `small`, `micro`, `nano`), operator `eq` only |
+| Measured cost | Screener search: $0.01 per call. Filter catalog: $0 per call, static, no Monid call |
+| Pagination | None. `limit` bounds the result set directly; there is no `next_page_url` on this route |
+
+## Query rules
+
+The request body needs a `filters` array with at least one filter object, each with `field`, `operator`, and `value`. Any field or operator outside the executable catalog above answers `400 bad_request` before any Monid call runs, so a malformed filter costs nothing. `currency` is accepted for parameter parity, but only `"USD"` is supported; anything else also answers `400`. `limit` defaults to `10`.
+
+## Worked example
+
+```bash curl
+curl -s -X POST 'https://monid-finance-api.fly.dev/financials/search/screener' \
+  -H 'X-API-KEY: <your-api-key>' \
+  -H 'Content-Type: application/json' \
+  -d '{"filters": [{"field": "exchange", "operator": "eq", "value": "NASDAQ"}], "limit": 2}'
+```
+
+```json Response
+{
+  "search_results": [
+    { "ticker": "AAPL", "exchange": "NASDAQ", "market_cap": "4785139738400", "last_sale": "$319.70" },
+    { "ticker": "MSFT", "exchange": "NASDAQ", "market_cap": "3612000000000", "last_sale": "$486.12" }
+  ]
+}
+```

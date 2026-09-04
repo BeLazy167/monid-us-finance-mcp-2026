@@ -1,0 +1,30 @@
+---
+title: "OpenAPI Spec"
+description: "Where the machine-readable API contract lives, and how the request playground works."
+---
+
+The REST API is described by an OpenAPI 3.1 document at `docs/openapi.json` in the repository, served in this site at `api-reference/openapi.json`. It is generated from the Go source, `go/httpapi/rest.go` for routes and query parameters, `go/service` for tool behavior, `go/fd` for response field order, so the spec and the running server cannot drift apart the way hand-written documentation can.
+
+The document declares one server:
+
+```json
+{ "url": "https://monid-finance-api.fly.dev" }
+```
+
+and one security scheme, an API key sent as a header:
+
+```json
+{ "type": "apiKey", "in": "header", "name": "X-API-KEY" }
+```
+
+That combination is what turns on the request playground on every generated endpoint page. Open the [API Reference](/api-reference) tab, pick an endpoint, fill in `X-API-KEY` and any parameters, and send a real request against the live server. Responses come back in the same panel with status tabs for the codes that route can return, `200`, `400`, `401`, `402`, and others depending on the endpoint. See [Errors](/guides/errors) for what each code means.
+
+## Two ways to read the same spec
+
+The [API Reference](/api-reference) tab auto-generates one page per operation directly from the spec, 34 pages covering both the 15 implemented routes and the 19 that are registered but not implemented yet. It is the complete, unfiltered listing.
+
+The [Datasets](/datasets/financial-statements) pages are a smaller, curated set, one page per data family, each pulling in the same request playground for its primary operation and adding an explanation of the provider chain, real coverage numbers, and a worked example. Start there if you are new to a dataset. Use the API Reference tab when you already know the route and want the full parameter and schema listing.
+
+## Downloading the spec
+
+The raw file is available at `/api-reference/openapi.json` on the deployed docs site, and in the repository at `docs/openapi.json`. Point any OpenAPI-aware code generator or client library at either one.

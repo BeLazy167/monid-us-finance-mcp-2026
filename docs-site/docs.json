@@ -1,0 +1,112 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "maple",
+  "name": "Monid Finance MCP",
+  "description": "Financial Datasets-compatible US finance API and MCP server, backed by pay-per-call Monid providers.",
+  "colors": {
+    "primary": "#6D28D9",
+    "light": "#A78BFA",
+    "dark": "#4C1D95"
+  },
+  "logo": {
+    "light": "/logo/logo-light.svg",
+    "dark": "/logo/logo-dark.svg"
+  },
+  "favicon": "/favicon.svg",
+  "icons": {
+    "library": "lucide"
+  },
+  "navbar": {
+    "links": [
+      {
+        "label": "Get an API key",
+        "href": "https://monid.ai"
+      }
+    ],
+    "primary": {
+      "type": "button",
+      "label": "Live API",
+      "href": "https://monid-finance-api.fly.dev"
+    }
+  },
+  "navigation": {
+    "global": {
+      "anchors": [
+        {
+          "anchor": "GitHub",
+          "icon": "github",
+          "href": "https://github.com/BeLazy167/monid-us-finance-mcp-2026"
+        },
+        {
+          "anchor": "Live API",
+          "icon": "server",
+          "href": "https://monid-finance-api.fly.dev"
+        }
+      ]
+    },
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Overview",
+            "icon": "compass",
+            "pages": [
+              "overview/introduction",
+              "overview/quickstart",
+              "overview/authentication",
+              "overview/coverage"
+            ]
+          },
+          {
+            "group": "Integrations",
+            "icon": "plug",
+            "pages": [
+              "integrations/mcp-server",
+              "mcp-tools/overview",
+              "integrations/openapi-spec"
+            ]
+          },
+          {
+            "group": "Datasets",
+            "icon": "database",
+            "pages": [
+              "datasets/financial-statements",
+              "datasets/financial-metrics",
+              "datasets/earnings",
+              "datasets/filings",
+              "datasets/prices",
+              "datasets/news",
+              "datasets/insider-trades",
+              "datasets/screener",
+              "datasets/company"
+            ]
+          },
+          {
+            "group": "Guides",
+            "icon": "book-open",
+            "pages": [
+              "guides/pagination",
+              "guides/errors",
+              "guides/rate-limits",
+              "guides/caching"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "icon": "square-terminal",
+        "openapi": "api-reference/openapi.json"
+      }
+    ]
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/BeLazy167/monid-us-finance-mcp-2026"
+    }
+  },
+  "styling": {
+    "latex": false
+  }
+}

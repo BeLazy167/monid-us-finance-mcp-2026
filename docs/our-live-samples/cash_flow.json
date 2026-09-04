@@ -1,0 +1,17 @@
+{
+  "cash_flow_statements": [
+    {
+      "ticker": "AAPL",
+      "report_period": "2025-09-30",
+      "fiscal_period": "FY2025",
+      "period": "annual",
+      "net_cash_flow_from_operations": 111482000000,
+      "net_cash_flow_from_investing": 27910000000,
+      "dividends_and_other_cash_distributions": -15421000000,
+      "net_cash_flow_from_financing": -120686000000,
+      "change_in_cash_and_equivalents": 18706000000,
+      "ending_cash_balance": 35934000000,
+      "free_cash_flow": 98767000000
+    }
+  ]
+}

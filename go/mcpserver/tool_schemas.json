@@ -1,20 +1,20 @@
 [
  {
   "name": "get_beneficial_owners",
-  "description": "Lists beneficial owners (holders of more than 5% of a company's shares, from SEC Schedules 13D/13G) with their filer CIK and reporting-person name. Optionally filter by case-insensitive name prefix. The response's `total` is the full match count; when it exceeds the returned page, narrow the search with `name`. Use this to discover the filer_cik to pass to get_beneficial_ownership.",
+  "description": "This server does not yet implement beneficial-owner discovery: every call returns a typed not-implemented error before any upstream request is made, so it never costs the caller and never returns invented data. Once live, it is meant to list the reporting persons behind SEC Schedule 13D/13G stakes (holders of more than 5% of a company's shares), pairing each with its SEC filer CIK, and to accept an optional name prefix so callers can locate the filer_cik that get_beneficial_ownership expects.",
   "inputSchema": {
    "type": "object",
    "properties": {
     "name": {
      "type": "string",
-     "description": "Optional case-insensitive name prefix to filter the beneficial-owner list (e.g. 'Saba'). Use this tool to discover the filer_cik to pass to get_beneficial_ownership."
+     "description": "Case-insensitive name prefix that would narrow the beneficial-owner list once this tool is implemented, for example 'Saba'. Accepted for interface parity; has no effect while this tool answers not-implemented."
     },
     "limit": {
      "type": "integer",
      "exclusiveMinimum": 0,
      "maximum": 1000,
      "default": 100,
-     "description": "Number of owners to return (default: 100, max: 1000). The response's `total` is the full match count; when it exceeds the page, narrow with `name`."
+     "description": "Row cap that would bound how many owners come back once this tool is implemented (default 100, maximum 1000). Accepted for interface parity; has no effect while this tool answers not-implemented."
     }
    },
    "additionalProperties": false,
@@ -23,17 +23,17 @@
  },
  {
   "name": "get_beneficial_ownership",
-  "description": "Retrieves beneficial-ownership stakes (holders of more than 5% of a class of shares) from SEC Schedules 13D and 13G. Schedule 13D stakes are ACTIVIST (intent to influence control: proxy fights, board seats, pushing for a sale); Schedule 13G stakes are passive (large asset managers). Query by ticker (who owns this company) OR by filer_cik (what stakes does this owner hold) \u2014 exactly one is required. Use type=activist to isolate activist stakes. By default each stake's CURRENT state is returned; set history=true for the full amendment chain. Each row is one reporting person with voting/dispositive powers, percent_of_class, and (for 13D) the stated purpose_of_transaction. Coverage begins January 2025.",
+  "description": "This server does not yet implement beneficial-ownership lookups: every call returns a typed not-implemented error before any upstream request is made, so it never costs the caller and never returns invented data. Its intended interface mirrors SEC Schedules 13D and 13G, which cover stakes of more than 5% of a share class: 13D signals activist intent (proxy fights, board seats, pushing for a sale), while 13G stakes are passive, typically held by large asset managers. A caller would supply exactly one of ticker (which owners hold this company) or filer_cik (which stakes this owner holds); type would narrow to activist or passive; history, once implemented, would return a stake's full amendment trail instead of only its latest state. Coverage was scoped to begin January 2025.",
   "inputSchema": {
    "type": "object",
    "properties": {
     "ticker": {
      "type": "string",
-     "description": "The subject company's ticker (e.g. 'BB'). Returns its 5%+ beneficial owners. Provide exactly one of ticker or filer_cik."
+     "description": "Ticker of the company whose beneficial owners are sought. Supply exactly one of ticker or filer_cik. Accepted for interface parity; has no effect while this tool answers not-implemented."
     },
     "filer_cik": {
      "type": "string",
-     "description": "SEC CIK of the beneficial owner (e.g. '0001510281' for Saba Capital). Returns their stakes across companies. Will be zero-padded to 10 digits. Provide exactly one of ticker or filer_cik. Use get_beneficial_owners to look up CIKs by owner name."
+     "description": "SEC CIK of the beneficial owner whose stakes are sought (would be zero-padded to 10 digits). Supply exactly one of ticker or filer_cik; look up a CIK by owner name with get_beneficial_owners. Accepted for interface parity; has no effect while this tool answers not-implemented."
     },
     "type": {
      "type": "string",
@@ -41,33 +41,33 @@
       "activist",
       "passive"
      ],
-     "description": "Filter by stake type: 'activist' (Schedule 13D, intent to influence control) or 'passive' (Schedule 13G). Omit for both."
+     "description": "Would restrict results to 'activist' (Schedule 13D) or 'passive' (Schedule 13G) stakes; omit for both. Accepted for interface parity; has no effect while this tool answers not-implemented."
     },
     "history": {
      "type": "boolean",
-     "description": "When true, returns the full amendment history of each stake instead of only its current state (the default)."
+     "description": "When true, would return a stake's full amendment history instead of only its current state. Accepted for interface parity; has no effect while this tool answers not-implemented."
     },
     "filing_date": {
      "type": "string",
      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-     "description": "Exact filing date filter in YYYY-MM-DD format"
+     "description": "Would restrict to filings dated exactly this day, given as YYYY-MM-DD. Accepted for interface parity; has no effect while this tool answers not-implemented."
     },
     "filing_date_gte": {
      "type": "string",
      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-     "description": "Filing date greater than or equal to (YYYY-MM-DD)"
+     "description": "Would restrict to filings dated on or after this day, given as YYYY-MM-DD. Accepted for interface parity; has no effect while this tool answers not-implemented."
     },
     "filing_date_lte": {
      "type": "string",
      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-     "description": "Filing date less than or equal to (YYYY-MM-DD)"
+     "description": "Would restrict to filings dated on or before this day, given as YYYY-MM-DD. Accepted for interface parity; has no effect while this tool answers not-implemented."
     },
     "limit": {
      "type": "integer",
      "exclusiveMinimum": 0,
      "maximum": 1000,
      "default": 10,
-     "description": "Number of rows to return (default: 10, max: 1000)."
+     "description": "Row cap that would bound the response (default 10, maximum 1000). Accepted for interface parity; has no effect while this tool answers not-implemented."
     }
    },
    "additionalProperties": false,
@@ -76,17 +76,17 @@
  },
  {
   "name": "get_company_facts",
-  "description": "Get comprehensive company facts data for a stock ticker or CIK from Financial Datasets. Returns real-time information including market cap, number of employees, sector/industry classification, exchange listing, company location, website URL, SIC codes, weighted average shares, and historical events like ticker changes.",
+  "description": "Looks up a US public company by ticker in Monid's company catalog and returns its ticker and registered name. Cik lookup is declared for schema parity, but any call that sets cik is rejected with a bad_request error. Only the ticker path is routed. The response schema has room for market cap, sector, exchange, SIC codes, and similar attributes, but this server sources ticker and name only; every other field is left out rather than filled with a guess.",
   "inputSchema": {
    "type": "object",
    "properties": {
     "ticker": {
      "type": "string",
-     "description": "The stock ticker symbol (e.g., 'AAPL', 'MSFT', 'TSLA'). Either ticker or cik is required."
+     "description": "Stock ticker to look up, for example 'AAPL', 'MSFT', or 'TSLA'. Required; this server does not support cik-based lookup."
     },
     "cik": {
      "type": "string",
-     "description": "The CIK (Central Index Key) identifier. Either ticker or cik is required."
+     "description": "SEC Central Index Key. Accepted for schema parity, but every call that sets it is rejected with a bad_request error; pass ticker instead."
     }
    },
    "additionalProperties": false,
@@ -95,13 +95,13 @@
  },
  {
   "name": "get_earnings",
-  "description": "Retrieves earnings data from SEC filings. Returns a flat list of `EarningsRecord` entries \u2014 same shape in either mode.\n  \u2022 COMPANY EARNINGS \u2014 pass a `ticker` to get the most recent SEC filings (8-K / 10-Q / 10-K / 20-F) for that company. The same `report_period` may appear in two consecutive entries when an 8-K announcement and the matching 10-Q have both been filed; the 8-K comes first because it filed earlier. Sorted `(report_period DESC, filing_date ASC)`.\n  \u2022 EARNINGS FEED \u2014 omit `ticker` to get the real-time feed of the most recently filed earnings across all covered companies, sorted by `filing_date` descending and deduped by `(ticker, report_period)`.\nEach entry exposes `ticker`, `report_period`, `fiscal_period`, `currency`, `source_type`, `filing_date`, `filing_url`, `accession_number`, plus `quarterly` and/or `annual` financial blocks (revenue, EPS, surprise vs estimates, etc.).",
+  "description": "Returns a flat list of EarningsRecord objects, each carrying ticker, report_period, fiscal_period, currency, source_type, filing_date, filing_url, accession_number, and a quarterly and/or annual block with revenue, EPS, and surprise-versus-estimate figures. This server composes every record from a company's 10-K or 10-Q filing only; 8-K earnings releases and 20-F foreign-filer reports are not sourced. Pass ticker to fetch up to 5 of that company's most recent earnings records, newest filing_date first. Omit ticker to pull the market-wide feed instead: this server walks the Nasdaq earnings calendar, resolves each reporting company's latest 10-K/10-Q earnings row in parallel, and returns up to 5 rows sorted by filing_date descending, skipping any ticker it cannot resolve rather than failing the whole request.",
   "inputSchema": {
    "type": "object",
    "properties": {
     "ticker": {
      "type": "string",
-     "description": "Optional. The stock ticker symbol (e.g., 'AAPL', 'MSFT', 'TSLA') to fetch a single company's most recent earnings. Omit this parameter to instead fetch the real-time Earnings Feed \u2014 the most recently filed earnings across ALL covered companies."
+     "description": "Ticker symbol, for example 'AAPL', 'MSFT', or 'TSLA', to fetch one company's most recent earnings. Leave this out to fetch the market-wide feed of recently filed earnings across every company this server can resolve from the Nasdaq earnings calendar."
     }
    },
    "additionalProperties": false,
@@ -110,13 +110,13 @@
  },
  {
   "name": "get_filing_items",
-  "description": "Retrieves specific sections (items) from a company's SEC filings (10-K, 10-Q, or 8-K). Useful for extracting detailed information such as 'Business', 'Risk Factors', or 'Financial Statements and Supplementary Data'.",
+  "description": "Fetches one or more sections (\"items\") from a company's 10-K, 10-Q, or 8-K SEC filing. For example Item 1 (Business), Item 1A (Risk Factors), or Item 9.01 (Financial Statements and Exhibits). Supply year to target a specific filing year; for 10-Q filings, quarter narrows further to one quarter. Omit year and this server automatically resolves the ticker's most recently filed matching filing instead of requiring one. Accession_number narrows the match when several filings of the requested type and year exist, which matters most for 8-K, where a company can file more than once a year. Set item to one or more codes from list_filing_item_types to return only those sections; leave it out to return every section this server can extract from the filing.",
   "inputSchema": {
    "type": "object",
    "properties": {
     "ticker": {
      "type": "string",
-     "description": "The ticker symbol."
+     "description": "Ticker symbol of the filer, for example 'AAPL'."
     },
     "filing_type": {
      "type": "string",
@@ -125,23 +125,23 @@
       "10-Q",
       "8-K"
      ],
-     "description": "The type of filing."
+     "description": "SEC form to pull sections from: '10-K' (annual report), '10-Q' (quarterly report), or '8-K' (current report)."
     },
     "year": {
      "type": "integer",
      "exclusiveMinimum": 0,
-     "description": "The year of the filing. Required for 10-K and 10-Q filings."
+     "description": "Filing year to target. Optional: when it is left out, this server automatically resolves the ticker's most recently filed matching filing_type instead of requiring a year."
     },
     "quarter": {
      "type": "integer",
      "exclusiveMinimum": 0,
      "minimum": 1,
      "maximum": 4,
-     "description": "The quarter of the filing if 10-Q."
+     "description": "Quarter (1-4) used to disambiguate among a ticker's 10-Q filings in the given year; ignored for 10-K and 8-K."
     },
     "accession_number": {
      "type": "string",
-     "description": "The accession number for the filing. Required for 8-K filings."
+     "description": "SEC accession number that pins down one specific filing among several matching filing_type/year candidates; most useful for 8-K, where a company can file more than once a year."
     },
     "item": {
      "type": "array",
@@ -202,7 +202,7 @@
        "Item-9.01"
       ]
      },
-     "description": "The item or items to get."
+     "description": "One or more item codes to return, such as 'Item-1A' or 'Item-9.01'; see list_filing_item_types for the full catalog per filing_type. Omit to return every section this server can extract from the filing."
     }
    },
    "required": [
@@ -215,7 +215,7 @@
  },
  {
   "name": "list_filing_item_types",
-  "description": "Provides a list of all available item names that can be extracted from 10-K, 10-Q, and 8-K reports, grouped by filing type.",
+  "description": "Lists every filing-section code this server recognizes for get_filing_items' item parameter, grouped by filing_type (10-K, 10-Q, 8-K). Each entry's description field carries the section's official SEC title, so this catalog also serves as a lookup table for what each item code covers.",
   "inputSchema": {
    "type": "object",
    "properties": {},
@@ -225,28 +225,28 @@
  },
  {
   "name": "get_filings",
-  "description": "Get SEC filings data for a stock ticker or CIK. Returns a list of filings, including the accession number, filing type, report date, and URLs to the filing documents.",
+  "description": "Lists SEC filings for a ticker, including each filing's accession number, form type, report date, and document URL. Pass ticker to identify the company; cik is accepted for schema parity, but every call that sets it is rejected with a bad_request error. Only the ticker path is routed. Filing_type narrows results to one of '10-K', '10-Q', '8-K', '20-F', or '6-K'; limit bounds how many filings come back.",
   "inputSchema": {
    "type": "object",
    "properties": {
     "ticker": {
      "type": "string",
-     "description": "The stock ticker symbol (e.g., 'AAPL', 'MSFT', 'TSLA'). Either ticker or cik is required."
+     "description": "Ticker of the filer to look up, for example 'AAPL'. Required; this server does not support cik-based lookup."
     },
     "cik": {
      "type": "string",
-     "description": "The CIK (Central Index Key) identifier. Either ticker or cik is required."
+     "description": "SEC Central Index Key. Accepted for schema parity, but every call that sets it is rejected with a bad_request error; pass ticker instead."
     },
     "limit": {
      "type": "integer",
      "exclusiveMinimum": 0,
      "maximum": 1000,
      "default": 100,
-     "description": "Number of filings to retrieve (default: 100, max: 1000)"
+     "description": "Maximum number of filings to return (default 100, maximum 1000)."
     },
     "filing_type": {
      "type": "string",
-     "description": "Filter by specific filing type (e.g., '10-K', '10-Q', '8-K', 'DEF 14A')"
+     "description": "Restricts results to one filing type: '10-K', '10-Q', '8-K', '20-F', or '6-K'. Any other value is rejected with a bad_request error."
     }
    },
    "additionalProperties": false,
@@ -255,13 +255,13 @@
  },
  {
   "name": "get_financial_metrics",
-  "description": "Retrieves historical financial metrics for a company, such as P/E ratio, revenue per share, and enterprise value, over a specified period. Useful for trend analysis and historical performance evaluation.",
+  "description": "Returns a company's historical financial-metrics series. Margins, per-share figures, and turnover and leverage ratios computed from its reported financial statements. One row per report_period. Because historical market values (share price, market capitalization) are not sourceable for past periods without inventing numbers, this server omits every metric derived from them: enterprise_value, the price_to_* ratios, EV multiples, free_cash_flow_yield, peg_ratio, return_on_invested_capital, currency, and filing_datetime never appear. Margin, ROE, and ROA figures use each period's ending balance; turnover ratios use the average of the period's opening and ending balances. TTM rows additionally omit the filing-identity fields (accession_number, form_type, filing_url, filing_date), since a trailing-twelve-month window spans more than one filing.",
   "inputSchema": {
    "type": "object",
    "properties": {
     "ticker": {
      "type": "string",
-     "description": "The stock ticker symbol (e.g., 'AAPL', 'MSFT', 'TSLA')"
+     "description": "Ticker symbol to compute metrics for, for example 'AAPL', 'MSFT', or 'TSLA'."
     },
     "period": {
      "type": "string",
@@ -271,39 +271,39 @@
       "ttm"
      ],
      "default": "ttm",
-     "description": "The reporting period (default: 'ttm' for trailing twelve months)"
+     "description": "Reporting cadence: 'annual', 'quarterly', or 'ttm' (trailing twelve months, the default)."
     },
     "limit": {
      "type": "integer",
      "exclusiveMinimum": 0,
      "maximum": 100,
      "default": 4,
-     "description": "Number of periods to retrieve (default: 4, max: 100)"
+     "description": "Maximum number of periods to return (default 4, maximum 100)."
     },
     "report_period_gte": {
      "type": "string",
      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-     "description": "Start date filter in YYYY-MM-DD format (inclusive)"
+     "description": "Only include rows whose report_period falls on or after this date, given as YYYY-MM-DD."
     },
     "report_period_lte": {
      "type": "string",
      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-     "description": "End date filter in YYYY-MM-DD format (inclusive)"
+     "description": "Only include rows whose report_period falls on or before this date, given as YYYY-MM-DD."
     },
     "report_period_gt": {
      "type": "string",
      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-     "description": "Start date filter in YYYY-MM-DD format (exclusive)"
+     "description": "Only include rows whose report_period falls strictly after this date, given as YYYY-MM-DD."
     },
     "report_period_lt": {
      "type": "string",
      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-     "description": "End date filter in YYYY-MM-DD format (exclusive)"
+     "description": "Only include rows whose report_period falls strictly before this date, given as YYYY-MM-DD."
     },
     "report_period": {
      "type": "string",
      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-     "description": "Exact report period date in YYYY-MM-DD format"
+     "description": "Only include the row whose report_period exactly equals this date, given as YYYY-MM-DD."
     }
    },
    "required": [
@@ -315,13 +315,13 @@
  },
  {
   "name": "get_financial_metrics_snapshot",
-  "description": "Fetches a snapshot of the most current financial metrics for a company, including key indicators like market capitalization, P/E ratio, and dividend yield. Useful for a quick overview of a company's financial health.",
+  "description": "Returns a single current snapshot of a company's key financial metrics. Market capitalization, valuation ratios such as P/E, and similar live indicators. Built from the most recent quote and statement data this server can source right now. Use get_financial_metrics instead for a historical series across multiple periods.",
   "inputSchema": {
    "type": "object",
    "properties": {
     "ticker": {
      "type": "string",
-     "description": "The stock ticker symbol (e.g., 'AAPL', 'MSFT', 'TSLA')"
+     "description": "Ticker symbol to snapshot, for example 'AAPL', 'MSFT', or 'TSLA'."
     }
    },
    "required": [
@@ -333,13 +333,13 @@
  },
  {
   "name": "get_balance_sheet",
-  "description": "Retrieves a company's balance sheet, which provides a snapshot of its assets, liabilities, and shareholders' equity at a specific point in time. Essential for assessing a company's financial position.",
+  "description": "Returns a company's balance sheet. Assets, liabilities, and shareholders' equity as of each report_period, one row per report_period, built from its reported financial statements and joined with filing metadata where this server can source it. As_reported is accepted for schema parity, but any true value is rejected with a bad_request error: this server always returns the standardized fields, never a filer's raw as-reported line items.",
   "inputSchema": {
    "type": "object",
    "properties": {
     "ticker": {
      "type": "string",
-     "description": "The stock ticker symbol (e.g., 'AAPL', 'MSFT', 'TSLA')"
+     "description": "Ticker symbol to fetch the statement for, for example 'AAPL', 'MSFT', or 'TSLA'."
     },
     "period": {
      "type": "string",
@@ -349,44 +349,44 @@
       "ttm"
      ],
      "default": "ttm",
-     "description": "The reporting period (default: 'ttm' for trailing twelve months)"
+     "description": "Reporting cadence: 'annual', 'quarterly', or 'ttm' (trailing twelve months, the default)."
     },
     "limit": {
      "type": "integer",
      "exclusiveMinimum": 0,
      "maximum": 100,
      "default": 4,
-     "description": "Number of periods to retrieve (default: 4, max: 100)"
+     "description": "Maximum number of periods to return (default 4, maximum 100)."
     },
     "report_period_gte": {
      "type": "string",
      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-     "description": "Start date filter in YYYY-MM-DD format (inclusive)"
+     "description": "Only include rows whose report_period falls on or after this date, given as YYYY-MM-DD."
     },
     "report_period_lte": {
      "type": "string",
      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-     "description": "End date filter in YYYY-MM-DD format (inclusive)"
+     "description": "Only include rows whose report_period falls on or before this date, given as YYYY-MM-DD."
     },
     "report_period_gt": {
      "type": "string",
      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-     "description": "Start date filter in YYYY-MM-DD format (exclusive)"
+     "description": "Only include rows whose report_period falls strictly after this date, given as YYYY-MM-DD."
     },
     "report_period_lt": {
      "type": "string",
      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-     "description": "End date filter in YYYY-MM-DD format (exclusive)"
+     "description": "Only include rows whose report_period falls strictly before this date, given as YYYY-MM-DD."
     },
     "report_period": {
      "type": "string",
      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-     "description": "Exact report period date in YYYY-MM-DD format"
+     "description": "Only include the row whose report_period exactly equals this date, given as YYYY-MM-DD."
     },
     "as_reported": {
      "type": "boolean",
      "default": false,
-     "description": "When true, returns raw as-reported line items exactly as they appear in the company's filing, rather than the standardized fields. Only supports 'annual' or 'quarterly' periods (a 'ttm' period is treated as 'annual')."
+     "description": "When true, would return the filer's raw as-reported line items instead of the standardized fields. This server does not source raw as-reported data, so any true value is rejected with a bad_request error; only the default of false is honored."
     }
    },
    "required": [
@@ -398,13 +398,13 @@
  },
  {
   "name": "get_income_statement",
-  "description": "Fetches a company's income statement, detailing its revenues, expenses, and net income over a reporting period. Useful for evaluating a company's profitability and operational efficiency.",
+  "description": "Returns a company's income statement. Revenue, expenses, and net income for each report_period, one row per report_period, built from its reported financial statements and joined with filing metadata where this server can source it. As_reported is accepted for schema parity, but any true value is rejected with a bad_request error: this server always returns the standardized fields, never a filer's raw as-reported line items.",
   "inputSchema": {
    "type": "object",
    "properties": {
     "ticker": {
      "type": "string",
-     "description": "The stock ticker symbol (e.g., 'AAPL', 'MSFT', 'TSLA')"
+     "description": "Ticker symbol to fetch the statement for, for example 'AAPL', 'MSFT', or 'TSLA'."
     },
     "period": {
      "type": "string",
@@ -414,44 +414,44 @@
       "ttm"
      ],
      "default": "ttm",
-     "description": "The reporting period (default: 'ttm' for trailing twelve months)"
+     "description": "Reporting cadence: 'annual', 'quarterly', or 'ttm' (trailing twelve months, the default)."
     },
     "limit": {
      "type": "integer",
      "exclusiveMinimum": 0,
      "maximum": 100,
      "default": 4,
-     "description": "Number of periods to retrieve (default: 4, max: 100)"
+     "description": "Maximum number of periods to return (default 4, maximum 100)."
     },
     "report_period_gte": {
      "type": "string",
      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-     "description": "Start date filter in YYYY-MM-DD format (inclusive)"
+     "description": "Only include rows whose report_period falls on or after this date, given as YYYY-MM-DD."
     },
     "report_period_lte": {
      "type": "string",
      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-     "description": "End date filter in YYYY-MM-DD format (inclusive)"
+     "description": "Only include rows whose report_period falls on or before this date, given as YYYY-MM-DD."
     },
     "report_period_gt": {
      "type": "string",
      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-     "description": "Start date filter in YYYY-MM-DD format (exclusive)"
+     "description": "Only include rows whose report_period falls strictly after this date, given as YYYY-MM-DD."
     },
     "report_period_lt": {
      "type": "string",
      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-     "description": "End date filter in YYYY-MM-DD format (exclusive)"
+     "description": "Only include rows whose report_period falls strictly before this date, given as YYYY-MM-DD."
     },
     "report_period": {
      "type": "string",
      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-     "description": "Exact report period date in YYYY-MM-DD format"
+     "description": "Only include the row whose report_period exactly equals this date, given as YYYY-MM-DD."
     },
     "as_reported": {
      "type": "boolean",
      "default": false,
-     "description": "When true, returns raw as-reported line items exactly as they appear in the company's filing, rather than the standardized fields. Only supports 'annual' or 'quarterly' periods (a 'ttm' period is treated as 'annual')."
+     "description": "When true, would return the filer's raw as-reported line items instead of the standardized fields. This server does not source raw as-reported data, so any true value is rejected with a bad_request error; only the default of false is honored."
     }
    },
    "required": [
@@ -463,13 +463,13 @@
  },
  {
   "name": "get_cash_flow_statement",
-  "description": "Provides a company's cash flow statement, showing how cash is generated and used across operating, investing, and financing activities. Key for understanding a company's liquidity and solvency.",
+  "description": "Returns a company's cash flow statement. Operating, investing, and financing cash flows for each report_period, one row per report_period, built from its reported financial statements and joined with filing metadata where this server can source it. As_reported is accepted for schema parity, but any true value is rejected with a bad_request error: this server always returns the standardized fields, never a filer's raw as-reported line items.",
   "inputSchema": {
    "type": "object",
    "properties": {
     "ticker": {
      "type": "string",
-     "description": "The stock ticker symbol (e.g., 'AAPL', 'MSFT', 'TSLA')"
+     "description": "Ticker symbol to fetch the statement for, for example 'AAPL', 'MSFT', or 'TSLA'."
     },
     "period": {
      "type": "string",
@@ -479,44 +479,44 @@
       "ttm"
      ],
      "default": "ttm",
-     "description": "The reporting period (default: 'ttm' for trailing twelve months)"
+     "description": "Reporting cadence: 'annual', 'quarterly', or 'ttm' (trailing twelve months, the default)."
     },
     "limit": {
      "type": "integer",
      "exclusiveMinimum": 0,
      "maximum": 100,
      "default": 4,
-     "description": "Number of periods to retrieve (default: 4, max: 100)"
+     "description": "Maximum number of periods to return (default 4, maximum 100)."
     },
     "report_period_gte": {
      "type": "string",
      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-     "description": "Start date filter in YYYY-MM-DD format (inclusive)"
+     "description": "Only include rows whose report_period falls on or after this date, given as YYYY-MM-DD."
     },
     "report_period_lte": {
      "type": "string",
      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-     "description": "End date filter in YYYY-MM-DD format (inclusive)"
+     "description": "Only include rows whose report_period falls on or before this date, given as YYYY-MM-DD."
     },
     "report_period_gt": {
      "type": "string",
      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-     "description": "Start date filter in YYYY-MM-DD format (exclusive)"
+     "description": "Only include rows whose report_period falls strictly after this date, given as YYYY-MM-DD."
     },
     "report_period_lt": {
      "type": "string",
      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-     "description": "End date filter in YYYY-MM-DD format (exclusive)"
+     "description": "Only include rows whose report_period falls strictly before this date, given as YYYY-MM-DD."
     },
     "report_period": {
      "type": "string",
      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-     "description": "Exact report period date in YYYY-MM-DD format"
+     "description": "Only include the row whose report_period exactly equals this date, given as YYYY-MM-DD."
     },
     "as_reported": {
      "type": "boolean",
      "default": false,
-     "description": "When true, returns raw as-reported line items exactly as they appear in the company's filing, rather than the standardized fields. Only supports 'annual' or 'quarterly' periods (a 'ttm' period is treated as 'annual')."
+     "description": "When true, would return the filer's raw as-reported line items instead of the standardized fields. This server does not source raw as-reported data, so any true value is rejected with a bad_request error; only the default of false is honored."
     }
    },
    "required": [
@@ -528,18 +528,18 @@
  },
  {
   "name": "get_index_fund",
-  "description": "Get an ETF or index fund's holdings and each position's weight (percent of net assets) for a fund ticker (e.g. SPY), sourced from SEC fund-holdings filings. Returns the fund's latest filing by default, or the composition as of a past date. Response includes a fund header (as-of period, total net assets, coverage counts) and the holdings sorted by weight descending.",
+  "description": "Returns an ETF or index fund's current holdings and each position's weight (percent of net assets), scraped from the fund's public holdings fact sheet rather than pulled from an SEC filing feed. The response has a fund header (name, as-of date, total and returned holding counts) followed by holdings sorted by weight descending. As_of narrows to the composition in effect on or before that date; if the routable fact sheet is dated after as_of, this server answers not_found instead of guessing an earlier composition. Asset_class filters holdings to 'equity' or 'bond' instruments; omit it for everything the fact sheet lists. Limit and offset page through the holdings list.",
   "inputSchema": {
    "type": "object",
    "properties": {
     "ticker": {
      "type": "string",
-     "description": "The fund ticker symbol (e.g., 'SPY', 'QQQ', 'VTI'). Required."
+     "description": "Ticker of the fund to fetch, for example 'SPY', 'QQQ', or 'VTI'. Required."
     },
     "as_of": {
      "type": "string",
      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-     "description": "Return the fund composition in effect on or before this date (YYYY-MM-DD). Defaults to the latest filing."
+     "description": "Return the fund composition in effect on or before this date, given as YYYY-MM-DD. Without it, this server returns whatever the routable fact sheet currently reports."
     },
     "asset_class": {
      "type": "string",
@@ -547,20 +547,20 @@
       "equity",
       "bond"
      ],
-     "description": "Filter holdings by instrument type. Omit for all holdings."
+     "description": "Restrict holdings to 'equity' or 'bond' instruments. Omit to return every holding the fact sheet lists."
     },
     "limit": {
      "type": "integer",
      "exclusiveMinimum": 0,
      "maximum": 1000,
      "default": 50,
-     "description": "Number of holdings to return (default: 50, max: 1000)."
+     "description": "Maximum number of holdings to return in this page (default 50, maximum 1000)."
     },
     "offset": {
      "type": "integer",
      "minimum": 0,
      "default": 0,
-     "description": "Number of holdings to skip, for pagination (default: 0)."
+     "description": "Number of holdings to skip before this page starts, for paging through a large holdings list (default 0)."
     }
    },
    "required": [
@@ -572,17 +572,17 @@
  },
  {
   "name": "get_insider_ownership",
-  "description": "Retrieves insider ownership statements for a company: what officers, directors, and 10% owners actually HOLD (common shares, options, RSUs), sourced from SEC Form 3 (an insider's initial statement of ownership) and Form 5 (the annual statement). Complements get_insider_trades, which covers the buys and sells in between: trades are the events, ownership statements are the state. Positions are returned as reported per filing, newest first. To find available insider names for a ticker, use: https://api.financialdatasets.ai/insider-ownership/names/?ticker={ticker}",
+  "description": "This server does not yet implement insider-ownership statements: every call returns a typed not-implemented error before any upstream request is made, so it never costs the caller and never returns invented data. Its intended interface mirrors SEC Form 3 (an insider's day-one ownership statement) and Form 5 (the annual statement): what officers, directors, and 10%+ owners hold. Common shares, options, RSUs. As distinct from get_insider_trades, which is meant to cover the buy/sell events in between.",
   "inputSchema": {
    "type": "object",
    "properties": {
     "ticker": {
      "type": "string",
-     "description": "The stock ticker symbol (e.g., 'AAPL', 'MSFT', 'TSLA')"
+     "description": "Ticker of the company whose insiders are sought. Accepted for interface parity; has no effect while this tool answers not-implemented."
     },
     "name": {
      "type": "string",
-     "description": "Filter by insider name (case-insensitive contains, e.g. 'cook'). Use the /insider-ownership/names/?ticker={ticker} endpoint to discover available names for a ticker."
+     "description": "Case-insensitive substring filter on insider name that would narrow results once this tool is implemented, for example 'cook'. Accepted for interface parity; has no effect while this tool answers not-implemented."
     },
     "form_type": {
      "type": "string",
@@ -592,39 +592,39 @@
       "5",
       "5/A"
      ],
-     "description": "Filter by SEC form type: 3 for initial ownership statements (what a new insider owned on day one), 5 for annual statements, or their amendments."
+     "description": "Would restrict to SEC form '3' (initial ownership statement), '5' (annual statement), or their amendments '3/A'/'5/A'. Accepted for interface parity; has no effect while this tool answers not-implemented."
     },
     "filing_date": {
      "type": "string",
      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-     "description": "Exact filing date filter in YYYY-MM-DD format"
+     "description": "Would restrict to filings dated exactly this day, given as YYYY-MM-DD. Accepted for interface parity; has no effect while this tool answers not-implemented."
     },
     "filing_date_gte": {
      "type": "string",
      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-     "description": "Filing date greater than or equal to (YYYY-MM-DD)"
+     "description": "Would restrict to filings dated on or after this day, given as YYYY-MM-DD. Accepted for interface parity; has no effect while this tool answers not-implemented."
     },
     "filing_date_lte": {
      "type": "string",
      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-     "description": "Filing date less than or equal to (YYYY-MM-DD)"
+     "description": "Would restrict to filings dated on or before this day, given as YYYY-MM-DD. Accepted for interface parity; has no effect while this tool answers not-implemented."
     },
     "filing_date_gt": {
      "type": "string",
      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-     "description": "Filing date strictly greater than (YYYY-MM-DD)"
+     "description": "Would restrict to filings dated strictly after this day, given as YYYY-MM-DD. Accepted for interface parity; has no effect while this tool answers not-implemented."
     },
     "filing_date_lt": {
      "type": "string",
      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-     "description": "Filing date strictly less than (YYYY-MM-DD)"
+     "description": "Would restrict to filings dated strictly before this day, given as YYYY-MM-DD. Accepted for interface parity; has no effect while this tool answers not-implemented."
     },
     "limit": {
      "type": "integer",
      "exclusiveMinimum": 0,
      "maximum": 1000,
      "default": 10,
-     "description": "Number of ownership rows to retrieve (default: 10, max: 1000)"
+     "description": "Row cap that would bound the response (default 10, maximum 1000). Accepted for interface parity; has no effect while this tool answers not-implemented."
     }
    },
    "required": [
@@ -636,39 +636,39 @@
  },
  {
   "name": "get_insider_trades",
-  "description": "Retrieves insider trading transactions for a company, including purchases, sales, and other transactions by company officers, directors, and major shareholders. Useful for tracking insider sentiment and ownership changes. To find available insider names for a ticker, use: https://api.financialdatasets.ai/insider-trades/names/?ticker={ticker}",
+  "description": "Lists insider (officer, director, or major-shareholder) buy and sell transactions for a company, sourced from the SEC Form 4 feed. The feed returns at most 15 rows per query, so a larger limit is clamped rather than rejected.  Name matches case-insensitively against the feed's full insider-relationship text (for example 'Cook' matches 'Timothy D Cook - Chief Executive Officer'), not a bare person name.",
   "inputSchema": {
    "type": "object",
    "properties": {
     "ticker": {
      "type": "string",
-     "description": "The stock ticker symbol (e.g., 'AAPL', 'MSFT', 'TSLA')"
+     "description": "Ticker of the company whose insider transactions to list, for example 'AAPL'."
     },
     "name": {
      "type": "string",
-     "description": "Filter by insider name (e.g., 'Timothy D Cook'). Use the /insider-trades/names/?ticker={ticker} endpoint to discover available names for a ticker."
+     "description": "Case-insensitive substring match against the insider's full relationship text, for example 'Cook' or 'Director'."
     },
     "filing_date": {
      "type": "string",
      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-     "description": "Exact filing date filter in YYYY-MM-DD format"
+     "description": "Restricts to transactions filed exactly this day, given as YYYY-MM-DD."
     },
     "filing_date_gte": {
      "type": "string",
      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-     "description": "Filing date greater than or equal to (YYYY-MM-DD)"
+     "description": "Restricts to transactions filed on or after this day, given as YYYY-MM-DD."
     },
     "filing_date_lte": {
      "type": "string",
      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-     "description": "Filing date less than or equal to (YYYY-MM-DD)"
+     "description": "Restricts to transactions filed on or before this day, given as YYYY-MM-DD."
     },
     "limit": {
      "type": "integer",
      "exclusiveMinimum": 0,
      "maximum": 5000,
      "default": 100,
-     "description": "Number of insider trades to retrieve (default: 100, max: 5000)"
+     "description": "Maximum rows to return. The underlying Form 4 feed returns at most 15 rows per query, so any larger value, including the default, is clamped to 15 rather than rejected."
     }
    },
    "required": [
@@ -680,13 +680,13 @@
  },
  {
   "name": "get_institutional_investors",
-  "description": "Lists institutional investors (SEC 13F filers) with their CIK and most recent reported name. Optionally filter by case-insensitive name prefix. Use this to discover the filer_cik to pass to get_institutional_holdings.",
+  "description": "This server does not yet implement institutional-filer discovery: every call returns a typed not-implemented error before any upstream request is made, so it never costs the caller and never returns invented data. Once live, it is meant to list SEC 13F filers with their CIK and most recently reported name, with an optional name-prefix filter to help locate the filer_cik that get_institutional_holdings expects.",
   "inputSchema": {
    "type": "object",
    "properties": {
     "name": {
      "type": "string",
-     "description": "Optional case-insensitive name prefix to filter the filer list (e.g. 'Berkshire'). Use this tool to discover the filer_cik to pass to get_institutional_holdings."
+     "description": "Case-insensitive name prefix that would narrow the filer list once this tool is implemented, for example 'Berkshire'. Accepted for interface parity; has no effect while this tool answers not-implemented."
     }
    },
    "additionalProperties": false,
@@ -695,39 +695,39 @@
  },
  {
   "name": "get_institutional_holdings",
-  "description": "Retrieves SEC 13F institutional holdings sourced directly from EDGAR. Query by filer_cik (what positions a filer holds) OR by ticker (which institutional filers hold this security) \u2014 exactly one is required. When no report_period filter is supplied, returns the latest available quarter for the filer or ticker. Ticker-mode rows include filer_cik and filer_name per position; filer-mode rows omit those (the filer is already implied by the query).",
+  "description": "Returns SEC Form 13F institutional-holdings rows for a security, each carrying the filer's CIK and name alongside the position, sourced from the SEC Form 4 provider's institutional-holdings route. Pass ticker to see which institutional filers hold that security. Filer_cik is accepted for schema parity, but every call that sets it is rejected with a bad_request error. This server routes only the ticker path, not a per-filer lookup. Report_period narrows to one quarter-end date; report_period_gte/report_period_lte bound a range. Without a report_period filter, this server returns the most recent quarter the underlying route has on file for the ticker.",
   "inputSchema": {
    "type": "object",
    "properties": {
     "filer_cik": {
      "type": "string",
-     "description": "Zero-padded 10-digit SEC CIK of the institutional filer (e.g. '0001067983' for Berkshire Hathaway). Provide exactly one of filer_cik or ticker. Use get_institutional_investors to look up CIKs by name."
+     "description": "SEC CIK of an institutional filer. Accepted for schema parity, but every call that sets it is rejected with a bad_request error; pass ticker instead."
     },
     "ticker": {
      "type": "string",
-     "description": "Stock ticker of the held security (e.g. 'AAPL'). Returns the list of institutional filers holding that security. Provide exactly one of filer_cik or ticker."
+     "description": "Ticker of the held security to look up institutional filers for, for example 'AAPL'."
     },
     "report_period": {
      "type": "string",
      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-     "description": "Exact 13F report period (quarter-end date) in YYYY-MM-DD format."
+     "description": "Restricts to the 13F quarter-end whose report_period exactly equals this date, given as YYYY-MM-DD."
     },
     "report_period_gte": {
      "type": "string",
      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-     "description": "Report period greater than or equal to (YYYY-MM-DD)."
+     "description": "Restricts to quarter-ends on or after this date, given as YYYY-MM-DD."
     },
     "report_period_lte": {
      "type": "string",
      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-     "description": "Report period less than or equal to (YYYY-MM-DD)."
+     "description": "Restricts to quarter-ends on or before this date, given as YYYY-MM-DD."
     },
     "limit": {
      "type": "integer",
      "exclusiveMinimum": 0,
      "maximum": 200,
      "default": 10,
-     "description": "Number of holdings to return (default: 10, max: 200)."
+     "description": "Maximum number of holdings rows to return (default 10, maximum 200)."
     }
    },
    "additionalProperties": false,
@@ -736,7 +736,7 @@
  },
  {
   "name": "get_interest_rates",
-  "description": "Retrieves the latest policy interest rates from major central banks (e.g., FED, ECB, BOE, BOJ). Returns a snapshot of each bank's current rate \u2014 no parameters required.",
+  "description": "Returns each major central bank's current policy interest rate. Federal Reserve, European Central Bank, Bank of England, and Bank of Japan. Scraped live from each bank's own site and parsed on the fly. No parameters are accepted. A bank whose page cannot be scraped or parsed in a given call is left out of the response rather than failing the whole request.",
   "inputSchema": {
    "type": "object",
    "properties": {},
@@ -746,13 +746,13 @@
  },
  {
   "name": "get_kpi_guidance",
-  "description": "Retrieves forward-looking KPI guidance items issued by company management in earnings releases and SEC filings. Filter by ticker, period (quarterly/annual), metric name, and date range. Available to Pro and Enterprise customers only.",
+  "description": "Extracts forward-looking KPI guidance issued by company management from a company's single most recent matching SEC filing: its latest 10-K for period='annual' or latest 10-Q for period='quarterly'. Data comes from document extraction, not an internal guidance database. Metric_name filters the extracted set to one guidance metric. Report_period_gte and report_period_lte check whether that one filing's report_period falls in the given range: if it does not, this server returns an empty list rather than searching earlier filings. This server applies no per-account gating; every caller with a valid Monid key gets the same access.",
   "inputSchema": {
    "type": "object",
    "properties": {
     "ticker": {
      "type": "string",
-     "description": "The stock ticker symbol (e.g., 'AAPL', 'MSFT', 'TSLA')"
+     "description": "Ticker of the company to extract from, for example 'AAPL'."
     },
     "period": {
      "type": "string",
@@ -761,28 +761,28 @@
       "annual"
      ],
      "default": "quarterly",
-     "description": "The reporting period (default: 'quarterly')"
+     "description": "Which filing to extract from: 'quarterly' (the latest 10-Q, the default) or 'annual' (the latest 10-K)."
     },
     "metric_name": {
      "type": "string",
-     "description": "Optional filter to a specific guidance metric name (e.g., 'Revenue', 'EPS')"
+     "description": "Restrict the response to one metric name from the extracted set, for example 'Revenue' or 'EPS'. Omit to return every metric this server extracts from the filing."
     },
     "report_period_gte": {
      "type": "string",
      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-     "description": "Start date filter in YYYY-MM-DD format (inclusive)"
+     "description": "Only return guidance rows if the selected filing's report_period falls on or after this date, given as YYYY-MM-DD; otherwise this server returns an empty list."
     },
     "report_period_lte": {
      "type": "string",
      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-     "description": "End date filter in YYYY-MM-DD format (inclusive)"
+     "description": "Only return guidance rows if the selected filing's report_period falls on or before this date, given as YYYY-MM-DD; otherwise this server returns an empty list."
     },
     "limit": {
      "type": "integer",
      "exclusiveMinimum": 0,
      "maximum": 50,
      "default": 4,
-     "description": "Number of records to retrieve (default: 4, max: 50)"
+     "description": "Maximum number of guidance rows to return from the selected filing (default 4, maximum 50)."
     }
    },
    "required": [
@@ -794,13 +794,13 @@
  },
  {
   "name": "get_kpi_metrics",
-  "description": "Retrieves historical KPI taxonomy metrics extracted from SEC filings for a company (e.g., subscriber counts, ARPU, units sold). Filter by ticker, period (quarterly/annual), metric name, and date range. Available to Pro and Enterprise customers only.",
+  "description": "Extracts KPI-taxonomy metrics. Subscriber counts, ARPU, units sold, and similar operating metrics. From a company's single most recent matching SEC filing: its latest 10-K for period='annual' or latest 10-Q for period='quarterly'. Data comes from document extraction, not an internal metrics database. Metric_name filters the extracted set to one metric. Report_period_gte and report_period_lte check whether that one filing's report_period falls in the given range: if it does not, this server returns an empty list rather than searching earlier filings. This server applies no per-account gating; every caller with a valid Monid key gets the same access.",
   "inputSchema": {
    "type": "object",
    "properties": {
     "ticker": {
      "type": "string",
-     "description": "The stock ticker symbol (e.g., 'AAPL', 'MSFT', 'TSLA')"
+     "description": "Ticker of the company to extract from, for example 'AAPL'."
     },
     "period": {
      "type": "string",
@@ -809,28 +809,28 @@
       "annual"
      ],
      "default": "quarterly",
-     "description": "The reporting period (default: 'quarterly')"
+     "description": "Which filing to extract from: 'quarterly' (the latest 10-Q, the default) or 'annual' (the latest 10-K)."
     },
     "metric_name": {
      "type": "string",
-     "description": "Optional filter to a specific KPI metric name (e.g., 'iPhone units sold')"
+     "description": "Restrict the response to one metric name from the extracted set, for example 'iPhone units sold'. Omit to return every metric this server extracts from the filing."
     },
     "report_period_gte": {
      "type": "string",
      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-     "description": "Start date filter in YYYY-MM-DD format (inclusive)"
+     "description": "Only return KPI rows if the selected filing's report_period falls on or after this date, given as YYYY-MM-DD; otherwise this server returns an empty list."
     },
     "report_period_lte": {
      "type": "string",
      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-     "description": "End date filter in YYYY-MM-DD format (inclusive)"
+     "description": "Only return KPI rows if the selected filing's report_period falls on or before this date, given as YYYY-MM-DD; otherwise this server returns an empty list."
     },
     "limit": {
      "type": "integer",
      "exclusiveMinimum": 0,
      "maximum": 50,
      "default": 4,
-     "description": "Number of records to retrieve (default: 4, max: 50)"
+     "description": "Maximum number of KPI rows to return from the selected filing (default 4, maximum 50)."
     }
    },
    "required": [
@@ -842,13 +842,13 @@
  },
  {
   "name": "get_kpi_non_gaap",
-  "description": "Retrieves non-GAAP KPIs reported by a company (e.g., Adjusted EBITDA, Free Cash Flow as defined by the company). Filter by ticker, period (quarterly/annual), metric name, and date range. Available to Pro and Enterprise customers only.",
+  "description": "Extracts non-GAAP metrics a company reports about itself. Adjusted EBITDA, company-defined Free Cash Flow, and similar figures. From its single most recent matching SEC filing: the latest 10-K for period='annual' or latest 10-Q for period='quarterly'. Data comes from document extraction, not an internal metrics database. Metric_name filters the extracted set to one metric. Report_period_gte and report_period_lte check whether that one filing's report_period falls in the given range: if it does not, this server returns an empty list rather than searching earlier filings. This server applies no per-account gating; every caller with a valid Monid key gets the same access.",
   "inputSchema": {
    "type": "object",
    "properties": {
     "ticker": {
      "type": "string",
-     "description": "The stock ticker symbol (e.g., 'AAPL', 'MSFT', 'TSLA')"
+     "description": "Ticker of the company to extract from, for example 'AAPL'."
     },
     "period": {
      "type": "string",
@@ -857,28 +857,28 @@
       "annual"
      ],
      "default": "quarterly",
-     "description": "The reporting period (default: 'quarterly')"
+     "description": "Which filing to extract from: 'quarterly' (the latest 10-Q, the default) or 'annual' (the latest 10-K)."
     },
     "metric_name": {
      "type": "string",
-     "description": "Optional filter to a specific non-GAAP metric name (e.g., 'Adjusted EBITDA', 'Free Cash Flow')"
+     "description": "Restrict the response to one metric name from the extracted set, for example 'Adjusted EBITDA' or 'Free Cash Flow'. Omit to return every metric this server extracts from the filing."
     },
     "report_period_gte": {
      "type": "string",
      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-     "description": "Start date filter in YYYY-MM-DD format (inclusive)"
+     "description": "Only return non-GAAP rows if the selected filing's report_period falls on or after this date, given as YYYY-MM-DD; otherwise this server returns an empty list."
     },
     "report_period_lte": {
      "type": "string",
      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-     "description": "End date filter in YYYY-MM-DD format (inclusive)"
+     "description": "Only return non-GAAP rows if the selected filing's report_period falls on or before this date, given as YYYY-MM-DD; otherwise this server returns an empty list."
     },
     "limit": {
      "type": "integer",
      "exclusiveMinimum": 0,
      "maximum": 50,
      "default": 4,
-     "description": "Number of records to retrieve (default: 4, max: 50)"
+     "description": "Maximum number of non-GAAP rows to return from the selected filing (default 4, maximum 50)."
     }
    },
    "required": [
@@ -890,20 +890,20 @@
  },
  {
   "name": "get_news",
-  "description": "Fetches recent news articles for a specific company or the broad market. Pass a ticker for company-specific news. Call with no arguments for the latest market-moving news, covering AI, macro, rates, earnings, geopolitics, war, energy, crypto, IPOs, housing, and other market-wide topics. Also useful when trying to explain broad price moves \u2014 omit the ticker to check for market-wide catalysts.",
+  "description": "Fetches recent news articles about a company, matched to its ticker through entity search and sorted newest first. Ticker is required: this server does not route the market-wide, tickerless news feed the wider schema describes, so leaving it out is rejected with a bad_request error.",
   "inputSchema": {
    "type": "object",
    "properties": {
     "ticker": {
      "type": "string",
-     "description": "The stock ticker symbol (e.g., 'AAPL', 'MSFT'). Omit for broad market news."
+     "description": "Ticker of the company to fetch news for, for example 'AAPL' or 'MSFT'. Required; this server does not source market-wide news, so leaving it out is rejected."
     },
     "limit": {
      "type": "integer",
      "exclusiveMinimum": 0,
      "maximum": 10,
      "default": 5,
-     "description": "Number of news articles to retrieve (default: 5, max: 10)"
+     "description": "Maximum number of articles to return (default 5, maximum 10)."
     }
    },
    "additionalProperties": false,
@@ -912,13 +912,13 @@
  },
  {
   "name": "get_segmented_financials",
-  "description": "Retrieves segment breakdowns from all three financial statement types (income statement, balance sheet, cash flow) in a single call. Returns revenue, operating income, and depreciation by product/segment; assets, goodwill, and long-lived assets by segment; and capital expenditure by segment. Essential for sum-of-the-parts valuation and segment-level analysis.",
+  "description": "Extracts segment-level breakdowns. Revenue, operating income, and depreciation by product or business segment; assets, goodwill, and long-lived assets by segment; and capital expenditure by segment. From a company's most recent annual 10-K, through document extraction rather than a segments database. Period only accepts 'annual' today; passing 'quarterly' is rejected with a bad_request error, since this server extracts from the annual 10-K only. The report_period filters narrow the extracted segment records to a range or an exact date.",
   "inputSchema": {
    "type": "object",
    "properties": {
     "ticker": {
      "type": "string",
-     "description": "The stock ticker symbol (e.g., 'AAPL', 'MSFT', 'TSLA')"
+     "description": "Ticker of the company to extract segment data for, for example 'AAPL'."
     },
     "period": {
      "type": "string",
@@ -927,39 +927,39 @@
       "quarterly"
      ],
      "default": "annual",
-     "description": "The reporting period (default: 'annual')"
+     "description": "Reporting cadence. Only 'annual' (the default) is supported; 'quarterly' is rejected with a bad_request error."
     },
     "limit": {
      "type": "integer",
      "exclusiveMinimum": 0,
      "maximum": 100,
      "default": 4,
-     "description": "Number of periods to retrieve (default: 4, max: 100)"
+     "description": "Maximum number of segment records to return (default 4, maximum 100)."
     },
     "report_period_gte": {
      "type": "string",
      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-     "description": "Start date filter in YYYY-MM-DD format (inclusive)"
+     "description": "Only include segment records whose report_period falls on or after this date, given as YYYY-MM-DD."
     },
     "report_period_lte": {
      "type": "string",
      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-     "description": "End date filter in YYYY-MM-DD format (inclusive)"
+     "description": "Only include segment records whose report_period falls on or before this date, given as YYYY-MM-DD."
     },
     "report_period_gt": {
      "type": "string",
      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-     "description": "Start date filter in YYYY-MM-DD format (exclusive)"
+     "description": "Only include segment records whose report_period falls strictly after this date, given as YYYY-MM-DD."
     },
     "report_period_lt": {
      "type": "string",
      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-     "description": "End date filter in YYYY-MM-DD format (exclusive)"
+     "description": "Only include segment records whose report_period falls strictly before this date, given as YYYY-MM-DD."
     },
     "report_period": {
      "type": "string",
      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-     "description": "Exact report period date in YYYY-MM-DD format"
+     "description": "Only include the segment record whose report_period exactly equals this date, given as YYYY-MM-DD."
     }
    },
    "required": [
@@ -971,13 +971,13 @@
  },
  {
   "name": "get_stock_price",
-  "description": "Fetches the most recent price snapshot for a specific stock, including the latest price, trading volume, and other open, high, low, and close price data.",
+  "description": "Returns the latest live price snapshot for a stock: current price, trading volume, and the day's open, high, low, and close, sourced from Monid's real-time summary route.",
   "inputSchema": {
    "type": "object",
    "properties": {
     "ticker": {
      "type": "string",
-     "description": "The stock ticker symbol (e.g., 'AAPL', 'MSFT', 'TSLA')"
+     "description": "Ticker to snapshot, for example 'AAPL', 'MSFT', or 'TSLA'."
     }
    },
    "required": [
@@ -989,13 +989,13 @@
  },
  {
   "name": "get_stock_prices",
-  "description": "Retrieves historical price data for a stock over a specified date range, including open, high, low, close prices, and volume.",
+  "description": "Returns historical OHLCV price bars for a stock across a date range. This server always sources daily bars and, for interval values other than 'day', aggregates them locally into week/month/year bars; 'second' and 'minute' are declared in the schema for parity but are rejected with a bad_request error, since sub-day granularity is not sourced. Interval_multiplier is accepted for schema parity, but only its default of 1 is honored. Any other value is rejected. Despite the schema's stated defaults, this server requires both start_date and end_date; omitting either is rejected rather than defaulting to a trailing year or today. Bars come back in ascending time order, and each bar's time is the bar's end date in UTC.",
   "inputSchema": {
    "type": "object",
    "properties": {
     "ticker": {
      "type": "string",
-     "description": "The stock ticker symbol (e.g., 'AAPL', 'MSFT', 'TSLA')"
+     "description": "Ticker to fetch price history for, for example 'AAPL', 'MSFT', or 'TSLA'."
     },
     "interval": {
      "type": "string",
@@ -1008,23 +1008,23 @@
       "year"
      ],
      "default": "day",
-     "description": "The time interval for price data (default: 'day')"
+     "description": "Bar size. This server sources daily bars and aggregates them locally for 'week', 'month', and 'year' (the default is 'day'); 'second' and 'minute' are declared for schema parity but are rejected with a bad_request error."
     },
     "interval_multiplier": {
      "type": "integer",
      "exclusiveMinimum": 0,
      "default": 1,
-     "description": "Multiplier for the interval (default: 1)"
+     "description": "Multiplier applied to interval. Only the default value of 1 is supported; any other value is rejected with a bad_request error."
     },
     "start_date": {
      "type": "string",
      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-     "description": "Start date in YYYY-MM-DD format (default: 1 year before end_date)"
+     "description": "Start of the date range, given as YYYY-MM-DD. Required by this server; there is no default despite the schema's stated one."
     },
     "end_date": {
      "type": "string",
      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-     "description": "End date in YYYY-MM-DD format (default: today in Eastern time)"
+     "description": "End of the date range, given as YYYY-MM-DD. Required by this server; there is no default despite the schema's stated one."
     }
    },
    "required": [
@@ -1036,7 +1036,7 @@
  },
  {
   "name": "screen_stocks",
-  "description": "Screens and filters stocks by financial metrics, valuation ratios, and company attributes. Combine multiple filter conditions to find stocks matching your investment criteria (e.g., revenue > $1B and P/E ratio < 20). Use list_stock_screener_filters first to see all available fields and operators.",
+  "description": "Screens stocks with the Nasdaq stock screener, but only two fields are wired up in this server: 'exchange' (one of 'NASDAQ', 'NYSE', 'AMEX') and 'market_cap' (one of the bucket labels 'mega', 'large', 'mid', 'small', 'micro', 'nano'. Not a numeric threshold). Supply one or two filter objects, each using operator 'eq' with a string value; any other field, operator, numeric value, or repeated field is rejected with a bad_request error before this server spends anything. Call list_stock_screener_filters first to see the exact set this server executes. Currency is accepted for schema parity, but only 'USD' (the default) is honored; any other value is rejected.",
   "inputSchema": {
    "type": "object",
    "properties": {
@@ -1047,7 +1047,7 @@
       "properties": {
        "field": {
         "type": "string",
-        "description": "The financial metric or company attribute to filter on (e.g., 'revenue', 'net_income', 'pe_ratio', 'sector', 'industry')"
+        "description": "Metric or attribute to filter on. This server executes only 'exchange' and 'market_cap'; see list_stock_screener_filters for the current set."
        },
        "operator": {
         "type": "string",
@@ -1059,7 +1059,7 @@
          "eq",
          "in"
         ],
-        "description": "The comparison operator. Use 'gt', 'lt', 'gte', 'lte', 'eq' for numeric fields. Use 'eq' or 'in' for sector/industry."
+        "description": "Comparison operator. This server executes only 'eq'; the schema's other enum values ('gt', 'lt', 'gte', 'lte', 'in') are declared for parity but are rejected with a bad_request error."
        },
        "value": {
         "anyOf": [
@@ -1079,7 +1079,7 @@
           }
          }
         ],
-        "description": "The value to compare against. Use numbers for financial metrics, strings for sector/industry, or arrays for the 'in' operator."
+        "description": "Value to compare against, given as a string: an exchange code for the 'exchange' field, or a market-cap bucket label ('mega', 'large', 'mid', 'small', 'micro', 'nano') for the 'market_cap' field. Numeric and array values are declared in the schema for parity but are rejected by this server."
        }
       },
       "required": [
@@ -1090,19 +1090,19 @@
       "additionalProperties": false
      },
      "minItems": 1,
-     "description": "Array of filter conditions. At least one filter is required. Use list_stock_screener_filters to see all available fields and operators."
+     "description": "One or two filter objects of the form {field, operator, value}. This server executes only field 'exchange' (operator 'eq', value one of 'NASDAQ'/'NYSE'/'AMEX') and field 'market_cap' (operator 'eq', value one of the bucket labels 'mega'/'large'/'mid'/'small'/'micro'/'nano'); each field may appear at most once. Any other field, operator, or value type is rejected with a bad_request error. Call list_stock_screener_filters to see this exact set."
     },
     "currency": {
      "type": "string",
      "default": "USD",
-     "description": "The currency for financial data (default: 'USD')"
+     "description": "Currency of the screened financial data. Only 'USD' (the default) is supported by this server; any other value is rejected with a bad_request error."
     },
     "limit": {
      "type": "integer",
      "exclusiveMinimum": 0,
      "maximum": 100,
      "default": 10,
-     "description": "Maximum number of results to return (default: 10, max: 100)"
+     "description": "Maximum number of matching stocks to return (default 10, maximum 100)."
     }
    },
    "required": [
@@ -1114,7 +1114,7 @@
  },
  {
   "name": "list_stock_screener_filters",
-  "description": "Retrieves all available filter fields and operators for the stock screener, grouped by category (income statement, balance sheet, cash flow statement, financial metrics, and company attributes like sector and industry). Use this to discover which fields and operators you can use with the screen_stocks tool.",
+  "description": "Lists the exact filter fields, operators, and allowed values screen_stocks currently executes: 'exchange' (operator 'eq', one of NASDAQ/NYSE/AMEX) and 'market_cap' (operator 'eq', one of the bucket labels mega/large/mid/small/micro/nano). The screen_stocks parameter schema has room for many more fields across income-statement, balance-sheet, cash-flow, and company-attribute metrics, but this server only ever routes the two fields listed here; the rest are declared for schema parity and are rejected with a bad_request error if used.",
   "inputSchema": {
    "type": "object",
    "properties": {},

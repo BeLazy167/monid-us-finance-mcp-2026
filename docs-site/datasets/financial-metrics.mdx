@@ -1,0 +1,57 @@
+---
+title: "Financial Metrics"
+description: "Margins, turnovers, and growth rates computed from the statement matrix, plus a live valuation snapshot."
+openapi: "api-reference/openapi.json GET /financial-metrics"
+---
+
+There are two related routes here, and they answer different questions.
+
+[`GET /financial-metrics`](/api-reference/financial-metrics/get-historical-financial-metrics) returns one row per historical reporting period: margins, turnovers, and growth rates computed from the statement matrix behind [Financial Statements](/datasets/financial-statements). It has no market price attached to past periods, so valuation fields are left out.
+
+[`GET /financial-metrics/snapshot`](/api-reference/financial-metrics/get-a-live-financial-metrics-snapshot) returns a single current snapshot, market cap, P/E, EV/EBITDA, and the rest, sourced from Monid's DefiLlama `/equities/v1/summary` endpoint. Because this snapshot carries a live price, its valuation fields are populated where the historical route's are not.
+
+## What this answers
+
+- How a company's gross margin or return on equity has trended over recent fiscal periods.
+- What a company's current market cap and P/E ratio are, right now.
+- How efficiently a company turns over inventory or receivables, by period.
+
+## Coverage
+
+| | |
+|---|---|
+| Provider chain | `/financial-metrics`: DefiLlama `/equities/v1/statements` and `/equities/v1/filings`. `/financial-metrics/snapshot`: DefiLlama `/equities/v1/summary` |
+| Measured cost | `/financial-metrics`: $0.0012 per call. `/financial-metrics/snapshot`: $0.0006 per call |
+| Cache TTL | `/financial-metrics`: 600 seconds. `/financial-metrics/snapshot`: 60 seconds, see [Caching](/guides/caching) |
+
+## Query rules
+
+Both routes require `ticker`. `/financial-metrics` accepts `period` (`annual`, `quarterly`, `ttm`), `limit` (default `4`, max `100`), and the same `report_period*` date filters as the statements routes.
+
+`period` defaults to `annual` on this REST route and to `ttm` on the underlying MCP tool's own schema. Pass it explicitly if the default matters.
+
+`/financial-metrics` always omits `enterprise_value`, every `price_to_*` ratio, EV multiples, `free_cash_flow_yield`, `peg_ratio`, `return_on_invested_capital`, `currency`, and `filing_datetime`. None of these are sourceable for a past period without a historical market price this server does not have. `ttm` rows also drop filing identity, since a trailing-twelve-month window spans more than one filing.
+
+## Worked example
+
+```bash curl
+curl -s 'https://monid-finance-api.fly.dev/financial-metrics/snapshot?ticker=AAPL' \
+  -H 'X-API-KEY: <your-api-key>'
+```
+
+```json Response, trimmed
+{
+  "snapshot": {
+    "ticker": "AAPL",
+    "currency": "USD",
+    "market_cap": 4785139738400.0,
+    "enterprise_value": 4840899738400.0,
+    "price_to_earnings_ratio": 37.42067763034204,
+    "price_to_book_ratio": 44.50464786458333,
+    "gross_margin": 0.4865291555900202,
+    "operating_margin": 0.33397240495862457,
+    "net_margin": 0.27618604910212224,
+    "return_on_equity": 1.199125744047619
+  }
+}
+```

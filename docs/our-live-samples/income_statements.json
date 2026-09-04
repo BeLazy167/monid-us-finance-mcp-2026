@@ -1,0 +1,44 @@
+{
+  "income_statements": [
+    {
+      "ticker": "AAPL",
+      "report_period": "2025-09-30",
+      "fiscal_period": "FY2025",
+      "period": "annual",
+      "revenue": 416161000000,
+      "cost_of_revenue": 220960000000,
+      "gross_profit": 195201000000,
+      "operating_expense": 62151000000,
+      "research_and_development": 34550000000,
+      "operating_income": 133050000000,
+      "ebit": 133050000000,
+      "income_tax_expense": 20719000000,
+      "net_income": 112010000000,
+      "net_income_common_stock": 112010000000,
+      "earnings_per_share": 7.49,
+      "earnings_per_share_diluted": 7.46,
+      "weighted_average_shares": 14948500000,
+      "weighted_average_shares_diluted": 14948500000
+    },
+    {
+      "ticker": "AAPL",
+      "report_period": "2024-09-30",
+      "fiscal_period": "FY2024",
+      "period": "annual",
+      "revenue": 391035000000,
+      "cost_of_revenue": 210352000000,
+      "gross_profit": 180683000000,
+      "operating_expense": 57467000000,
+      "research_and_development": 31370000000,
+      "operating_income": 123216000000,
+      "ebit": 123216000000,
+      "income_tax_expense": 29749000000,
+      "net_income": 93736000000,
+      "net_income_common_stock": 93736000000,
+      "earnings_per_share": 6.11,
+      "earnings_per_share_diluted": 6.08,
+      "weighted_average_shares": 15343783000,
+      "weighted_average_shares_diluted": 15343783000
+    }
+  ]
+}

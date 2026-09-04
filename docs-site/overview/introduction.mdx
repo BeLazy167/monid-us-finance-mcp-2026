@@ -1,0 +1,56 @@
+---
+title: "Introduction"
+description: "What Monid Finance MCP is and how it differs from a subscription-based finance API."
+---
+
+This is a US-equities finance API with an MCP server in front of it. The routes, tool names, and response shapes match the Financial Datasets interface, so an existing client can point at it by changing the base URL and the key. Calls run through Monid and bill per request against your own wallet, so a quiet week costs almost nothing.
+
+It is an independent, Monid-backed implementation, not affiliated with or endorsed by Financial Datasets, and it ships no Financial Datasets data or code. When this doc calls a route "compatible," it means the request and response shape match closely enough that an existing integration can switch base URLs and keep working, not that any code or data was copied.
+
+## Why per-call pricing
+
+Most SEC research and market-data APIs charge a fixed monthly plan whether you make ten calls or ten thousand. That works for a trading desk. It doesn't work for an agent that checks one company's balance sheet twice a week.
+
+Each call here routes through SEC EDGAR, DefiLlama US equities, and Context.dev via Monid. Measured cost per call has run $0.0006 to $0.01 on the live deployment, against a $200/month or $2,000/month commitment on the plan this replaces. You bring your own Monid API key, and every call bills your wallet directly. We take no cut and never see or store the key.
+
+The scope isn't complete. Some Financial Datasets routes aren't implemented yet, and they answer with a typed, zero-cost `not_implemented` error rather than a guess. A few implemented routes cover less ground than the original, with capped result sizes and omitted fields in places. Read [Compatibility](/overview/coverage) before you build on this.
+
+<CardGroup cols={2}>
+  <Card title="REST quickstart" icon="terminal" href="/overview/quickstart">
+    Authenticate with `X-API-KEY` and pull an income statement.
+  </Card>
+  <Card title="MCP setup" icon="plug" href="/integrations/mcp-server">
+    Connect Claude, Cursor, or Claude Code to the MCP server at `/mcp`.
+  </Card>
+  <Card title="API Reference" icon="book-open" href="/api-reference">
+    Every REST endpoint, generated from the OpenAPI spec, with a request playground.
+  </Card>
+  <Card title="MCP Tools" icon="wrench" href="/mcp-tools/overview">
+    All 27 tool names and parameters, generated from the tool schema file.
+  </Card>
+</CardGroup>
+
+## How the server is built
+
+<AccordionGroup>
+  <Accordion title="Contract parity">
+    A success response contains only Financial Datasets schema keys, in schema property order. A field the server can't source is left out of the response. It is never set to null or guessed.
+  </Accordion>
+  <Accordion title="No fabricated data">
+    If a route can't be answered honestly, it returns `{"error": "not_implemented", ...}` at zero cost. Nothing is filled in with a plausible-looking number.
+  </Accordion>
+  <Accordion title="Every Monid call is logged">
+    Each call the server makes to Monid, its run ID and its measured cost, is written to a receipts ledger. Cost is recorded per call, not estimated afterward.
+  </Accordion>
+  <Accordion title="Filing extraction is rule-based">
+    `get_filing_items` extracts SEC filing sections with rule-based parsing against known section boundaries. There is no LLM in that path guessing where a section starts and ends.
+  </Accordion>
+</AccordionGroup>
+
+<Note>
+  Bring your own Monid API key. Every request, REST or MCP, sends it as the `X-API-KEY` header, and it bills your own Monid wallet. Get a key at [monid.ai](https://monid.ai). See [Authentication](/overview/authentication) for how the header works.
+</Note>
+
+## Where to go next
+
+Start with the [Quickstart](/overview/quickstart) if you're new. Go straight to [MCP setup](/integrations/mcp-server) if you're wiring an agent. Read [Compatibility](/overview/coverage) first if you're deciding whether to migrate an existing Financial Datasets integration.

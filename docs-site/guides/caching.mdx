@@ -1,0 +1,35 @@
+---
+title: "Caching"
+description: "What gets cached, for how long, and what a cache hit means for cost."
+---
+
+`GET` REST responses are cached in the server process. A cache hit skips the Monid call entirely, so it costs nothing and returns faster than a fresh call would. Every response carries an `X-Cache` header telling you which one happened.
+
+```bash curl
+curl -si 'https://monid-finance-api.fly.dev/financial-metrics/snapshot?ticker=AAPL' \
+  -H 'X-API-KEY: <your-api-key>' | grep -i x-cache
+```
+
+```
+X-Cache: miss
+```
+
+Call the same URL again with the same key before the TTL runs out, and the header reads `X-Cache: hit`, with no Monid call behind it.
+
+## What makes two requests "the same"
+
+A cache entry is keyed on your API key plus the request path plus the query parameters, sorted. Two different keys never share a cached response for the same query. Parameter order does not matter: `?ticker=AAPL&limit=1` and `?limit=1&ticker=AAPL` hit the same entry.
+
+## How long entries live
+
+| Route pattern | TTL | Why |
+|---|---|---|
+| `/prices*`, `*/snapshot`, `/news*` | 60 seconds | Prices and headlines move fast. |
+| `/financials/*`, `/filings*`, `/financial-metrics*` | 600 seconds | Statements and filings change at most once a day. |
+| Everything else | 300 seconds | A middle ground for routes without a strong reason either way. |
+
+## What never gets cached
+
+Non-`GET` requests, `POST /financials/search/screener` is the only one, are never cached. Error responses, anything with a status of 400 or higher, are never cached either. The MCP transport at `/mcp` and `/api` is never cached, regardless of method.
+
+Caching here is in-process and best effort. It uses a bounded, oldest-first eviction cache with no persistence across restarts. Treat it as a latency and cost optimization, not a guarantee that a given response will still be there in an hour.

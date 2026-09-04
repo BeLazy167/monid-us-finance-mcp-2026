@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="120" height="32" viewBox="0 0 120 32" fill="none">
+  <rect x="0" y="2" width="28" height="28" rx="8" fill="#A78BFA"/>
+  <path d="M8 22V10h3.4l4.1 6.4L19.6 10H23v12h-3.2v-7.2l-3.7 5.7h-2.2l-3.7-5.7V22H8Z" fill="#1A1523"/>
+  <text x="36" y="22" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif" font-size="16" font-weight="700" fill="#F5F3FF">Monid Finance</text>
+</svg>

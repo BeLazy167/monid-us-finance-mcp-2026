@@ -1,0 +1,64 @@
+---
+title: "MCP Server"
+description: "Connect Claude, Cursor, or Claude Code to the MCP endpoint at /mcp."
+---
+
+`https://monid-finance-api.fly.dev/mcp` is a streamable-HTTP [MCP](https://modelcontextprotocol.io) endpoint. It exposes all 27 Financial Datasets-named tools, listed with full parameters in [MCP Tools](/mcp-tools/overview), and authenticates with the same `X-API-KEY` header as REST. `/api` is a working alias for the same endpoint.
+
+There is no separate MCP account. The `X-API-KEY` you send here is your Monid API key, and MCP calls bill your Monid wallet the same way REST calls do. See [Authentication](/overview/authentication).
+
+## Claude Desktop
+
+Add a `monid-finance` entry to `claude_desktop_config.json`.
+
+```json claude_desktop_config.json
+{
+  "mcpServers": {
+    "monid-finance": {
+      "url": "https://monid-finance-api.fly.dev/mcp",
+      "headers": { "X-API-KEY": "<your-api-key>" }
+    }
+  }
+}
+```
+
+Restart Claude Desktop after saving. The tools show up under the hammer icon in a new chat.
+
+## Cursor
+
+Add the same shape to `.cursor/mcp.json` in your project, or to the global `~/.cursor/mcp.json`.
+
+```json .cursor/mcp.json
+{
+  "mcpServers": {
+    "monid-finance": {
+      "url": "https://monid-finance-api.fly.dev/mcp",
+      "headers": { "X-API-KEY": "<your-api-key>" }
+    }
+  }
+}
+```
+
+## Claude Code
+
+Register the server from the CLI. No config file to edit by hand.
+
+```bash Terminal
+claude mcp add monid-finance --transport http https://monid-finance-api.fly.dev/mcp --header "X-API-KEY: <your-api-key>"
+```
+
+## Checking the connection
+
+Ask the agent to list its tools, or call one directly, for example: "use monid-finance to get AAPL's latest income statement." A working connection returns the same JSON shape documented in [Quickstart](/overview/quickstart) and in the dataset pages, because REST and MCP share one backend service.
+
+<Accordion title="Why does an MCP tool sometimes return data the REST endpoint does not?">
+  Seven tools, `get_segmented_financials`, `get_kpi_metrics`, `get_kpi_guidance`, `get_kpi_non_gaap`, `get_interest_rates`, `get_index_fund`, `get_institutional_holdings`, plus `list_filing_item_types`, are implemented and callable over MCP but have no matching REST route yet. Their REST paths answer a zero-cost `not_implemented` stub instead. Call the MCP tool directly. See [Coverage](/overview/coverage) for the full breakdown.
+</Accordion>
+
+<Accordion title="Why do MCP errors look different from REST errors?">
+  REST always answers the Financial Datasets `{"error": <code>, "message": <text>}` shape with a matching HTTP status. MCP tool failures surface as a JSON-RPC error object on the `tools/call` response instead, since MCP is a JSON-RPC protocol. The `message` carries the same underlying text either way. See [Errors](/guides/errors).
+</Accordion>
+
+<Card title="MCP Tools reference" icon="wrench" href="/mcp-tools/overview">
+  All 27 tools with their parameters, types, required flags, and defaults, generated from the tool schema file.
+</Card>
