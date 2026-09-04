@@ -2,6 +2,8 @@
 
 "Compatible" means the same tool name and user job. Output adds provenance and cost. It does not mean byte-for-byte proprietary responses.
 
+The first implemented and live-smoked slice contains `get_company_facts`, the three statement tools, `get_financial_metrics_snapshot`, `get_filings`, both stock-price tools, and `get_news`. Other rows remain targets until their route and contract tests land.
+
 | Dataset | MCP tool | Phase 1 path |
 |---|---|---|
 | Beneficial ownership | `get_beneficial_owners` | SEC 13D/13G aggregation |

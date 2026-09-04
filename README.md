@@ -8,6 +8,17 @@ Status: phase 1 implementation. Do not use this software as investment advice.
 
 The target contract is the 27 tools published at `docs.financialdatasets.ai/mcp-server`. Two documented dataset groups, activist ownership and IPOs, are included as extensions.
 
+The first implemented US slice includes:
+
+- `get_company_facts`;
+- `get_income_statement`, `get_balance_sheet`, and `get_cash_flow_statement`;
+- `get_financial_metrics_snapshot`;
+- `get_filings`;
+- `get_stock_prices` and `get_stock_price`;
+- `get_news`.
+
+Each tool returns one JSON envelope with `data`, `provenance`, `total_cost`, `warnings`, and `partial_errors`.
+
 Every successful response reports:
 
 - source provider and endpoint;
@@ -17,6 +28,8 @@ Every successful response reports:
 - partial failures and unsupported fields.
 
 No tool returns mock market data.
+
+This slice does not claim full parity. DefiLlama equity data is beta. Price data is labeled indicative or delayed/EOD. TTM statements are not derived. Context.dev news currently requires a ticker.
 
 ## Setup
 
@@ -40,4 +53,4 @@ uv run pyright
 uv run pytest
 ```
 
-See [compatibility](docs/compatibility.md), [provenance](docs/provenance.md), and [phase 2](docs/phase-2-india.md).
+See [compatibility](docs/compatibility.md), [provenance](docs/provenance.md), [live smoke evidence](docs/live-smoke.md), and [phase 2](docs/phase-2-india.md).

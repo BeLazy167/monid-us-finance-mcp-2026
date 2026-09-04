@@ -18,7 +18,18 @@ The server calls Monid through its authenticated CLI. Each provider endpoint is 
 
 ## Initial live US sources
 
-- DefiLlama beta equities: company catalog, market summary, statements, dimensions, filings, and OHLCV.
+The first implemented slice uses these exact Monid routes:
+
+- DefiLlama `/equities/v1/companies-list` and `/equities/v1/summary` for company facts;
+- DefiLlama `/equities/v1/statements` for annual and quarterly statements;
+- DefiLlama `/equities/v1/summary` for financial metrics and latest price snapshots;
+- DefiLlama `/equities/v1/filings` for the filing index;
+- DefiLlama `/equities/v1/ohlcv` for delayed or EOD price history;
+- Context.dev `/news/search` for ticker-matched company news.
+
+Planned sources for later slices include:
+
+- DefiLlama beta equities: dimensions and other supported equity data.
 - Nasdaq: earnings, quotes, filings, ownership, and market calendars.
 - SECForm4: Forms 3/4/5, Schedules 13D/13G, and 13F-derived views where available.
 - Context.dev: relevance-scored news and filing/page extraction.
