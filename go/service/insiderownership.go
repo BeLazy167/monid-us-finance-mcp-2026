@@ -19,6 +19,7 @@
 package service
 
 import (
+	"regexp"
 	"sort"
 	"strings"
 
@@ -52,6 +53,7 @@ type insiderOwnershipObservation struct {
 	company          *string
 	filingDate       *string // reported_datetime's date component, YYYY-MM-DD
 	asOfDate         *string // transaction_date's date component, YYYY-MM-DD
+	insiderID        *string // stable id from the insider profile URL, when present
 	formType         *string
 	accessionNumber  *string
 	sharesOwned      *float64
@@ -148,6 +150,16 @@ func (c *callCtx) getInsiderOwnership(args map[string]any) (Result, error) {
 		if sharesRaw := firstStringGeneric(row, "shares_owned", "sharesOwned", "current_shares", "shares"); sharesRaw != nil {
 			obs.sharesOwned, obs.directOrIndirect = parseSharesAndOwnership(*sharesRaw)
 		}
+		// The displayed name carries the insider's title, which changes over
+		// time ("SVP, GC and Secretary" becoming "SVP, GC and Government
+		// Affairs"). Keying on that text splits one person into several rows
+		// with different holdings, so prefer the stable numeric id in the
+		// insider profile URL when the feed supplies one.
+		if profile := firstStringGeneric(row, "insider_relationship_url", "insider_url", "reporting_owner_url"); profile != nil {
+			if id := insiderIDFromURL(*profile); id != nil {
+				obs.insiderID = id
+			}
+		}
 		observations = append(observations, obs)
 	}
 
@@ -213,7 +225,7 @@ func latestPerInsider(observations []insiderOwnershipObservation) []insiderOwner
 	best := make(map[string]insiderOwnershipObservation)
 	order := make([]string, 0, len(observations))
 	for _, obs := range observations {
-		key := strings.ToLower(obs.name)
+		key := obs.identity()
 		current, exists := best[key]
 		if !exists {
 			order = append(order, key)
@@ -240,4 +252,27 @@ func obsDateGTE(a, b insiderOwnershipObservation) bool {
 		bd = *b.filingDate
 	}
 	return ad >= bd
+}
+
+// insiderIDFromURL pulls the stable insider id out of a profile URL such as
+// https://www.secform4.com/insider-trading/1780525.htm.
+func insiderIDFromURL(raw string) *string {
+	match := insiderProfileID.FindStringSubmatch(raw)
+	if len(match) != 2 {
+		return nil
+	}
+	id := match[1]
+	return &id
+}
+
+var insiderProfileID = regexp.MustCompile(`/insider-trading/(\d+)`)
+
+// identity returns the key that decides whether two observations describe the
+// same person. The stable profile id wins; the displayed name is the fallback
+// when the feed omits a profile URL.
+func (o insiderOwnershipObservation) identity() string {
+	if o.insiderID != nil {
+		return "id:" + *o.insiderID
+	}
+	return "name:" + strings.ToLower(o.name)
 }

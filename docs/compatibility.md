@@ -48,10 +48,21 @@ beneficial-ownership row this server returns carries its own sourced
 guess) so a caller can judge recency directly; the server itself never
 describes this data as current, real-time, or the latest activity.
 
-The other two ownership-state routes (`get_insider_ownership`, backed by
-SECForm4's `/get_company_insider_trading`, and `get_institutional_investors`,
-backed by `/get_institution_holders`) were not independently timestamped
-the same way; treat them with the same caution until they are.
+`get_insider_ownership` is a different case, measured the same day. The
+newest row SECForm4's `/get_company_insider_trading` returned for AAPL was
+a 2026-09-01 transaction reported 2026-09-03, so that feed tracks filings
+within days. The six-month caveat above applies to the 13D/13G feeds, not
+to insider ownership.
+
+`get_institutional_investors`, backed by `/get_institution_holders`, has
+not been independently timestamped; treat its recency as unverified until
+it is.
+
+Dedupe note: the insider feed's displayed name carries the person's title,
+and titles change between filings (the same officer appeared as both "SVP,
+GC and Secretary" and "SVP, GC and Government Affairs"). Insiders are
+therefore keyed on the stable id in their profile URL, so one person yields
+one row at their most recent holding rather than one row per title.
 
 ## Honest deviations from Financial Datasets behavior
 
