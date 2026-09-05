@@ -1001,6 +1001,9 @@ func (c *callCtx) getFinancialMetrics(args map[string]any) (Result, error) {
 				}
 			}
 		}
+		// Every feed behind this server reports one country's issuers in
+		// their own currency, which is why the snapshot already states it.
+		base["currency"] = "USD"
 		if parsed.filing.any() {
 			filingDayStr, _ := base["filing_date"].(string)
 			var filingDay *time.Time
