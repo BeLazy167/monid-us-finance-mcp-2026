@@ -103,22 +103,32 @@ func number(row map[string]any, keys ...string) (float64, bool) {
 }
 
 // inputsFor gathers the lines one period needs from the three statements.
+// The statement matrices are keyed by the provider's own printed labels
+// ("Shares Outstanding (Diluted)"), not by Financial Datasets field
+// names. The normalised names are kept as fallbacks so this keeps working
+// if the shape is ever normalised upstream.
 func inputsFor(income, balance, cash map[string]any, epsGrowth float64) valuationInputs {
 	in := valuationInputs{EPSGrowth: epsGrowth}
-	in.Shares, in.hasShares = number(income, "weighted_average_shares_diluted", "weighted_average_shares")
-	in.EPS, in.hasEPS = number(income, "earnings_per_share_diluted", "earnings_per_share")
-	in.Revenue, in.hasRevenue = number(income, "revenue")
-	in.Equity, in.hasEquity = number(balance, "shareholders_equity")
-	in.EBITDA, in.hasEBITDA = number(income, "ebitda")
-	in.FreeCashFlow, in.hasFreeCashFlow = number(cash, "free_cash_flow")
-	current, _ := number(balance, "current_debt")
-	nonCurrent, _ := number(balance, "non_current_debt")
+	in.Shares, in.hasShares = number(income,
+		"Shares Outstanding (Diluted)", "Shares Outstanding (Basic)",
+		"weighted_average_shares_diluted", "weighted_average_shares")
+	in.EPS, in.hasEPS = number(income,
+		"EPS (Diluted)", "EPS (Basic)", "earnings_per_share_diluted", "earnings_per_share")
+	in.Revenue, in.hasRevenue = number(income, "Revenue", "revenue")
+	in.Equity, in.hasEquity = number(balance,
+		"Total Shareholders Equity", "Total Equity", "shareholders_equity")
+	in.EBITDA, in.hasEBITDA = number(income, "EBITDA", "ebitda")
+	in.FreeCashFlow, in.hasFreeCashFlow = number(cash, "Free Cash Flow", "free_cash_flow")
+
+	shortDebt, _ := number(balance, "Total Current Liabilities|Short-Term Debt", "current_debt")
+	longDebt, _ := number(balance, "Total Non-Current Liabilities|Long-Term Debt", "non_current_debt")
 	if total, ok := number(balance, "total_debt"); ok {
 		in.Debt = total
 	} else {
-		in.Debt = current + nonCurrent
+		in.Debt = shortDebt + longDebt
 	}
-	in.Cash, _ = number(balance, "cash_and_equivalents")
+	in.Cash, _ = number(balance,
+		"Total Current Assets|Cash and Cash Equivalents", "cash_and_equivalents")
 	return in
 }
 
