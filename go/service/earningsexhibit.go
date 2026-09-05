@@ -58,10 +58,12 @@ func (c *callCtx) earningsExhibit(filingURL string) (string, error) {
 }
 
 // maxEarningsExhibits bounds how far back a KPI request looks. Each
-// exhibit costs a directory scrape plus an extraction, and a quarter
-// whose release carries no non-GAAP measures is common, so the search
+// exhibit costs a directory scrape plus an extraction, so the search
 // stops as soon as it has enough items rather than walking every filing.
-const maxEarningsExhibits = 3
+// Six covers about eighteen months of releases: a company reconciles
+// non-GAAP measures only when it has a one-off to explain, and Apple's
+// most recent was four releases back when this was measured.
+const maxEarningsExhibits = 6
 
 // kpiFromEarningsReleases extracts KPI items from recent earnings
 // releases, newest first, stopping once it has enough for the request.

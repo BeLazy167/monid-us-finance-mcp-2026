@@ -220,11 +220,17 @@ func normalizeKPIGuidance(data map[string]any, ticker, filingURL string, period,
 	}
 	var records []fd.KPIGuidanceItem
 	for _, item := range items {
-		if !kpiMatches(item, period, metricName) || !kpiComplete(item) {
+		// Guidance is not filtered on the extractor's basis guess. A
+		// declared dividend has no annual-or-quarterly basis to read, and
+		// the same sentence came back "annual" on one run and "quarterly"
+		// on the next, which silently dropped the row. period_type is the
+		// period the caller asked for, as Financial Datasets reports it.
+		if !kpiMatches(item, nil, metricName) || !kpiComplete(item) {
 			continue
 		}
 		tickerCopy, metricNameCopy := ticker, item.Name
-		unit, periodLabel, periodType, sourceURL := kpiStr(item.Unit), kpiStr(item.Period), kpiStr(item.Basis), filingURL
+		unit, periodLabel, sourceURL := kpiStr(item.Unit), kpiStr(item.Period), filingURL
+		periodType := kpiStr(period)
 		record := fd.KPIGuidanceItem{
 			Ticker:     &tickerCopy,
 			MetricName: &metricNameCopy,
