@@ -52,22 +52,12 @@ const notImplementedMessage = "This Financial Datasets route is not implemented 
 // such answer, for the reason noted beside each. Each answers 200
 // {"error": "not_implemented", "message": ...} once authorized, at zero
 // cost, and never reaches Caller.
-var notImplementedPaths = []string{
-	// get_kpi_metrics itself has no fixed per-ticker/per-sector *data*
-	// universe (it extracts on demand from whichever filing a ticker
-	// has); /kpi/metrics/tickers now answers the accept-universe instead
-	// (see above). /kpi/metrics/sectors has no such accept-universe
-	// fallback: sector is not a dimension the shared catalog carries at
-	// all (catalogTickerUniverse: ticker/companyName/country/
-	// countryName only), so there is nothing honest to enumerate.
-	"/kpi/metrics/sectors",
-	// get_index_fund resolves holdings via a live web search per ticker
-	// (indexfund.go); knownIssuerDomains is a search-ranking hint for a
-	// handful of tickers, not an exhaustive "tickers we can serve" list,
-	// so publishing it as a coverage catalog would overstate what this
-	// server actually supports.
-	"/index-funds/tickers",
-}
+// notImplementedPaths is empty: every Financial Datasets REST path this
+// server registers now answers from a live source. The last two stubs,
+// /kpi/metrics/sectors and /index-funds/tickers, are served by
+// Service.ListKPISectors and Service.ListIndexFundTickers, each scraping
+// its catalog through Monid rather than embedding one.
+var notImplementedPaths = []string{}
 
 // restRoutes builds the full REST route table, ported route-for-route from
 // src/monid_finance_mcp/rest_api.py, plus every route wired directly onto
@@ -149,6 +139,12 @@ func restRoutes(rt *restAPI) []restRoute {
 		// could silently drift from bankSpecs if a bank were ever added
 		// or removed there. It still makes no Monid call.
 		{http.MethodGet, "/macro/interest-rates/banks", rt.interestRateBanks},
+		{http.MethodGet, "/kpi/metrics/sectors", func(w http.ResponseWriter, r *http.Request, id callerIdentity) {
+			rt.callCapabilityAndRespond(w, r, id, "list_kpi_sectors", map[string]any{}, nil)
+		}},
+		{http.MethodGet, "/index-funds/tickers", func(w http.ResponseWriter, r *http.Request, id callerIdentity) {
+			rt.callCapabilityAndRespond(w, r, id, "list_index_fund_tickers", map[string]any{}, nil)
+		}},
 
 		// ---- Index fund holdings (get_index_fund) ----
 		{http.MethodGet, "/index-funds", rt.indexFunds},

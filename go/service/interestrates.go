@@ -300,10 +300,12 @@ func interestRateHistory(markdown, bank, name string) []bankRate {
 	return out
 }
 
-// monthlySeries samples a decision history at the first of each month in
-// [from, to], which is the shape Financial Datasets publishes. A month
-// before the first decision on the page has no answer and is skipped
-// rather than back-filled with a guess.
+// monthlySeries reports the rate in force at the END of each month in
+// [from, to], stamped with the first of that month, which is what
+// Financial Datasets publishes: their October 2025 point is 3.875, the
+// rate the Fed set on 30 October, not the 4.125 that stood on the 1st. A
+// month earlier than the first decision on the page is skipped rather
+// than back-filled with a guess.
 func monthlySeries(history []bankRate, from, to time.Time) []bankRate {
 	type point struct {
 		day  time.Time
@@ -321,9 +323,10 @@ func monthlySeries(history []bankRate, from, to time.Time) []bankRate {
 
 	var out []bankRate
 	for m := time.Date(from.Year(), from.Month(), 1, 0, 0, 0, 0, time.UTC); !m.After(to); m = m.AddDate(0, 1, 0) {
+		monthEnd := m.AddDate(0, 1, -1)
 		var inForce *bankRate
 		for i := range decisions {
-			if decisions[i].day.After(m) {
+			if decisions[i].day.After(monthEnd) {
 				break
 			}
 			inForce = &decisions[i].rate

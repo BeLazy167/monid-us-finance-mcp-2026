@@ -116,6 +116,18 @@ func (s *Service) GetKPISectors(ctx context.Context, apiKey string, args map[str
 	return s.capability(ctx, apiKey, "get_kpi_sectors", func(c *callCtx) (Result, error) { return c.getKPISectors(args) })
 }
 
+// ListKPISectors returns the industry taxonomy a KPI request can be
+// scoped by, scraped live from the screener provider's own catalog.
+func (s *Service) ListKPISectors(ctx context.Context, apiKey string, args map[string]any) (Result, error) {
+	return s.capability(ctx, apiKey, "list_kpi_sectors", func(c *callCtx) (Result, error) { return c.listKPISectors(args) })
+}
+
+// ListIndexFundTickers returns the exchange-traded funds the upstream
+// universe lists, scraped live.
+func (s *Service) ListIndexFundTickers(ctx context.Context, apiKey string, args map[string]any) (Result, error) {
+	return s.capability(ctx, apiKey, "list_index_fund_tickers", func(c *callCtx) (Result, error) { return c.listIndexFundTickers(args) })
+}
+
 // GetIPOs returns one issuer's S-1 and S-1/A registration statements from
 // the same filings feed get_filings reads (see ipos.go). Distinct from
 // GetIPOCalendar, which is a forward calendar of upcoming offerings.

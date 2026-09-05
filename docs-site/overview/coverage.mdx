@@ -17,16 +17,10 @@ Call any of them over MCP at `/mcp` or `/api`.
 
 ## REST coverage
 
-All 54 Financial Datasets REST paths are registered. 52 return data. Two answer a zero-cost `not_implemented` stub.
+All 54 Financial Datasets REST paths are registered, and every one of them answers from a live source. There are no stubs.
 
 <Tabs>
-  <Tab title="Stubbed, 2 routes">
-    Registered for interface parity. Both answer HTTP 200 with a `not_implemented` body, make no Monid call, and cost nothing.
-
-    `/kpi/metrics/sectors` — sector is not a dimension the shared ticker catalog carries, so there is nothing honest to enumerate. Financial Datasets returns its own curated 77-slug KPI taxonomy here, which is theirs, not a public list.
-
-    `/index-funds/tickers` — `get_index_fund` resolves holdings by live web search per ticker. Publishing the search-ranking hint list as a coverage catalog would overstate what this server supports.
-  </Tab>
+  
   <Tab title="As-reported, 4 routes">
     `/financials/as-reported`, `/financials/income-statements/as-reported`, `/financials/balance-sheets/as-reported` and `/financials/cash-flow-statements/as-reported` read the rendered statement files EDGAR generates from a filing's own XBRL presentation linkbase, so the `line_items` tree is the filing's hierarchy.
 

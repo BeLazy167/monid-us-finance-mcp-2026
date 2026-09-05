@@ -52,12 +52,15 @@ func TestMonthlySeries(t *testing.T) {
 	to := time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC)
 	got := monthlySeries(history, from, to)
 
+	// The rate in force at the END of each month, stamped with its first,
+	// which is the convention Financial Datasets publishes on.
 	want := []struct {
 		date string
 		rate float64
 	}{
-		{"2025-11-01", 3.875}, // after the October decision
-		{"2025-12-01", 3.875}, // the December cut lands on the 11th
+		{"2025-10-01", 3.875}, // the 30 October cut lands inside October
+		{"2025-11-01", 3.875},
+		{"2025-12-01", 3.625}, // the 11 December cut lands inside December
 		{"2026-01-01", 3.625},
 		{"2026-02-01", 3.625},
 	}
