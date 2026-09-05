@@ -147,5 +147,7 @@ func (c *callCtx) getInstitutionalInvestors(args map[string]any) (Result, error)
 	for i, inv := range investors {
 		out[i] = inv
 	}
-	return Result{Value: out, WrapperKey: "investors", Paginate: true}, nil
+	// Financial Datasets answers this route whole, with no continuation,
+	// measured live 2026-09-05.
+	return Result{Value: out, WrapperKey: "investors", Paginate: false}, nil
 }
