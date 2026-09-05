@@ -1284,7 +1284,12 @@ func cursorOffset(cursor string) (int, error) {
 // inbound request's own scheme and host (never a configured upstream base
 // URL), so pagination always points back at this deployment.
 func nextPageURL(r *http.Request, cursor string) string {
-	values := url.Values{"cursor": {cursor}}
+	// The cursor carries an offset, not the query behind it, so the link
+	// has to carry the caller's own parameters forward. Emitting
+	// "?cursor=..." alone dropped the ticker, and a client that followed
+	// the link this server had just handed it got "ticker is required".
+	values := r.URL.Query()
+	values.Set("cursor", cursor)
 	return requestBaseURL(r) + r.URL.Path + "?" + values.Encode()
 }
 
