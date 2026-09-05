@@ -1,37 +1,39 @@
-# Fly configuration for the Monid-backed Financial Datasets-compatible API.
-app = "monid-finance-api"
-primary_region = "iad"
+# fly.toml app configuration file generated for monid-finance-api-vivid-moon-3657 on 2026-09-04T20:50:34-05:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'monid-finance-api-vivid-moon-3657'
+primary_region = 'iad'
 
 [build]
-  dockerfile = "Dockerfile"
+  dockerfile = 'Dockerfile'
 
 [env]
-  PORT = "8080"
-  STATIC_DIR = "/app/website"
-  ALLOWLIST_PATH = "/app/docs/monid_finance_discovery.json"
-  RATE_LIMIT_PER_MINUTE = "60"
+  ALLOWLIST_PATH = '/app/docs/monid_finance_discovery.json'
+  PORT = '8080'
+  RATE_LIMIT_PER_MINUTE = '60'
+  STATIC_DIR = '/app/website'
 
 [http_service]
   internal_port = 8080
   force_https = true
-  # Callers supply their own Monid API key, so there is no shared upstream
-  # budget to protect. Keep one machine warm to avoid cold starts in the demo.
-  auto_stop_machines = "suspend"
+  auto_stop_machines = 'suspend'
   auto_start_machines = true
   min_machines_running = 1
 
   [http_service.concurrency]
-    type = "requests"
+    type = 'requests'
     hard_limit = 250
     soft_limit = 200
 
-[[http_service.checks]]
-  grace_period = "5s"
-  interval = "30s"
-  method = "GET"
-  timeout = "5s"
-  path = "/healthz"
+  [[http_service.checks]]
+    interval = '30s'
+    timeout = '5s'
+    grace_period = '5s'
+    method = 'GET'
+    path = '/healthz'
 
 [[vm]]
-  size = "shared-cpu-1x"
-  memory = "256mb"
+  size = 'shared-cpu-1x'
+  memory = '256mb'

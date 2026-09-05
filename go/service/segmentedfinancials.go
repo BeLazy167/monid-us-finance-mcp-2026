@@ -9,6 +9,7 @@
 package service
 
 import (
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -71,7 +72,7 @@ const segmentInstructions = "Extract the segment information note from this SEC 
 	"filing; leave fields null when the filing does not state them. Report " +
 	"each value exactly as printed and put the table's stated scale in unit " +
 	"(for example \"millions\" or \"thousands\"), or null if the table " +
-	"states none."
+	"states none. Write every period_end as an ISO date, YYYY-MM-DD."
 
 // segmentScale converts a figure from the scale the filing's table states
 // to whole units. Tables in a 10-K almost always print "in millions" or
@@ -92,6 +93,33 @@ func segmentScale(unit any) float64 {
 	default:
 		return 1
 	}
+}
+
+// The whole field is one date, so these are anchored: a month name or
+// abbreviation either side of the day.
+var (
+	segmentDateMonthFirstRE = regexp.MustCompile(`^\s*([A-Za-z]{3,9})\.?\s+(\d{1,2}),?\s+(\d{4})\s*$`)
+	segmentDateDayFirstRE   = regexp.MustCompile(`^\s*(\d{1,2})\s+([A-Za-z]{3,9})\.?,?\s+(\d{4})\s*$`)
+)
+
+// parseSegmentPeriodEnd reads one extracted period_end. The instructions
+// ask for an ISO date, but the extractor copies the filing's own wording
+// often enough to matter: Apple's 10-K prints "September 27, 2025", and
+// reading only ISO dropped every row and failed the whole route.
+func parseSegmentPeriodEnd(text string) *time.Time {
+	if day := parseOptDate(text); day != nil {
+		return day
+	}
+	var iso *string
+	if m := segmentDateMonthFirstRE.FindStringSubmatch(text); m != nil {
+		iso = monthDayYearToISO(m[1], m[2], m[3])
+	} else if m := segmentDateDayFirstRE.FindStringSubmatch(text); m != nil {
+		iso = monthDayYearToISO(m[2], m[1], m[3])
+	}
+	if iso == nil {
+		return nil
+	}
+	return parseOptDate(*iso)
 }
 
 type segmentRow struct {
@@ -151,7 +179,7 @@ func normalizeSegmentedFinancials(data map[string]any, ticker, filingURL string,
 				if !isNumber {
 					continue
 				}
-				day := parseOptDate(periodEnd)
+				day := parseSegmentPeriodEnd(periodEnd)
 				if day == nil {
 					continue
 				}

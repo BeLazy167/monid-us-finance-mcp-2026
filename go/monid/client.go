@@ -161,6 +161,10 @@ func (c *Client) Run(ctx context.Context, provider, endpoint string, input Input
 		// Surfaced as 429 so a client's retry logic fires; a 502 would
 		// read as an outage and stop it.
 		return nil, &RunError{Kind: ErrRateLimited, Message: ErrRateLimited.Error(), Provider: provider, Endpoint: endpoint}
+	case resp.StatusCode == http.StatusGatewayTimeout:
+		// The Monid gateway gave up waiting on the provider. That is a
+		// timeout, not an outage, and a client should read it as one.
+		return nil, &RunError{Kind: ErrTimeout, Message: "monid: the API timed out waiting for the provider", Provider: provider, Endpoint: endpoint}
 	case resp.StatusCode >= 500:
 		return nil, &RunError{Kind: ErrProviderHTTP, Message: fmt.Sprintf("monid: API returned HTTP %d", resp.StatusCode), Provider: provider, Endpoint: endpoint}
 	}

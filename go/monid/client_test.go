@@ -156,6 +156,19 @@ func TestMonidRateLimitIsClassified(t *testing.T) {
 	}
 }
 
+// A 504 from the Monid gateway is a timeout, not an outage: it must map to
+// ErrTimeout (HTTP 504 upstream_timeout), never to a generic 502.
+func TestMonidGatewayTimeoutIsClassified(t *testing.T) {
+	c, _ := newTestClient(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusGatewayTimeout)
+		_, _ = w.Write([]byte(`{"code":504,"message":"upstream timeout"}`))
+	})
+	_, err := c.Run(context.Background(), "context.dev", "/web/extract", Input{})
+	if !errors.Is(err, ErrTimeout) {
+		t.Fatalf("err = %v, want ErrTimeout", err)
+	}
+}
+
 // An endpoint outside the validated discovery artifact must never be called.
 func TestAllowlistBlocksBeforeAnyRequest(t *testing.T) {
 	calls := 0
