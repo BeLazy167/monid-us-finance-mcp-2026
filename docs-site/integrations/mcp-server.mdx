@@ -51,8 +51,10 @@ claude mcp add monid-finance --transport http https://monid-finance-api.fly.dev/
 
 Ask the agent to list its tools, or call one directly, for example: "use monid-finance to get AAPL's latest income statement." A working connection returns the same JSON shape documented in [Quickstart](/overview/quickstart) and in the dataset pages, because REST and MCP share one backend service.
 
-<Accordion title="Why does an MCP tool sometimes return data the REST endpoint does not?">
-  Seven tools, `get_segmented_financials`, `get_kpi_metrics`, `get_kpi_guidance`, `get_kpi_non_gaap`, `get_interest_rates`, `get_index_fund`, `get_institutional_holdings`, plus `list_filing_item_types`, are implemented and callable over MCP but have no matching REST route yet. Their REST paths answer a zero-cost `not_implemented` stub instead. Call the MCP tool directly. See [Coverage](/overview/coverage) for the full breakdown.
+<Accordion title="Can an MCP tool return data its REST route does not?">
+  No. Every tool is reachable both ways, and both transports share one backend service. Two REST paths answer a zero-cost `not_implemented` stub, `/kpi/metrics/sectors` and `/index-funds/tickers`, because neither has an honest catalog to enumerate; no tool sits behind either.
+
+  Defaults do differ where a REST handler fills a value before calling the tool. `period` defaults to `annual` over REST and `ttm` over MCP; `get_filings` defaults `limit` to `10` over REST and `100` over MCP. Pass both explicitly. See [Coverage](/overview/coverage).
 </Accordion>
 
 <Accordion title="Why do MCP errors look different from REST errors?">

@@ -4,9 +4,9 @@ description: "Earnings records composed from SEC filing events, not a separate e
 openapi: "api-reference/openapi.json GET /earnings"
 ---
 
-There is no dedicated earnings dataset behind this route. An earnings record here is composed from SEC filing events, 8-K, 10-Q, and 10-K, matched to the period they report on. Pass `ticker` for one company's recent filings. Omit `ticker` for the real-time feed instead. It returns the most recently filed earnings across covered companies, sourced from the Nasdaq earnings calendar and deduplicated by ticker.
+There is no dedicated earnings dataset behind this route. With a `ticker`, an earnings record is composed from that company's 10-K and 10-Q filing events, matched to the period they report on. Omit `ticker` for the market-wide feed instead. It returns the most recently filed earnings across covered companies, sourced from the Nasdaq earnings calendar and deduplicated by ticker.
 
-The same `report_period` can show up twice if a company files an 8-K earnings announcement and the matching 10-Q lands separately. The 8-K sorts first, since it is usually the earlier of the two filings.
+8-K earnings releases are not composed. A quarter therefore appears once the 10-Q lands, not when the company first announces it.
 
 ## What this answers
 
@@ -25,7 +25,7 @@ The same `report_period` can show up twice if a company files an 8-K earnings an
 
 `ticker` is optional. `limit` is accepted for parameter parity with the underlying `limit` query parameter, but the tool behind this route ignores it and always returns up to 5 records regardless of the value passed. This is a REST-parity quirk, not a REST default mismatch like the ones on the statement routes.
 
-Records only cover 10-K and 10-Q filing events. 8-K earnings releases that have not yet been followed by a matching 10-Q, and the real-time feed's underlying calendar coverage, are narrower than a dedicated earnings-calendar API. A block whose period is missing from the underlying statements matrix is left out of the record rather than filled with an estimate.
+Records only cover 10-K and 10-Q filing events, so coverage is narrower than a dedicated earnings-calendar API: a quarter announced by 8-K but not yet filed on a 10-Q is absent, and the market-wide feed reaches only as far as the Nasdaq calendar does. A block whose period is missing from the underlying statements matrix is left out of the record rather than filled with an estimate.
 
 `filing_datetime` is declared on this record for Financial Datasets-contract parity, but no provider integration in this codebase currently sets it. It is always omitted in practice.
 
