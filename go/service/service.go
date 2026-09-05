@@ -933,7 +933,9 @@ func (c *callCtx) getFinancialMetrics(args map[string]any) (Result, error) {
 		return Result{}, err
 	}
 
-	identityMap, err := buildFilingIdentityMap(filingsRun, filingsErr, parsed.ticker, parsed.period != "quarterly")
+	// A ttm row closes on a quarter end, so it is joined against the quarterly filings; the annual map holds only 10-Ks, none of which
+	// falls within the ten-day tolerance of a mid-year period.
+	identityMap, err := buildFilingIdentityMap(filingsRun, filingsErr, parsed.ticker, parsed.period == "annual")
 	if err != nil {
 		return Result{}, err
 	}
@@ -955,7 +957,13 @@ func (c *callCtx) getFinancialMetrics(args map[string]any) (Result, error) {
 		}
 		reportDay, hasReportDay := base["report_period"].(string)
 		if identityMap != nil && hasReportDay {
-			if identity, ok := identityMap[reportDay]; ok {
+			// Matched with the same tolerance the statements routes use,
+			// not by exact string. The statements feed rounds a period to
+			// month end (2025-09-30) while the filing states the fiscal
+			// close (2025-09-27), so an exact lookup missed every row and
+			// left every metrics record with no filing to point at.
+			reportTime, timeErr := time.Parse(dateLayout, reportDay)
+			if identity := lookupFilingIdentity(identityMap, reportTime); timeErr == nil && identity != nil {
 				if identity.AccessionNumber != nil {
 					base["accession_number"] = *identity.AccessionNumber
 				}
@@ -981,12 +989,6 @@ func (c *callCtx) getFinancialMetrics(args map[string]any) (Result, error) {
 			if filingDay == nil || !parsed.filing.matches(*filingDay) {
 				continue
 			}
-		}
-		if parsed.period == "ttm" {
-			delete(base, "accession_number")
-			delete(base, "form_type")
-			delete(base, "filing_url")
-			delete(base, "filing_date")
 		}
 		bases = append(bases, base)
 	}
