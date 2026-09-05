@@ -71,8 +71,14 @@ var kpiMetricsInstructions = kpiInstructions("operational key performance indica
 	"FFO per share, CET1 ratio, DAUs, or ARPU")
 
 // kpiGuidanceInstructions mirrors kpi.KPI_GUIDANCE_INSTRUCTIONS.
-var kpiGuidanceInstructions = kpiInstructions("forward guidance, such as a guided revenue range, margin range, or " +
-	"EPS outlook; period is the forward fiscal period that is being guided")
+// Guidance is every forward-looking amount the company commits to, not
+// only a guided range. Measured 2026-09-05, the narrower wording returned
+// nothing for Apple, which issues no revenue or EPS outlook but declares a
+// dividend in the same release; this wording returns that dividend, which
+// is the row Financial Datasets reports.
+var kpiGuidanceInstructions = kpiInstructions("forward-looking amount the company commits to or guides, including a " +
+	"declared dividend per share, an announced share repurchase authorisation, and any guided revenue, margin or " +
+	"EPS range; period is the period the amount applies to")
 
 // kpiNonGAAPInstructions mirrors kpi.KPI_NONGAAP_INSTRUCTIONS.
 var kpiNonGAAPInstructions = kpiInstructions("non-GAAP adjusted financial metrics, such as adjusted EPS, adjusted " +

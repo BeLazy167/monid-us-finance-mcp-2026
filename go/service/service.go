@@ -2163,19 +2163,15 @@ func (c *callCtx) getKPIGuidance(args map[string]any) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	data, filingURL, found, inRange, err := c.kpiFiling(parsed, kpiGuidanceExtractSchema(), kpiGuidanceInstructions)
+	// The dividend declaration and the non-GAAP reconciliation live in
+	// the earnings release filed as an exhibit to an 8-K, never in the
+	// 10-Q this used to read.
+	data, filingURL, found, err := c.kpiFromEarningsReleases(parsed, kpiGuidanceExtractSchema(), kpiGuidanceInstructions)
 	if err != nil {
 		return Result{}, err
 	}
 	if !found {
-		wanted := "10-Q"
-		if parsed.period == "annual" {
-			wanted = "10-K"
-		}
-		return Result{Value: fd.NewErrorResponse("not_found", "No "+wanted+" filing exists for ticker "+parsed.ticker+".")}, nil
-	}
-	if !inRange {
-		return Result{Value: []any{}, WrapperKey: "kpi_guidance", Paginate: true}, nil
+		return Result{Value: fd.NewErrorResponse("not_found", "No earnings release exists for ticker "+parsed.ticker+".")}, nil
 	}
 	records, err := normalizeKPIGuidance(data, parsed.ticker, filingURL, &parsed.period, parsed.metricName)
 	if err != nil {
@@ -2196,19 +2192,15 @@ func (c *callCtx) getKPINonGAAP(args map[string]any) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	data, filingURL, found, inRange, err := c.kpiFiling(parsed, kpiNonGAAPExtractSchema(), kpiNonGAAPInstructions)
+	// The dividend declaration and the non-GAAP reconciliation live in
+	// the earnings release filed as an exhibit to an 8-K, never in the
+	// 10-Q this used to read.
+	data, filingURL, found, err := c.kpiFromEarningsReleases(parsed, kpiNonGAAPExtractSchema(), kpiNonGAAPInstructions)
 	if err != nil {
 		return Result{}, err
 	}
 	if !found {
-		wanted := "10-Q"
-		if parsed.period == "annual" {
-			wanted = "10-K"
-		}
-		return Result{Value: fd.NewErrorResponse("not_found", "No "+wanted+" filing exists for ticker "+parsed.ticker+".")}, nil
-	}
-	if !inRange {
-		return Result{Value: []any{}, WrapperKey: "kpi_non_gaap", Paginate: true}, nil
+		return Result{Value: fd.NewErrorResponse("not_found", "No earnings release exists for ticker "+parsed.ticker+".")}, nil
 	}
 	records, err := normalizeKPINonGAAP(data, parsed.ticker, filingURL, &parsed.period, parsed.metricName)
 	if err != nil {
