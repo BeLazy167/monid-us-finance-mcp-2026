@@ -703,7 +703,7 @@ func TestBuildFilingItemsResponseMatchesFDShape(t *testing.T) {
 	// accession_number, filing_url and the items, with quarter present
 	// and null for a 10-K. This server sends the same set.
 	assertExactKeys(t, asMap, "resource", "ticker", "cik", "filing_type", "accession_number",
-		"year", "quarter", "filing_url", "items")
+		"year", "filing_url", "items")
 	if asMap["resource"] != "filing_items" {
 		t.Errorf("resource = %v, want filing_items", asMap["resource"])
 	}
@@ -716,8 +716,8 @@ func TestBuildFilingItemsResponseMatchesFDShape(t *testing.T) {
 	if asMap["accession_number"] != "0000320193-25-000079" {
 		t.Errorf("accession_number = %v", asMap["accession_number"])
 	}
-	if asMap["quarter"] != nil {
-		t.Errorf("quarter = %v, want null for a 10-K", asMap["quarter"])
+	if _, present := asMap["quarter"]; present {
+		t.Errorf("quarter must be absent for a 10-K, got %v", asMap["quarter"])
 	}
 	itemsOut, ok := asMap["items"].([]any)
 	if !ok || len(itemsOut) != 1 {

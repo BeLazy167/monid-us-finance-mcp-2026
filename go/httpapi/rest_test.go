@@ -1213,8 +1213,10 @@ func TestCoverageTickers_ShapeAndCapabilitySurface(t *testing.T) {
 			if body["resource"] != "some_resource" {
 				t.Fatalf("resource = %#v, want some_resource", body["resource"])
 			}
-			if body["total"] != float64(5) {
-				t.Fatalf("total = %#v, want 5", body["total"])
+			// Financial Datasets sends {resource, tickers} on these
+			// routes, measured live 2026-09-05, and nothing else.
+			if _, present := body["total"]; present {
+				t.Fatalf("total must not reach a coverage list: %#v", body)
 			}
 			tickers, ok := body["tickers"].([]any)
 			if !ok || len(tickers) != 5 {
@@ -1249,63 +1251,34 @@ func TestCoverageTickers_LimitCursorPagination(t *testing.T) {
 	caller.capabilityResult["list_company_facts_tickers"] = coverageFakeResult("company_facts")
 	rt := newTestRouter(caller, nil)
 
+	// Financial Datasets answers these routes with {resource, tickers}
+	// and no continuation, measured live 2026-09-05: limit is the whole
+	// pagination story, and its maximum reaches the entire universe.
 	rec := doGet(t, rt, "/company/facts/tickers?limit=2", map[string]string{apiKeyHeader: testAPIKey})
 	if rec.Code != http.StatusOK {
-		t.Fatalf("page 1 status = %d, want 200: %s", rec.Code, rec.Body.String())
+		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
 	}
 	body := decodeBody(t, rec)
 	page1, _ := body["tickers"].([]any)
 	if len(page1) != 2 || page1[0] != "AAPL" || page1[1] != "GOOG" {
-		t.Fatalf("page 1 tickers = %#v, want [AAPL GOOG]", body["tickers"])
+		t.Fatalf("tickers = %#v, want [AAPL GOOG]", body["tickers"])
 	}
-	if body["total"] != float64(5) {
-		t.Fatalf("page 1 total = %#v, want 5 (full universe, independent of limit)", body["total"])
+	if _, present := body["next_page_url"]; present {
+		t.Fatalf("a coverage list must advertise no continuation: %#v", body)
 	}
-	nextURL, ok := body["next_page_url"].(string)
-	if !ok || nextURL == "" {
-		t.Fatalf("page 1 missing next_page_url: %#v", body["next_page_url"])
+	if _, present := body["total"]; present {
+		t.Fatalf("a coverage list must not report a total: %#v", body)
 	}
 
-	req2 := httptest.NewRequest(http.MethodGet, nextURL, nil)
-	req2.Header.Set(apiKeyHeader, testAPIKey)
-	rec2 := httptest.NewRecorder()
-	rt.ServeHTTP(rec2, req2)
-	body2 := decodeBody(t, rec2)
-	page2, _ := body2["tickers"].([]any)
+	// A cursor a caller still holds keeps working, so nothing that was
+	// paging before is stranded mid-way.
+	offset := doGet(t, rt, "/company/facts/tickers?limit=2&cursor="+encodeCursor(2),
+		map[string]string{apiKeyHeader: testAPIKey})
+	page2, _ := decodeBody(t, offset)["tickers"].([]any)
 	if len(page2) != 2 || page2[0] != "MSFT" || page2[1] != "NVDA" {
-		t.Fatalf("page 2 tickers = %#v, want [MSFT NVDA]", body2["tickers"])
-	}
-	if body2["total"] != float64(5) {
-		t.Fatalf("page 2 total = %#v, want 5", body2["total"])
-	}
-	nextURL2, ok := body2["next_page_url"].(string)
-	if !ok || nextURL2 == "" {
-		t.Fatalf("page 2 missing next_page_url: %#v", body2["next_page_url"])
-	}
-
-	req3 := httptest.NewRequest(http.MethodGet, nextURL2, nil)
-	req3.Header.Set(apiKeyHeader, testAPIKey)
-	rec3 := httptest.NewRecorder()
-	rt.ServeHTTP(rec3, req3)
-	body3 := decodeBody(t, rec3)
-	page3, _ := body3["tickers"].([]any)
-	if len(page3) != 1 || page3[0] != "TSLA" {
-		t.Fatalf("page 3 tickers = %#v, want [TSLA]", body3["tickers"])
-	}
-	if _, has := body3["next_page_url"]; has {
-		t.Fatalf("page 3 unexpectedly has next_page_url: %#v", body3["next_page_url"])
-	}
-
-	// Every page shares one capability call: the underlying capability
-	// only ever fetches the full universe once per REST request, and
-	// each page re-requests it with the identical args (limit=max),
-	// which the shared TTL cache upstream would collapse to one Monid
-	// fetch across all three pages.
-	if len(caller.capabilityCalls) != 3 {
-		t.Fatalf("expected 3 capability calls (one per REST page request), got %d", len(caller.capabilityCalls))
+		t.Fatalf("cursor page = %#v, want [MSFT NVDA]", page2)
 	}
 }
-
 func TestCoverageTickers_LimitValidation(t *testing.T) {
 	for _, tc := range []struct {
 		name  string

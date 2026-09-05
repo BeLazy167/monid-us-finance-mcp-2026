@@ -199,7 +199,6 @@ func (c *callCtx) listFilingTypes(args map[string]any) (Result, error) {
 		types[i] = t
 	}
 	out := newOrderedJSONObject()
-	out.set("resource", "filing_types")
 	out.set("filing_types", types)
 	return Result{Value: out}, nil
 }

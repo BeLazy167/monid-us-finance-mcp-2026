@@ -1106,7 +1106,7 @@ type FilingItemsResponse struct {
 	FilingType      string          `json:"filing_type"`
 	AccessionNumber *string         `json:"accession_number"`
 	Year            int             `json:"year"`
-	Quarter         *int            `json:"quarter"`
+	Quarter         *int            `json:"quarter,omitempty"`
 	FilingURL       string          `json:"filing_url"`
 	Items           []fd.FilingItem `json:"items"`
 }

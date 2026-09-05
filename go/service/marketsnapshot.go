@@ -62,7 +62,7 @@ type marketMoverRow struct {
 // record. Snapshots is not omitempty: a market with no movers must answer
 // an empty list, never a missing key.
 type marketSnapshot struct {
-	DataAsOf  *string          `json:"data_as_of,omitempty"`
+	DataAsOf  *string          `json:"-"`
 	Snapshots []marketMoverRow `json:"snapshots"`
 }
 

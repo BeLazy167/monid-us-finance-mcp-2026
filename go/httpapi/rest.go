@@ -1117,24 +1117,11 @@ func (rt *restAPI) coverageRoute(capability string) routeHandler {
 		for i, t := range body.Tickers {
 			tickers[i] = t
 		}
-		page, hasMore := paginateValue(tickers, offset, limit)
-		out := map[string]any{
+		page, _ := paginateValue(tickers, offset, limit)
+		writeJSON(w, http.StatusOK, map[string]any{
 			"resource": body.Resource,
-			"total":    body.Total,
 			"tickers":  page,
-		}
-		if hasMore {
-			// Unlike nextPageURL (used by every other paginated route,
-			// where the REST page size is a fixed per-resource constant -
-			// see pageSizeFor), a coverage list's page size IS its own
-			// `limit` query parameter, so the continuation link must
-			// carry `limit` forward too: dropping it would silently
-			// reset the caller's page size back to coverageDefaultLimit
-			// on every follow-up request.
-			values := url.Values{"cursor": {encodeCursor(offset + limit)}, "limit": {strconv.Itoa(limit)}}
-			out["next_page_url"] = requestBaseURL(r) + r.URL.Path + "?" + values.Encode()
-		}
-		writeJSON(w, http.StatusOK, out)
+		})
 	}
 }
 

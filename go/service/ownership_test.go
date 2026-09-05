@@ -494,8 +494,10 @@ func TestGetMarketSnapshot_ParsesRowsAndKeepsAsOf(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	body := jsonRoundTrip(t, result.Value)
-	if body["data_as_of"] != "Sep 4, 2026 2:18 PM ET" {
-		t.Fatalf("expected data_as_of carried through, got %#v", body["data_as_of"])
+	// Financial Datasets sends only the snapshots on this route, measured
+	// live 2026-09-05, so the feed's as-of label is parsed but not emitted.
+	if _, present := body["data_as_of"]; present {
+		t.Fatalf("data_as_of must not reach the response: %#v", body)
 	}
 	rows, ok := body["snapshots"].([]any)
 	if !ok || len(rows) != 2 {
