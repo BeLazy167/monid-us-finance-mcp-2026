@@ -2,7 +2,7 @@
 
 This is the Mintlify-based documentation site for Monid Finance MCP. It replaces the hand-rolled static site in `../website/` with a modern docs UI: left nav, right-hand table of contents, code tabs, cards, and an API playground generated from the OpenAPI spec.
 
-`../website/` is still the live, deployed docs site (`https://monid-us-finance-mcp-2026.vercel.app`). Do not delete or modify it until this Mintlify site has replaced it in production.
+This site is live at https://ripfinancialdatasets.mintlify.app, rebuilt by Mintlify on every push to `main`. It replaced the hand-written pages that used to live in `../website/`; that folder now holds only the root page and the head-to-head comparison, served by the Go binary.
 
 ## Structure
 
@@ -83,7 +83,7 @@ Note: the Mintlify CLI does not run on Node 25+. If your default Node is newer, 
 1. Create a Mintlify account at [mintlify.com](https://mintlify.com), a human needs to do this, see below.
 2. Install the Mintlify GitHub app on this repository and point it at `docs-site/` as the docs root.
 3. Push to `main`. Mintlify builds and deploys automatically on every push that touches `docs-site/**`.
-4. Once the new site is live and verified, point the production docs domain (`monid-us-finance-mcp-2026.vercel.app`, or a new custom domain) at the Mintlify deployment, and only then retire `../website/`.
+4. Done: the Mintlify site is the documentation, and the old static pages are removed.
 
 **Alternative, CLI deploy**, if the Mintlify CLI's `deploy` command is available on your plan:
 

@@ -42,7 +42,7 @@ docker: ## build the distroless image locally (needs a running Docker daemon)
 
 deploy: ## deploy to Fly.io, building remotely; first run creates the app
 	@command -v flyctl >/dev/null || { echo "install flyctl: https://fly.io/docs/flyctl/install/"; exit 1; }
-	@flyctl apps list 2>/dev/null | grep -q "^$(APP)" || flyctl launch --name $(APP) --copy-config --no-deploy --yes
+	@flyctl status -a $(APP) >/dev/null 2>&1 || flyctl launch --name $(APP) --copy-config --no-deploy --yes
 	flyctl deploy --remote-only -a $(APP) --build-arg VERSION=$(VERSION)
 	@$(MAKE) --no-print-directory verify
 

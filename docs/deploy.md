@@ -38,7 +38,7 @@ external CLI) to install.
 fly secrets set \
   API_KEYS="key1,key2" \
   DEMO_MONID_API_KEY="monid_live_..." \
-  CORS_ALLOWED_ORIGINS="https://your-project.vercel.app"
+  CORS_ALLOWED_ORIGINS="https://your-own-frontend.example"
 ```
 
 - `API_KEYS`: optional comma-separated restriction on which caller-supplied
@@ -82,21 +82,14 @@ curl -s -X POST https://monid-finance-api.fly.dev/mcp \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"curl","version":"0"}}}'
 ```
 
-## Vercel (static site)
+## Static pages
 
-Deploys `website/` only, with no build step. `vercel.json` (repo root) sets
-`outputDirectory: "website"` and `buildCommand: ""`.
+`website/` holds two files and is served by the Go binary itself from
+`STATIC_DIR`: the root page and the head-to-head comparison at `/kill.html`,
+with its dataset. There is no separate static host and no build step.
 
-```bash
-cd /path/to/repo/root   # vercel.json must be at the project root
-vercel                  # first run: link/create the project, do NOT let it
-                         # auto-detect a framework or build command
-vercel --prod            # or: vercel deploy --prod
-```
-
-Once the Vercel domain is known, set it as `CORS_ALLOWED_ORIGINS` on the
-Fly app (step 2 above) so browser calls from the marketing site to the API
-are allowed, and re-run `fly deploy` or `fly secrets set` to apply it.
+Documentation lives at https://ripfinancialdatasets.mintlify.app, built by
+Mintlify from `docs-site/` on every push to `main`.
 
 ## Local equivalents
 
