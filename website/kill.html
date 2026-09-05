@@ -490,6 +490,7 @@ function filters(){
 
 const hops=t=>!t.length?'<span style="color:var(--dim);font-size:13px">answered locally</span>'
   :`<span class="hop">${t.map((s,i)=>`${i?ARROW:''}<span class="${s.cached?'c':''}" title="${esc(s.endpoint)}${s.run_id?' · '+esc(s.run_id):''}">${esc(s.provider)}${s.cached?' cached':''}</span>`).join('')}</span>`;
+const count=n=>n===0?'empty list':n+(n===1?' record':' records');
 const recs=v=>v==null?'<span class="sep">·</span>':v===0?'<span class="z">0</span>':String(v);
 
 function rows(group){
@@ -562,8 +563,8 @@ function gaps(){
   if(!rows.length){$('#gaps').remove();return}
   $('#gaps').innerHTML=`<div class="h">Route</div><div class="h">Ours</div><div class="h">Financial Datasets</div>`+
     rows.map(r=>`<div class="k"><span class="route">${esc(r.path)}</span></div>
-      <div class="v ${r.ours.records>0?'us':''}">${r.ours.records} ${r.ours.records===1?'record':'records'}</div>
-      <div class="v b ${r.fd.records>0?'them':''}">${r.fd.records===0?'empty list':r.fd.records+' records'}</div>`).join('');
+      <div class="v ${r.ours.records>0?'us':''}">${count(r.ours.records)}</div>
+      <div class="v b ${r.fd.records>0?'them':''}">${count(r.fd.records)}</div>`).join('');
 }
 
 /* One authored moment: the lanes run when the verdict arrives. */
