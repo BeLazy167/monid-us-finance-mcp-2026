@@ -31,3 +31,5 @@ receipts/private/
 .vercel
 receipts/
 bin/
+
+__pycache__/

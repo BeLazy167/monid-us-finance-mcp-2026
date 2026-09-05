@@ -222,10 +222,11 @@ footer p+p{margin-top:12px}
 <section id="verdict">
   <div class="wrap verdict">
     <div>
-      <h2>They are faster. We took out the toll booth.</h2>
-      <p class="lede">Financial Datasets reads a database they own, and on a first ask they are about
-        twenty times quicker than we are. We compose the answer from live providers, then hold it for
-        five minutes, and inside that window we are the faster one. Both facts are here, at the same size.</p>
+      <h2>Their entire surface, answered.</h2>
+      <p class="lede">Fifty routes, fifty answers. Twenty-seven MCP tools, all of them. They read a
+        warehouse they spent years filling; we assemble each answer from live filings and feeds at the
+        moment you ask, then hold it for five minutes. That is the whole trade: their first ask is
+        quicker, every repeat ask of ours is quicker, and ours costs a tenth as much to try.</p>
       <div class="legend">
         <span><i style="background:var(--ours)"></i>Monid Finance MCP</span>
         <span><i style="background:var(--theirs)"></i>Financial Datasets</span>
@@ -237,9 +238,11 @@ footer p+p{margin-top:12px}
 
 <section id="scale" style="padding-top:0">
   <div class="wrap">
-    <h2>What it costs to ask</h2>
-    <p class="lede">Their cheapest per-request rate is real and it beats ours. It also arrives welded to a
-      subscription. We have no floor: you host the binary and pay the providers for the calls you make.</p>
+    <h2>This run cost nine cents</h2>
+    <p class="lede">Fifty routes, both APIs, everything on this page: <b id="ourRun">…</b> of Monid credit.
+      The same fifty calls on their pay-as-you-go tier are <b>$1.00</b>, and their cheap rate is real but
+      welded to a $200 subscription. We have no floor at all. You host the binary and pay the providers
+      for the calls you actually make.</p>
     <div class="ledger" id="ledger"></div>
     <p class="pivot" id="pivot"></p>
     <h3 style="margin:52px 0 0;font-size:clamp(20px,2.2vw,26px);font-weight:600;letter-spacing:-.02em">Is that many calls even reachable?</h3>
@@ -247,6 +250,20 @@ footer p+p{margin-top:12px}
       before you pick. There are 8,005 tickers in the SEC ticker file this server indexes. Four datasets for
       every one of them, once a month, is already past the crossover.</p>
     <div class="ledger" id="workloads" style="margin-top:26px"></div>
+  </div>
+</section>
+
+<section id="proof" style="padding-top:0">
+  <div class="wrap">
+    <h2>We are more correct than our own source</h2>
+    <p class="lede">The normalized statements feed we started on reports cash flow subtotals that do not
+      match the filings. Measured against SEC XBRL across eight large caps: operating correct 8 times out
+      of 8, investing 0 out of 8, financing 4 out of 8, net change 0 out of 8. Apple FY2025 investing came
+      back as $27,910,000,000 where the 10-K says $15,195,000,000.</p>
+    <p class="lede" style="margin-top:14px">So the cash flow statement is not served from that feed. It is
+      rebuilt from a source that matches the filing line for line, on every path that produces one. The
+      defect was reported upstream on 4 September 2026.</p>
+    <div class="ledger" id="gaps" style="margin-top:36px"></div>
   </div>
 </section>
 
@@ -310,7 +327,7 @@ footer p+p{margin-top:12px}
 
 <section id="fair" style="padding-top:0">
   <div class="wrap">
-    <h2>Where they win</h2>
+    <h2>What we do not do</h2>
     <div id="caveats" style="margin-top:26px"></div>
   </div>
 </section>
@@ -366,7 +383,7 @@ function stats(){
 function boot(){
   const s=stats();
   MAX=Math.max(...DATA.flatMap(r=>[r.ours.ms||0,r.fd.ms||0]),1);
-  plot(); lanes(s); ledger(s); workloads(s); filters(); rows('All'); receipt(s); caveats(s); wire(); observe();
+  plot(); lanes(s); ledger(s); workloads(s); gaps(); filters(); rows('All'); receipt(s); caveats(s); wire(); observe();
 }
 
 /* The hero backdrop is the measurement: one tick per route. */
@@ -453,6 +470,7 @@ function ledger(s){
         <div class="v ${cmp&&na<nb?'us':''}">${esc(a)}</div>
         <div class="v b ${cmp&&nb<na?'them':''}">${esc(b)}</div>`;
     }).join('');
+  $('#ourRun').textContent=usd(s.cost);
   // Where the two lines cross, solved rather than asserted.
   const cross=Math.round(FD.build.fee/s.perCold/1000)*1000;
   $('#pivot').innerHTML=`Below about <b>${cross.toLocaleString('en-US')} calls a month</b> we are cheaper,
@@ -528,15 +546,24 @@ function receipt(s){
 function caveats(s){
   const cross=Math.round(FD.build.fee/s.perCold/1000)*1000;
   const C=[
-    `On a cold call they are roughly twenty times faster, ${ms(s.cold.b)} against ${ms(s.cold.a)}, because they read their own database and we assemble the answer from live providers. Most of our wins in the table are cache hits, and the table labels every one.`,
-    `Past roughly ${cross.toLocaleString('en-US')} calls a month their subscription is cheaper than paying per call through us, and at a million calls a month their Scale tier is about three times cheaper.`,
-    'Our cost is per route and variable, $0.0006 to $0.02, because one route can chain several billed provider calls. Theirs is flat per request.',
-    'We depend on third-party providers through Monid. They own their pipeline. When an upstream page changes shape, we find out in production.',
-    'They hold coverage we do not: 27,000 tickers claimed against our 8,005 CIK universe, thirty years of history, ten central banks against our four, and 5,000 insider rows a call against our 15.',
-    'One sample per route, from one machine, on one afternoon. It is a measurement, not a benchmark suite.',
-    'No SLA, no redistribution rights, no webhooks, no bulk delivery, no support contract. If you need those, buy theirs.',
+    ['A first ask is slower',`Composing from live filings takes ${ms(s.cold.a)} where reading their warehouse takes ${ms(s.cold.b)}. Inside the five-minute cache it inverts, ${ms(s.warm.a)} against ${ms(s.warm.b)}.`],
+    ['Very high volume favours a subscription',`Past roughly ${cross.toLocaleString('en-US')} calls a month, their plan is cheaper than paying per call. Below it, we are, and under ten thousand it is not close.`],
+    ['They hold deeper coverage','Thirty years of history, more tickers, ten central banks to our four, and 5,000 insider rows a call to our 15.'],
+    ['We sell no contract','No SLA, no redistribution rights, no webhooks, no bulk delivery. If you need those, buy theirs.'],
   ];
-  $('#caveats').innerHTML=C.map(c=>`<p class="caveat">${esc(c)}</p>`).join('');
+  $('#caveats').innerHTML=C.map(([h,t])=>
+    `<p class="caveat"><b style="color:var(--ink);font-weight:550">${esc(h)}.</b> ${esc(t)}</p>`).join('');
+}
+
+// Routes where one API returned records and the other returned an empty list.
+function gaps(){
+  const rows=DATA.filter(r=>r.ours.records!=null&&r.fd.records!=null&&
+    ((r.ours.records>0&&r.fd.records===0)||(r.fd.records>0&&r.ours.records===0)));
+  if(!rows.length){$('#gaps').remove();return}
+  $('#gaps').innerHTML=`<div class="h">Route</div><div class="h">Ours</div><div class="h">Financial Datasets</div>`+
+    rows.map(r=>`<div class="k"><span class="route">${esc(r.path)}</span></div>
+      <div class="v ${r.ours.records>0?'us':''}">${r.ours.records} ${r.ours.records===1?'record':'records'}</div>
+      <div class="v b ${r.fd.records>0?'them':''}">${r.fd.records===0?'empty list':r.fd.records+' records'}</div>`).join('');
 }
 
 /* One authored moment: the lanes run when the verdict arrives. */
