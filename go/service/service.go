@@ -1028,16 +1028,105 @@ func (c *callCtx) getFinancialMetricsSnapshot(args map[string]any) (Result, erro
 	if err != nil {
 		return Result{}, err
 	}
-	run, err := c.run(defillama, summaryEndpoint, nil, map[string]any{"ticker": symbol, "country": "US"})
+	var summaryRun *monid.Run
+	var summaryErr error
+	var trailing map[string]any
+	var trailingErr error
+	concurrent2(
+		func() {
+			summaryRun, summaryErr = c.run(defillama, summaryEndpoint, nil,
+				map[string]any{"ticker": symbol, "country": "US"})
+		},
+		func() { trailing, trailingErr = c.trailingMetricsFields(symbol) },
+	)
+	if summaryErr != nil {
+		return Result{}, summaryErr
+	}
+	// A statements failure fails the whole snapshot. Answering with the
+	// ten fields the summary alone provides would be indistinguishable
+	// from a complete snapshot whose other thirty were genuinely absent.
+	if trailingErr != nil {
+		return Result{}, trailingErr
+	}
+	summary, err := providers.ParseSummary(summaryRun.Output)
 	if err != nil {
 		return Result{}, err
 	}
-	summary, err := providers.ParseSummary(run.Output)
+
+	// The summary feed carries a live quote and the handful of multiples
+	// priced off it, and nothing else: ten fields against the forty-one
+	// Financial Datasets answers with. The rest are the trailing metrics
+	// row, so a snapshot is that row restated against the live price.
+	// Measured 2026-09-05, an agent asked for Apple's EV/EBITDA read this
+	// route, found no such field and estimated one from raw statements
+	// instead.
+	merged := map[string]any{}
+	for key, value := range trailing {
+		merged[key] = value
+	}
+	live, err := json.Marshal(providers.BuildFinancialMetricSnapshot(symbol, summary))
 	if err != nil {
 		return Result{}, err
 	}
-	snapshot := providers.BuildFinancialMetricSnapshot(symbol, summary)
-	return Result{Value: map[string]any{"snapshot": snapshot}}, nil
+	var liveFields map[string]any
+	if err := json.Unmarshal(live, &liveFields); err != nil {
+		return Result{}, err
+	}
+	// The live values win: a snapshot states the company as the market
+	// prices it now, not as its last filing period closed.
+	for key, value := range liveFields {
+		merged[key] = value
+	}
+	merged["currency"] = "USD"
+	return Result{Value: map[string]any{"snapshot": orderMetricsRecord(merged)}}, nil
+}
+
+// snapshotOmitted are the metrics-row fields a snapshot does not carry.
+// A snapshot has no reporting period of its own, so it names neither the
+// period nor the filing the period came from.
+var snapshotOmitted = map[string]bool{
+	"report_period": true, "period": true, "fiscal_period": true,
+	"accession_number": true, "form_type": true, "filing_url": true,
+	"filing_date": true, "filing_datetime": true,
+}
+
+// trailingMetricsFields returns one trailing-twelve-month metrics row as
+// a map, less the fields that belong to a reporting period rather than to
+// the company. It is the body a snapshot is built from.
+func (c *callCtx) trailingMetricsFields(symbol string) (map[string]any, error) {
+	run, err := c.run(defillama, statementsEndpoint, nil,
+		map[string]any{"ticker": symbol, "country": "US"})
+	if err != nil {
+		return nil, err
+	}
+	value, err := unmarshalRun(run)
+	if err != nil {
+		return nil, err
+	}
+	data, err := providers.NormalizeFinancialMetrics(
+		value, symbol, providers.MetricsPeriod("ttm"), 1, providers.MetricsFilters{})
+	if err != nil {
+		return nil, err
+	}
+	if len(data.Records) == 0 {
+		return map[string]any{}, nil
+	}
+	raw, err := json.Marshal(data.Records[0])
+	if err != nil {
+		return nil, err
+	}
+	var base map[string]any
+	if err := json.Unmarshal(raw, &base); err != nil {
+		return nil, err
+	}
+	rows := c.withValuation(symbol, "ttm", value, []map[string]any{base})
+	out := make(map[string]any, len(rows[0]))
+	for key, field := range rows[0] {
+		if !snapshotOmitted[key] {
+			out[key] = field
+		}
+	}
+	return out, nil
 }
 
 // --- get_filings ---
