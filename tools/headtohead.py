@@ -91,6 +91,16 @@ MATRIX = [
     ("Screener", "/financials/search/screener/filters", ""),
     ("IPOs", "/ipos", "ticker=RDDT&limit=2"),
     ("Metrics", "/financial-metrics/snapshot/tickers", "limit=5"),
+    ("Prices", "/prices/snapshot/tickers", "limit=5"),
+    ("Filings", "/filings/items/requests/does-not-exist", ""),
+]
+
+# The two routes Financial Datasets defines as POST.
+POST_MATRIX = [
+    ("Screener", "/financials/search/screener",
+     {"filters": [{"field": "market_cap", "operator": "eq", "value": 3000000000000}], "limit": 2}),
+    ("Line items", "/financials/search/line-items",
+     {"tickers": ["AAPL"], "line_items": ["revenue", "net_income"], "period": "annual", "limit": 2}),
 ]
 
 
@@ -113,6 +123,42 @@ def fetch(url, headers, timeout=TIMEOUT):
         return e.code, body, norm(e.headers), time.perf_counter() - started
     except Exception as e:  # network-level failure
         return 0, json.dumps({"error": str(e)[:200]}).encode(), {}, time.perf_counter() - started
+
+
+def post(url, headers, payload, timeout=TIMEOUT):
+    """One HTTP POST. Returns (status, body_bytes, lowercased headers, seconds)."""
+    headers = dict(headers, **{"User-Agent": USER_AGENT, "Content-Type": "application/json"})
+    req = urllib.request.Request(url, headers=headers, data=json.dumps(payload).encode(), method="POST")
+    started = time.perf_counter()
+    norm = lambda m: {k.lower(): v for k, v in m.items()}
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return r.status, r.read(), norm(r.headers), time.perf_counter() - started
+    except urllib.error.HTTPError as e:
+        return e.code, e.read(), norm(e.headers), time.perf_counter() - started
+    except Exception as e:
+        return 0, json.dumps({"error": str(e)[:200]}).encode(), {}, time.perf_counter() - started
+
+
+def verdict(row):
+    """A blunt grade per route, so a 200 with an empty body cannot pass as working."""
+    o, f = row["ours"], row["fd"]
+    if o["status"] != 200:
+        return "OURS_FAILS"
+    if f["status"] != 200:
+        return "THEIRS_FAILS"
+    if o["key"] and f["key"] and o["key"] != f["key"]:
+        return "SHAPE_DIFFERS"
+    on, fn = o["records"], f["records"]
+    if on is None and fn is None:
+        return "BOTH_OBJECT"
+    if (on or 0) > 0 and (fn or 0) > 0:
+        return "BOTH_DATA"
+    if (on or 0) > 0 and (fn or 0) == 0:
+        return "ONLY_OURS"
+    if (on or 0) == 0 and (fn or 0) > 0:
+        return "ONLY_THEIRS"
+    return "BOTH_EMPTY"
 
 
 def envelope_count(body):
@@ -190,6 +236,50 @@ def main():
         )
         with open(out_path, "w") as f:
             json.dump(rows, f)
+
+    for i, (group, path, payload) in enumerate(POST_MATRIX, 1):
+        ours_status, ours_body, ours_headers, ours_secs = post(
+            f"{OURS}{path}", {"X-API-KEY": monid_key, "X-Monid-Trace": "1"}, payload)
+        trace = []
+        try:
+            trace = json.loads(ours_headers.get("x-monid-trace") or "[]")
+        except Exception:
+            trace = []
+        try:
+            ours_cost = float(ours_headers.get("x-monid-cost-usd") or 0)
+        except ValueError:
+            ours_cost = 0.0
+        time.sleep(PAUSE_SECONDS)
+        fd_status, fd_body, _, fd_secs = post(f"{FD}{path}", {"X-API-KEY": fd_key}, payload)
+        time.sleep(PAUSE_SECONDS)
+        ours_key, ours_n = envelope_count(ours_body)
+        fd_key_name, fd_n = envelope_count(fd_body)
+        rows.append({
+            "group": group, "path": path, "query": json.dumps(payload), "method": "POST",
+            "ours": {"status": ours_status, "ms": round(ours_secs * 1000), "bytes": len(ours_body),
+                     "key": ours_key, "records": ours_n, "cost_usd": ours_cost, "trace": trace,
+                     "body": ours_body[:4000].decode("utf-8", "replace")},
+            "fd": {"status": fd_status, "ms": round(fd_secs * 1000), "bytes": len(fd_body),
+                   "key": fd_key_name, "records": fd_n, "body": fd_body[:4000].decode("utf-8", "replace")},
+        })
+        print(f"POST {path:46} ours {ours_status} | fd {fd_status}", flush=True)
+        with open(out_path, "w") as f:
+            json.dump(rows, f)
+
+    for r in rows:
+        r["verdict"] = verdict(r)
+    with open(out_path, "w") as f:
+        json.dump(rows, f)
+
+    from collections import Counter
+    tally = Counter(r["verdict"] for r in rows)
+    print("\n=== verdicts ===")
+    for k, v in tally.most_common():
+        print(f"  {k:14} {v}")
+    for bad in ("OURS_FAILS", "ONLY_THEIRS", "SHAPE_DIFFERS", "BOTH_EMPTY"):
+        for r in rows:
+            if r["verdict"] == bad:
+                print(f"  {bad}: {r['path']}  ours={r['ours']['status']}/{r['ours']['records']} theirs={r['fd']['status']}/{r['fd']['records']}")
 
     ok = lambda side: sum(1 for r in rows if r[side]["status"] == 200)
     total_cost = sum(r["ours"]["cost_usd"] for r in rows)

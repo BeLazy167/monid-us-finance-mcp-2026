@@ -120,6 +120,20 @@ type beneficialOwnershipRow struct {
 	ShareChangePercent               *float64 `json:"share_change_percent,omitempty"`
 }
 
+// edgarFormFor maps the type filter onto the EDGAR form it selects.
+func edgarFormFor(typeArg *string) string {
+	if typeArg == nil {
+		return ""
+	}
+	switch *typeArg {
+	case "activist":
+		return "SC 13D"
+	case "passive":
+		return "SC 13G"
+	}
+	return ""
+}
+
 // fetchBeneficialFeeds runs /get_13d_filings and /get_13g_filings
 // concurrently and returns each feed's rows.
 func (c *callCtx) fetchBeneficialFeeds() (dRows, gRows []map[string]any, err error) {
@@ -238,9 +252,25 @@ func (c *callCtx) getBeneficialOwnership(args map[string]any) (Result, error) {
 		}
 	}
 
-	var rows []beneficialOwnershipRow
-	rows = append(rows, buildBeneficialOwnershipRows(dRows, "SCHEDULE 13D", "activist", symbol, filerCIK, filingDate)...)
-	rows = append(rows, buildBeneficialOwnershipRows(gRows, "SCHEDULE 13G", "passive", symbol, filerCIK, filingDate)...)
+	// Two paths to the same fact. The SECForm4 feed is one short rolling
+	// window across all issuers, which most tickers are absent from, so a
+	// ticker query falls through to that issuer's own Schedule 13 index at
+	// EDGAR rather than answering an empty list.
+	rows, err := firstNonEmpty(
+		func() ([]beneficialOwnershipRow, error) {
+			feed := buildBeneficialOwnershipRows(dRows, "SCHEDULE 13D", "activist", symbol, filerCIK, filingDate)
+			return append(feed, buildBeneficialOwnershipRows(gRows, "SCHEDULE 13G", "passive", symbol, filerCIK, filingDate)...), nil
+		},
+		func() ([]beneficialOwnershipRow, error) {
+			if symbol == "" {
+				return nil, nil
+			}
+			return c.beneficialFromEDGAR(symbol, edgarFormFor(typeArg), limit)
+		},
+	)
+	if err != nil {
+		return Result{}, err
+	}
 	sort.SliceStable(rows, func(i, j int) bool {
 		return beneficialRowDate(rows[i]) > beneficialRowDate(rows[j])
 	})

@@ -748,7 +748,12 @@ func (rt *restAPI) institutionalHoldings(w http.ResponseWriter, r *http.Request,
 	putQueryString(args, q, "report_period")
 	putQueryString(args, q, "report_period_gte")
 	putQueryString(args, q, "report_period_lte")
-	rt.callAndRespond(w, r, id, "get_institutional_holdings", args, nil)
+	// Financial Datasets echoes the issuer alongside the holdings.
+	var extra map[string]any
+	if ticker := q.Get("ticker"); ticker != "" {
+		extra = map[string]any{"ticker": strings.ToUpper(ticker)}
+	}
+	rt.callAndRespond(w, r, id, "get_institutional_holdings", args, extra)
 }
 
 // ---- Ownership state (get_insider_ownership / get_beneficial_ownership) ----
@@ -863,7 +868,8 @@ func (rt *restAPI) institutionalInvestors(w http.ResponseWriter, r *http.Request
 	// lookup (see go/service/institutionalinvestors.go). An omitted
 	// ticker reaches the tool's own bad_request, which explains why.
 	putQueryString(args, q, "ticker")
-	rt.callAndRespond(w, r, id, "get_institutional_investors", args, nil)
+	rt.callAndRespond(w, r, id, "get_institutional_investors", args,
+		map[string]any{"resource": "institutional_holdings"})
 }
 
 // ---- SEC registration statements (get_ipos) ----

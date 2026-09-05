@@ -358,8 +358,21 @@ type ScreenerFilterField struct {
 // ScreenerFiltersCatalog is the executable filter catalog for the
 // validated Nasdaq screener route, mirroring fd.screener_filters_response.
 type ScreenerFiltersCatalog struct {
-	Metrics   map[string][]ScreenerFilterField `json:"metrics"`
-	Operators []string                         `json:"operators"`
+	Metrics map[string][]ScreenerFilterField `json:"metrics"`
+	// Aliases maps a friendly filter name onto its canonical one. This
+	// server defines none, but the key is part of the contract and a
+	// client that reads it must not find it missing.
+	Aliases map[string]string `json:"aliases"`
+	// CompanyFilters describes the non-numeric fields a screen accepts.
+	CompanyFilters ScreenerCompanyFilters `json:"company_filters"`
+	Operators      []string               `json:"operators"`
+}
+
+// ScreenerCompanyFilters lists the company-level fields a screen can
+// filter on, and the operators they accept.
+type ScreenerCompanyFilters struct {
+	Fields    []string `json:"fields"`
+	Operators []string `json:"operators"`
 }
 
 // ScreenerFilters returns the static filter catalog for screen_stocks,
@@ -377,6 +390,13 @@ func ScreenerFilters() ScreenerFiltersCatalog {
 				{Field: "exchange", Operators: []string{"eq"}, Values: exchanges},
 				{Field: "market_cap", Operators: []string{"eq"}, Values: caps},
 			},
+		},
+		// This server defines no aliases; the key ships empty rather than
+		// absent so a client reading it finds the shape it expects.
+		Aliases: map[string]string{},
+		CompanyFilters: ScreenerCompanyFilters{
+			Fields:    []string{"exchange"},
+			Operators: []string{"eq"},
 		},
 		Operators: []string{"eq"},
 	}

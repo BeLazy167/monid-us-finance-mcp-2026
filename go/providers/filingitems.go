@@ -1102,10 +1102,12 @@ func FilingItemRecord(number, name, text string) fd.FilingItem {
 type FilingItemsResponse struct {
 	Resource        string          `json:"resource"`
 	Ticker          string          `json:"ticker"`
+	CIK             *string         `json:"cik,omitempty"`
 	FilingType      string          `json:"filing_type"`
 	AccessionNumber *string         `json:"accession_number"`
 	Year            int             `json:"year"`
 	Quarter         *int            `json:"quarter"`
+	FilingURL       string          `json:"filing_url"`
 	Items           []fd.FilingItem `json:"items"`
 }
 
@@ -1119,17 +1121,20 @@ func BuildFilingItemsResponse(
 	year int,
 	quarter *int,
 	items []fd.FilingItem,
+	cik *string,
 ) FilingItemsResponse {
 	if items == nil {
 		items = []fd.FilingItem{}
 	}
 	return FilingItemsResponse{
-		Resource:        resource,
+		Resource:        "filing_items",
 		Ticker:          ticker,
+		CIK:             cik,
 		FilingType:      filingType,
 		AccessionNumber: accessionNumber,
 		Year:            year,
 		Quarter:         quarter,
+		FilingURL:       resource,
 		Items:           items,
 	}
 }

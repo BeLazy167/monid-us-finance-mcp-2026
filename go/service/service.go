@@ -1790,7 +1790,11 @@ func (c *callCtx) getFilingItems(args map[string]any) (Result, error) {
 		q := ((int(reportDay.Month()) - 1) / 3) + 1
 		quarterPtr = &q
 	}
-	response := providers.BuildFilingItemsResponse(sourceURL, symbol, selected.Form, accessionPtr, reportDay.Year(), quarterPtr, items)
+	var cikPtr *string
+	if cik, found, cerr := c.resolveIssuerCIK(symbol); cerr == nil && found && cik != "" {
+		cikPtr = &cik
+	}
+	response := providers.BuildFilingItemsResponse(sourceURL, symbol, selected.Form, accessionPtr, reportDay.Year(), quarterPtr, items, cikPtr)
 	return Result{Value: response}, nil
 }
 

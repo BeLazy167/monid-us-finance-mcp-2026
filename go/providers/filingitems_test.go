@@ -688,7 +688,7 @@ func TestFilingItemRecordMatchesFDShape(t *testing.T) {
 func TestBuildFilingItemsResponseMatchesFDShape(t *testing.T) {
 	items := []fd.FilingItem{FilingItemRecord("Item-1A", "Risk Factors", "Demand, competition, ...")}
 	response := BuildFilingItemsResponse(
-		secURL1, "AAPL", "10-K", ptrString("0000320193-25-000079"), 2025, nil, items,
+		secURL1, "AAPL", "10-K", ptrString("0000320193-25-000079"), 2025, nil, items, ptrString("0000320193"),
 	)
 	raw, err := json.Marshal(response)
 	if err != nil {
@@ -698,10 +698,18 @@ func TestBuildFilingItemsResponseMatchesFDShape(t *testing.T) {
 	if err := json.Unmarshal(raw, &asMap); err != nil {
 		t.Fatalf("json.Unmarshal error: %v", err)
 	}
-	// Matches test_get_filing_items_matches_fd_response_shape's
-	// set(response) assertion exactly: no "cik" key, "quarter" present and
-	// null for a 10-K.
-	assertExactKeys(t, asMap, "resource", "ticker", "filing_type", "accession_number", "year", "quarter", "items")
+	// Measured against the live Financial Datasets response on
+	// 2026-09-05: they send resource, ticker, cik, filing_type,
+	// accession_number, filing_url and the items, with quarter present
+	// and null for a 10-K. This server sends the same set.
+	assertExactKeys(t, asMap, "resource", "ticker", "cik", "filing_type", "accession_number",
+		"year", "quarter", "filing_url", "items")
+	if asMap["resource"] != "filing_items" {
+		t.Errorf("resource = %v, want filing_items", asMap["resource"])
+	}
+	if asMap["filing_url"] != secURL1 {
+		t.Errorf("filing_url = %v, want the filing's own URL", asMap["filing_url"])
+	}
 	if asMap["ticker"] != "AAPL" || asMap["filing_type"] != "10-K" {
 		t.Errorf("unexpected response: %+v", asMap)
 	}
@@ -723,7 +731,7 @@ func TestBuildFilingItemsResponseMatchesFDShape(t *testing.T) {
 }
 
 func TestBuildFilingItemsResponseTenQHasIntegerQuarter(t *testing.T) {
-	response := BuildFilingItemsResponse(secURL2, "AAPL", "10-Q", nil, 2025, ptrInt(1), nil)
+	response := BuildFilingItemsResponse(secURL2, "AAPL", "10-Q", nil, 2025, ptrInt(1), nil, nil)
 	raw, _ := json.Marshal(response)
 	var asMap map[string]any
 	_ = json.Unmarshal(raw, &asMap)
