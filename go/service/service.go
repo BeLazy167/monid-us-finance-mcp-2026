@@ -61,6 +61,31 @@ const (
 var annualForms = map[string]bool{"10-K": true, "20-F": true}
 var quarterlyForms = map[string]bool{"10-Q": true, "6-K": true}
 
+// identityForms are the filings a period of this kind can be joined to.
+// A trailing-twelve-month period closes wherever its newest quarter
+// closed, and a company files a 10-Q for three quarters of the year and
+// an annual report for the fourth, so a ttm row matches against both.
+// Against the quarterly forms alone every fiscal-year-end period joined
+// to nothing: Microsoft closes its year on 30 June, and its newest
+// trailing row named no filing at all.
+func identityForms(period string) map[string]bool {
+	switch period {
+	case "annual":
+		return annualForms
+	case "quarterly":
+		return quarterlyForms
+	default:
+		both := make(map[string]bool, len(annualForms)+len(quarterlyForms))
+		for form := range annualForms {
+			both[form] = true
+		}
+		for form := range quarterlyForms {
+			both[form] = true
+		}
+		return both
+	}
+}
+
 // Config configures a Service. HTTP is a shared *http.Client so its
 // connection pool pools across every caller's Monid client (clients
 // themselves are cheap - see Service.Call). Ledger nil disables receipt
@@ -519,7 +544,7 @@ func (c *callCtx) statementResponse(statement string, args map[string]any) (Resu
 	if err != nil {
 		return Result{}, err
 	}
-	identityMap, err := buildFilingIdentityMap(filingsRun, filingsErr, parsed.ticker, parsed.period != "quarterly")
+	identityMap, err := buildFilingIdentityMap(filingsRun, filingsErr, parsed.ticker, identityForms(parsed.period))
 	if err != nil {
 		return Result{}, err
 	}
@@ -655,17 +680,15 @@ func applyFilingFilters(rows []providers.PeriodRow, identityMap map[string]Filin
 // return None`. A parse failure of a successful run's payload
 // (providers.NormalizeFilings returning an error) propagates, matching
 // Python's normalize_filings call sitting outside that try/except.
-func buildFilingIdentityMap(filingsRun *monid.Run, filingsErr error, ticker string, annual bool) (map[string]FilingIdentity, error) {
+func buildFilingIdentityMap(
+	filingsRun *monid.Run, filingsErr error, ticker string, forms map[string]bool,
+) (map[string]FilingIdentity, error) {
 	if filingsErr != nil {
 		return nil, nil
 	}
 	filings, err := providers.NormalizeFilings(filingsRun.Output, ticker, nil, 10_000, nil, nil)
 	if err != nil {
 		return nil, err
-	}
-	forms := quarterlyForms
-	if annual {
-		forms = annualForms
 	}
 	type candidate struct {
 		filingDate string
@@ -935,7 +958,7 @@ func (c *callCtx) getFinancialMetrics(args map[string]any) (Result, error) {
 
 	// A ttm row closes on a quarter end, so it is joined against the quarterly filings; the annual map holds only 10-Ks, none of which
 	// falls within the ten-day tolerance of a mid-year period.
-	identityMap, err := buildFilingIdentityMap(filingsRun, filingsErr, parsed.ticker, parsed.period == "annual")
+	identityMap, err := buildFilingIdentityMap(filingsRun, filingsErr, parsed.ticker, identityForms(parsed.period))
 	if err != nil {
 		return Result{}, err
 	}

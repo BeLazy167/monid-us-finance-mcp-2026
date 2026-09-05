@@ -63,3 +63,22 @@ func TestListInsiderNames_TickerRequired(t *testing.T) {
 		t.Fatalf("a rejected request cost %d provider calls, want 0", len(transport.calls))
 	}
 }
+
+// TestIdentityForms_TrailingMatchesBothFamilies pins that a trailing
+// period can join to either kind of filing. A company files a 10-Q for
+// three quarters and an annual report for the fourth, so against the
+// quarterly forms alone every fiscal-year-end period named no filing.
+func TestIdentityForms_TrailingMatchesBothFamilies(t *testing.T) {
+	trailing := identityForms("ttm")
+	for _, form := range []string{"10-K", "20-F", "10-Q", "6-K"} {
+		if !trailing[form] {
+			t.Fatalf("a trailing period cannot join to a %s", form)
+		}
+	}
+	if annual := identityForms("annual"); annual["10-Q"] {
+		t.Fatal("an annual period joined to a quarterly filing")
+	}
+	if quarterly := identityForms("quarterly"); quarterly["10-K"] {
+		t.Fatal("a quarterly period joined to an annual filing")
+	}
+}

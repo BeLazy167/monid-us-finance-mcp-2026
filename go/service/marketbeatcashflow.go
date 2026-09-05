@@ -302,7 +302,7 @@ func (c *callCtx) marketbeatCashFlowResponse(parsed statementArgs) (Result, erro
 	if cashErr != nil {
 		return Result{}, cashErr
 	}
-	identityMap, err := buildFilingIdentityMap(filingsRun, filingsErr, parsed.ticker, parsed.period != "quarterly")
+	identityMap, err := buildFilingIdentityMap(filingsRun, filingsErr, parsed.ticker, identityForms(parsed.period))
 	if err != nil {
 		return Result{}, err
 	}

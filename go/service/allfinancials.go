@@ -56,7 +56,7 @@ func (c *callCtx) getAllFinancials(args map[string]any) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	identityMap, err := buildFilingIdentityMap(filingsRun, filingsErr, parsed.ticker, parsed.period != "quarterly")
+	identityMap, err := buildFilingIdentityMap(filingsRun, filingsErr, parsed.ticker, identityForms(parsed.period))
 	if err != nil {
 		return Result{}, err
 	}
