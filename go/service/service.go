@@ -342,7 +342,13 @@ var ttmFlowIncome = providers.NewLabelSet(
 )
 var ttmMeanIncome = providers.NewLabelSet("Shares Outstanding (Basic)", "Shares Outstanding (Diluted)")
 var ttmFlowCash = providers.NewLabelSet(
-	"Net Income", "Depreciation and Amortization", "Cash Flow from Operating Activities",
+	"Net Income", "Depreciation and Amortization",
+	// DefiLlama files depreciation as a child of operating activities and
+	// never as a top-level "Depreciation and Amortization" line, so
+	// without this label a trailing row carries no depreciation and EBITDA
+	// cannot be derived at all.
+	"Cash Flow from Operating Activities|Depreciation",
+	"Cash Flow from Operating Activities",
 	"Cash Flow from Investing Activities", "Cash Flow from Financing Activities",
 	"Net Cash Flow", "Free Cash Flow", "Cash Flow from Investing Activities|Capital Expenditure",
 	"Cash Flow from Financing Activities|Common Dividends",

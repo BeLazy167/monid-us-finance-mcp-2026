@@ -141,6 +141,7 @@ func inputsFor(income, balance, cash map[string]any, epsGrowth float64) valuatio
 	// trailing-twelve-month row, so it arrived holding a single quarter
 	// and priced Apple at 111 times EBITDA against a true 27.
 	amortisation, hasAmortisation := number(cash,
+		"Cash Flow from Operating Activities|Depreciation",
 		"Depreciation and Amortization", "depreciation_and_amortization")
 	if in.hasEBIT && hasAmortisation {
 		in.EBITDA, in.hasEBITDA = in.EBIT+amortisation, true
