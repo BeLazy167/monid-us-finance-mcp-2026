@@ -852,6 +852,7 @@ var metricsKeyOrder = []string{
 	"filing_url",
 	"filing_date",
 	"filing_datetime",
+	"market_cap",
 	"enterprise_value",
 	"price_to_earnings_ratio",
 	"price_to_book_ratio",
@@ -936,6 +937,7 @@ func (c *callCtx) getFinancialMetrics(args map[string]any) (Result, error) {
 	}
 
 	records := make([]any, 0, len(data.Records))
+	bases := make([]map[string]any, 0, len(data.Records))
 	for _, record := range data.Records {
 		raw, marshalErr := json.Marshal(record)
 		if marshalErr != nil {
@@ -980,6 +982,9 @@ func (c *callCtx) getFinancialMetrics(args map[string]any) (Result, error) {
 			delete(base, "filing_url")
 			delete(base, "filing_date")
 		}
+		bases = append(bases, base)
+	}
+	for _, base := range c.withValuation(parsed.ticker, parsed.period, value, bases) {
 		records = append(records, orderMetricsRecord(base))
 	}
 	return Result{Value: records, WrapperKey: "financial_metrics", Paginate: true}, nil
