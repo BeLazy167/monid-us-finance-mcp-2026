@@ -1188,7 +1188,7 @@ func (c *callCtx) getNews(args map[string]any) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	limit, err := validateLimit(limitRaw, 10)
+	limit, err := acceptLimit(limitRaw, 100, 10)
 	if err != nil {
 		return Result{}, err
 	}
@@ -1515,7 +1515,7 @@ func (c *callCtx) getInsiderTrades(args map[string]any) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	limit, err := validateLimit(limitRaw, 15)
+	limit, err := acceptLimit(limitRaw, 5000, 15)
 	if err != nil {
 		return Result{}, err
 	}

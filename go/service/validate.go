@@ -90,6 +90,22 @@ func validateLimit(value, maximum int) (int, error) {
 	return value, nil
 }
 
+// acceptLimit takes the Financial Datasets ceiling a caller may ask for and
+// the smaller number this server can actually source, and returns what to
+// fetch. limit is a maximum, not a promise: refusing a request for more
+// rows than the upstream feed holds turned a working call into a 400.
+// The ai-hedge-fund client asks /news for 1000 and /insider-trades for
+// 1000; both used to fail here and succeed against Financial Datasets.
+func acceptLimit(value, contractMax, sourceable int) (int, error) {
+	if _, err := validateLimit(value, contractMax); err != nil {
+		return 0, err
+	}
+	if value > sourceable {
+		return sourceable, nil
+	}
+	return value, nil
+}
+
 // validateDate mirrors normalize.validate_date. A nil value returns (nil, nil).
 func validateDate(value *string, name string) (*time.Time, error) {
 	if value == nil {
