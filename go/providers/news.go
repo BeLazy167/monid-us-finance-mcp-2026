@@ -4,6 +4,8 @@ package providers
 
 import (
 	"encoding/json"
+	"net/url"
+	"strings"
 
 	"github.com/belazy/monid-finance/fd"
 )
@@ -31,10 +33,30 @@ func NormalizeNews(raw json.RawMessage, ticker string, limit int) ([]fd.News, er
 		articles = append(articles, fd.News{
 			Ticker: &symbol,
 			Title:  firstStringPtr(record, "title", "headline"),
-			Source: firstStringPtr(record, "source"),
+			Source: newsSource(record, firstStringPtr(record, "url")),
 			Date:   firstStringPtr(record, "published_at", "publishedAt", "date"),
 			URL:    firstStringPtr(record, "url"),
 		})
 	}
 	return articles, nil
+}
+
+// newsSource is the publisher behind an article. The feed rarely states
+// one, and Financial Datasets reports the article's own host, so that is
+// what this falls back to: their source for an acquirersmultiple.com
+// article is "acquirersmultiple.com". A record with neither carries no
+// source rather than a guess.
+func newsSource(record map[string]any, articleURL *string) *string {
+	if stated := firstStringPtr(record, "source", "publisher", "site_name"); stated != nil {
+		return stated
+	}
+	if articleURL == nil {
+		return nil
+	}
+	parsed, err := url.Parse(*articleURL)
+	if err != nil || parsed.Host == "" {
+		return nil
+	}
+	host := strings.TrimPrefix(parsed.Host, "www.")
+	return &host
 }
