@@ -30,7 +30,9 @@ type valuationInputs struct {
 	Equity          float64
 	Debt            float64
 	Cash            float64
+	EBIT            float64
 	EBITDA          float64
+	InterestExpense float64
 	FreeCashFlow    float64
 	EPSGrowth       float64
 	hasShares       bool
@@ -38,7 +40,9 @@ type valuationInputs struct {
 	hasRevenue      bool
 	hasEquity       bool
 	hasFreeCashFlow bool
+	hasEBIT         bool
 	hasEBITDA       bool
+	hasInterest     bool
 }
 
 // The OHLCV normaliser keeps a bar only while earliestDay <= day <=
@@ -127,8 +131,20 @@ func inputsFor(income, balance, cash map[string]any, epsGrowth float64) valuatio
 	in.Revenue, in.hasRevenue = number(income, "Revenue", "revenue")
 	in.Equity, in.hasEquity = number(balance,
 		"Total Shareholders Equity", "Total Equity", "shareholders_equity")
-	in.EBITDA, in.hasEBITDA = number(income, "EBITDA", "ebitda")
 	in.FreeCashFlow, in.hasFreeCashFlow = number(cash, "Free Cash Flow", "free_cash_flow")
+	in.EBIT, in.hasEBIT = number(income, "EBIT", "ebit")
+	in.InterestExpense, in.hasInterest = number(income,
+		"Non-Operating Items|Non-Operating Interest Expense", "interest_expense")
+
+	// EBITDA is built from EBIT and D&A rather than read from the
+	// provider's own EBITDA line. That line is not summed into a
+	// trailing-twelve-month row, so it arrived holding a single quarter
+	// and priced Apple at 111 times EBITDA against a true 27.
+	amortisation, hasAmortisation := number(cash,
+		"Depreciation and Amortization", "depreciation_and_amortization")
+	if in.hasEBIT && hasAmortisation {
+		in.EBITDA, in.hasEBITDA = in.EBIT+amortisation, true
+	}
 
 	shortDebt, _ := number(balance, "Total Current Liabilities|Short-Term Debt", "current_debt")
 	longDebt, _ := number(balance, "Total Non-Current Liabilities|Long-Term Debt", "non_current_debt")
@@ -194,6 +210,21 @@ func valuationFields(price float64, in valuationInputs) map[string]any {
 			set("enterprise_value_to_ebitda_ratio", enterprise/in.EBITDA)
 		}
 	}
+
+	// Financial Datasets states return on invested capital as EBITDA over
+	// invested capital, not the textbook NOPAT over the same base. Their
+	// definition is the one reproduced here because it is the one their
+	// responses carry: measured 2026-09-05 it matched their published
+	// figure to ten decimal places for AAPL, MSFT, NVDA and KO.
+	invested := in.Equity + in.Debt - in.Cash
+	if in.hasEBITDA && in.hasEquity && invested > 0 {
+		set("return_on_invested_capital", in.EBITDA/invested)
+	}
+	// Interest coverage is EBIT over interest expense, and a company that
+	// pays no interest has no coverage ratio rather than an infinite one.
+	if in.hasEBIT && in.hasInterest && in.InterestExpense != 0 {
+		set("interest_coverage", in.EBIT/in.InterestExpense)
+	}
 	return out
 }
 
@@ -214,6 +245,19 @@ func (c *callCtx) withValuation(ticker, period string, statements any, rows []ma
 	if ierr != nil || berr != nil || cerr != nil {
 		return rows
 	}
+	// A ttm row states the business as it stands now, so it is priced at
+	// the latest close rather than at the quarter end its statements were
+	// last built from. Financial Datasets does the same: measured
+	// 2026-09-05 their Apple ttm market cap tracked the current $320
+	// quote, while their 2025 annual row still carried that September's
+	// $254.
+	var newest time.Time
+	for _, day := range days {
+		if day.After(newest) {
+			newest = day
+		}
+	}
+
 	for _, row := range rows {
 		reportPeriod, ok := row["report_period"].(string)
 		if !ok {
@@ -223,7 +267,11 @@ func (c *callCtx) withValuation(ticker, period string, statements any, rows []ma
 		if perr != nil {
 			continue
 		}
-		price, found := closeOnOrBefore(closes, days, asOf)
+		pricedAt := asOf
+		if period == "ttm" {
+			pricedAt = newest
+		}
+		price, found := closeOnOrBefore(closes, days, pricedAt)
 		if !found || price <= 0 {
 			continue
 		}

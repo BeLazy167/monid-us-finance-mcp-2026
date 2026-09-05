@@ -127,3 +127,61 @@ func TestValuationFieldsPriceTheRow(t *testing.T) {
 		t.Fatal("peg_ratio was reported without an earnings growth rate")
 	}
 }
+
+// TestDerivedRatiosMatchFinancialDatasets pins the two formulas whose
+// shape was read off Financial Datasets' own responses rather than a
+// textbook. Both were confirmed against AAPL, MSFT, NVDA and KO on
+// 2026-09-05; Apple's figures are the ones used here.
+func TestDerivedRatiosMatchFinancialDatasets(t *testing.T) {
+	in := valuationInputs{
+		Shares: 14_084_000_000, hasShares: true,
+		EBIT: 155_906_000_000, hasEBIT: true,
+		EBITDA: 169_006_000_000, hasEBITDA: true,
+		Equity: 107_520_000_000, hasEquity: true,
+		Debt: 95_304_000_000,
+		Cash: 39_544_000_000,
+	}
+	got := valuationFields(320.19, in)
+
+	// EBITDA over invested capital, which is equity plus debt less cash.
+	roic, ok := got["return_on_invested_capital"].(float64)
+	if !ok {
+		t.Fatal("return_on_invested_capital is absent")
+	}
+	if diff := roic - 1.0350685938265556; diff > 1e-12 || diff < -1e-12 {
+		t.Fatalf("return_on_invested_capital is %v, want Financial Datasets' 1.0350685938265556", roic)
+	}
+
+	// Apple pays no broken-out interest, so it has no coverage ratio.
+	if _, present := got["interest_coverage"]; present {
+		t.Fatal("interest_coverage was reported without an interest expense")
+	}
+	in.InterestExpense, in.hasInterest = 1_544_000_000, true
+	in.EBIT = 18_688_000_000
+	if coverage, _ := valuationFields(1, in)["interest_coverage"].(float64); coverage != 18_688_000_000.0/1_544_000_000.0 {
+		t.Fatalf("interest_coverage is %v, want EBIT over interest expense", coverage)
+	}
+}
+
+// TestEBITDAIsBuiltFromEBITAndAmortisation proves a trailing row no
+// longer takes the provider's own single-quarter EBITDA line.
+func TestEBITDAIsBuiltFromEBITAndAmortisation(t *testing.T) {
+	income := map[string]any{
+		"EBIT":   155_906_000_000.0,
+		"EBITDA": 39_000_000_000.0, // one quarter, and so not to be used
+	}
+	cash := map[string]any{"Depreciation and Amortization": 13_100_000_000.0}
+
+	in := inputsFor(income, map[string]any{}, cash, 0)
+	if !in.hasEBITDA {
+		t.Fatal("EBITDA was not derived")
+	}
+	if in.EBITDA != 169_006_000_000 {
+		t.Fatalf("EBITDA is %v, want EBIT plus amortisation (169,006,000,000)", in.EBITDA)
+	}
+
+	// With no amortisation there is no EBITDA, rather than a quarter of one.
+	if bare := inputsFor(income, map[string]any{}, map[string]any{}, 0); bare.hasEBITDA {
+		t.Fatalf("EBITDA was reported as %v with no amortisation stated", bare.EBITDA)
+	}
+}
