@@ -234,11 +234,19 @@ func (a callerAdapter) Capability(ctx context.Context, apiKey, name string, args
 // adaptResult copies a go/service.Result field-for-field into
 // httpapi.Result, the one place the two shapes are bridged.
 func adaptResult(result service.Result) httpapi.Result {
-	return httpapi.Result{
+	out := httpapi.Result{
 		Value:      result.Value,
 		WrapperKey: result.WrapperKey,
 		Paginate:   result.Paginate,
 	}
+	for _, step := range result.Trace {
+		out.Trace = append(out.Trace, httpapi.TraceStep{
+			Provider: step.Provider, Endpoint: step.Endpoint, RunID: step.RunID,
+			Status: step.Status, CostUSD: step.CostUSD, Milliseconds: step.Milliseconds,
+			Cached: step.Cached, Error: step.Error,
+		})
+	}
+	return out
 }
 
 // dispatcher satisfies mcpserver.Dispatcher: it extracts the caller's own

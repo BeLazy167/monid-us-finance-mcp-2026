@@ -164,7 +164,11 @@ func (w *cachingResponseWriter) Write(b []byte) (int, error) {
 // routed through this: their handler is registered separately.
 func withCache(cache *responseCache, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
+		// A request asking for provenance must reach the handler: a
+		// replayed body carries no route, and the point of asking is to
+		// see the route. The service-level run cache still spares the
+		// Monid calls, and reports each spared call as a cached step.
+		if r.Method != http.MethodGet || wantsTrace(r) {
 			next(w, r)
 			return
 		}

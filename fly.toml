@@ -1,9 +1,9 @@
-# fly.toml app configuration file generated for monid-finance-api-misty-resonance-1244 on 2026-09-04T20:56:05-05:00
+# fly.toml app configuration file generated for monid-finance-api-lustrous-sound-5643 on 2026-09-04T21:19:35-05:00
 #
 # See https://fly.io/docs/reference/configuration/ for information about how to use this file.
 #
 
-app = 'monid-finance-api-misty-resonance-1244'
+app = 'monid-finance-api-lustrous-sound-5643'
 primary_region = 'iad'
 
 [build]

@@ -109,6 +109,9 @@ type Result struct {
 	// get_interest_rates, get_index_fund - whose response mixes a list with
 	// sibling scalar fields or never paginates).
 	WrapperKey string
+	// Trace lists the Monid runs this call made, in completion order. It
+	// is provenance, never part of a Financial Datasets response body.
+	Trace []TraceStep
 	// Paginate reports whether REST should apply cursor pagination
 	// (fd.Paginate) over Value's slice: true for every tool whose Python
 	// counterpart calls compat.paginate() (the statements, filings, prices,
@@ -128,6 +131,7 @@ type callCtx struct {
 	client *monid.Client
 	svc    *Service
 	tool   string
+	trace  *traceRecorder
 }
 
 // Call runs one FD tool with the caller's own Monid API key: every Monid
@@ -144,7 +148,21 @@ func (s *Service) Call(ctx context.Context, apiKey, tool string, args map[string
 	if args == nil {
 		args = map[string]any{}
 	}
-	return handler(s.newCallCtx(ctx, apiKey, tool), args)
+	c := s.newCallCtx(ctx, apiKey, tool)
+	result, err := handler(c, args)
+	result.Trace = c.trace.snapshot()
+	return result, err
+}
+
+// capability runs one non-tool capability and attaches its trace, the way
+// Call does for the 27 Financial Datasets tools. Every exported
+// capability in capabilities.go goes through here so provenance is
+// recorded on one path rather than twenty.
+func (s *Service) capability(ctx context.Context, apiKey, name string, fn func(*callCtx) (Result, error)) (Result, error) {
+	c := s.newCallCtx(ctx, apiKey, name)
+	result, err := fn(c)
+	result.Trace = c.trace.snapshot()
+	return result, err
 }
 
 // newCallCtx builds one callCtx for apiKey, mirroring the client
@@ -157,7 +175,7 @@ func (s *Service) Call(ctx context.Context, apiKey, tool string, args map[string
 // in go/mcpserver/tool_schemas.json.
 func (s *Service) newCallCtx(ctx context.Context, apiKey, tool string) *callCtx {
 	client := monid.NewClient(apiKey, s.http, s.allowlist, s.maxConcurrentRuns)
-	return &callCtx{ctx: ctx, client: client, svc: s, tool: tool}
+	return &callCtx{ctx: ctx, client: client, svc: s, tool: tool, trace: &traceRecorder{}}
 }
 
 // run executes one Monid call, records a receipt, and serves repeat calls
@@ -165,16 +183,28 @@ func (s *Service) newCallCtx(ctx context.Context, apiKey, tool string) *callCtx 
 // hit performs no run, spends nothing, and writes no ledger row.
 func (c *callCtx) run(provider, endpoint string, body, queryParams map[string]any) (*monid.Run, error) {
 	key := newCacheKey(provider, endpoint, body, queryParams)
+	started := time.Now()
 	if cached, ok := c.svc.cache.Get(key); ok {
+		c.trace.add(TraceStep{Provider: provider, Endpoint: endpoint, RunID: cached.RunID,
+			Status: cached.Status, Milliseconds: elapsedMS(started), Cached: true})
 		return cached, nil
 	}
 	run, err := c.client.Run(c.ctx, provider, endpoint, monid.Input{Body: body, QueryParams: queryParams})
 	if err != nil {
+		c.trace.add(TraceStep{Provider: provider, Endpoint: endpoint,
+			Milliseconds: elapsedMS(started), Error: err.Error()})
 		if c.svc.ledger != nil {
 			_ = c.svc.ledger.RecordFailure(c.tool, provider, endpoint, err, body, queryParams)
 		}
 		return nil, err
 	}
+	step := TraceStep{Provider: provider, Endpoint: endpoint, RunID: run.RunID,
+		Status: run.Status, Milliseconds: elapsedMS(started)}
+	if run.Cost != nil {
+		cost := run.Cost.Value
+		step.CostUSD = &cost
+	}
+	c.trace.add(step)
 	if c.svc.ledger != nil {
 		_ = c.svc.ledger.RecordSuccess(c.tool, run, body, queryParams)
 	}

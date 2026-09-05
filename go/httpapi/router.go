@@ -22,6 +22,22 @@ type Result struct {
 	// Paginate is true when REST should apply cursor pagination to Value
 	// (which must then be a slice). MCP never paginates.
 	Paginate bool
+	// Trace lists the Monid runs the call made. It never enters a
+	// response body; traceHeader emits it only when the request opts in.
+	Trace []TraceStep
+}
+
+// TraceStep mirrors service.TraceStep. httpapi keeps its own copy so it
+// builds independently of go/service, exactly as Result does.
+type TraceStep struct {
+	Provider     string   `json:"provider"`
+	Endpoint     string   `json:"endpoint"`
+	RunID        string   `json:"run_id,omitempty"`
+	Status       string   `json:"status,omitempty"`
+	CostUSD      *float64 `json:"cost_usd,omitempty"`
+	Milliseconds int64    `json:"ms"`
+	Cached       bool     `json:"cached"`
+	Error        string   `json:"error,omitempty"`
 }
 
 // Caller runs one FD tool, or one non-tool capability, with the caller's
@@ -130,6 +146,18 @@ func NewRouter(cfg Config) *Router {
 		mux.HandleFunc(route.path, handler)
 	}
 
+	// Comparison proxy: outside the Financial Datasets parity surface, on
+	// its own /x/ prefix. It carries no Monid key, so requireAuth does not
+	// apply; it is rate limited by client address so it cannot be used as
+	// an open relay.
+	mux.HandleFunc(comparePrefix, withCORS(cors, func(w http.ResponseWriter, r *http.Request) {
+		if !limiter.allow("compare:"+clientAddr(r), rate) {
+			writeFDError(w, http.StatusTooManyRequests, "rate_limited", "Rate limit exceeded. Retry shortly.")
+			return
+		}
+		rt.fdProxy(w, r)
+	}))
+
 	// MCP: mounted verbatim at both paths, in-process, never cached. CORS
 	// applies; rate limiting keys off the caller's presented key (or an
 	// "anonymous" bucket when none is presented — the dispatcher, not this
@@ -223,8 +251,9 @@ func withCORS(cors corsConfig, next http.HandlerFunc) http.HandlerFunc {
 		if origin, ok := cors.originFor(r); ok {
 			h := w.Header()
 			h.Set("Access-Control-Allow-Origin", origin)
-			h.Set("Access-Control-Allow-Headers", "Content-Type, X-API-KEY, Authorization")
+			h.Set("Access-Control-Allow-Headers", "Content-Type, X-API-KEY, Authorization, X-Monid-Trace, X-FD-API-KEY")
 			h.Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+			h.Set("Access-Control-Expose-Headers", "X-Monid-Trace, X-Monid-Cost-USD, X-FD-Elapsed-MS")
 			if r.Method == http.MethodOptions {
 				w.WriteHeader(http.StatusNoContent)
 				return

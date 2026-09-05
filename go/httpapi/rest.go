@@ -15,6 +15,10 @@ import (
 // restAPI holds the dependencies REST handlers need.
 type restAPI struct {
 	caller Caller
+	// compareHTTP serves the Financial Datasets comparison proxy only, so
+	// a slow comparison never competes with a Monid call. Nil means the
+	// default client (see compareClient).
+	compareHTTP *http.Client
 }
 
 // routeHandler answers one REST request for an already-authorized caller.
@@ -1203,6 +1207,7 @@ func (rt *restAPI) callCapabilityAndRespond(
 // WrapperKey is empty, else wrapped under WrapperKey with cursor pagination
 // applied when Paginate is true.
 func respond(w http.ResponseWriter, r *http.Request, result Result, extra map[string]any) {
+	writeTraceHeaders(w, r, result.Trace)
 	if result.WrapperKey == "" {
 		writeJSON(w, http.StatusOK, result.Value)
 		return
