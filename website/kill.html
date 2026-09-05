@@ -90,6 +90,21 @@ section{padding:clamp(72px,10vh,124px) 0}
 .btn.line:hover{border-color:var(--ink)}
 .btn svg{width:15px;height:15px;flex:none}
 
+/* ---------------- the swap ---------------- */
+.swap{border:1px solid var(--line);border-radius:16px;background:var(--raise);overflow:hidden;margin-top:34px}
+.swap .l{display:grid;grid-template-columns:22px 1fr;gap:12px;align-items:center;padding:16px 20px;
+  font-family:var(--mono);font-size:clamp(12.5px,1.5vw,15.5px);white-space:nowrap;overflow-x:auto}
+.swap .l+.l{border-top:1px solid var(--hair)}
+.swap .s{color:var(--dim);text-align:center}
+.swap .old{color:var(--dim);text-decoration:line-through;text-decoration-color:var(--accent);
+  text-decoration-thickness:2px}
+.swap .new{color:var(--ours)}
+.swap .foot{padding:16px 20px;border-top:1px solid var(--hair);font-size:14px;color:var(--dim)}
+.swap .foot b{color:var(--ink);font-weight:550}
+.mcpline{margin-top:18px;font-family:var(--mono);font-size:12.5px;color:var(--dim);
+  border:1px dashed var(--line);border-radius:12px;padding:14px 16px;overflow-x:auto;white-space:nowrap}
+.mcpline b{color:var(--ink);font-weight:400}
+
 /* ---------------- verdict ---------------- */
 .verdict{display:grid;grid-template-columns:minmax(0,1.02fr) minmax(0,1fr);gap:clamp(36px,6vw,80px);align-items:start}
 .lane+.lane{margin-top:32px}
@@ -239,6 +254,23 @@ footer p+p{margin-top:12px}
     </div>
   </div>
 </header>
+
+<section id="swap" style="padding-bottom:0">
+  <div class="wrap">
+    <h2>Change one line. That is the migration.</h2>
+    <p class="lede">Same paths, same query parameters, same response shapes, same field order, same
+      twenty-seven tool names. Point your client at a different host, send a Monid key instead of theirs,
+      and every call you already wrote keeps working.</p>
+    <div class="swap">
+      <div class="l"><span class="s">−</span><span class="old">https://api.financialdatasets.ai/financials/income-statements?ticker=AAPL</span></div>
+      <div class="l"><span class="s">+</span><span class="new">https://monid-finance-api.fly.dev/financials/income-statements?ticker=AAPL</span></div>
+      <div class="foot"><b>X-API-KEY:</b> your own Monid key. There is no account here, no seat, no
+        dashboard and no subscription. Usage bills your Monid wallet and the key is never stored or logged.</div>
+    </div>
+    <div class="mcpline">For an agent, the whole integration is one line:<br>
+      <b>claude mcp add --transport http monid-finance https://monid-finance-api.fly.dev/mcp --header "X-API-KEY: &lt;your-monid-key&gt;"</b></div>
+  </div>
+</section>
 
 <section id="verdict">
   <div class="wrap verdict">
