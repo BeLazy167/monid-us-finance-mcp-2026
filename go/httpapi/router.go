@@ -102,7 +102,25 @@ type Router struct {
 	mux *http.ServeMux
 }
 
-func (rt *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) { rt.mux.ServeHTTP(w, r) }
+// ServeHTTP normalises a trailing slash before dispatch. Financial
+// Datasets answers /prices/ and /prices alike, and real clients written
+// against them use the slashed form throughout: the ai-hedge-fund client
+// calls /prices/, /financial-metrics/, /news/, /insider-trades/ and
+// /earnings/. Go's mux treats those as different patterns, so every one
+// of them used to 404 here while the same call worked there.
+func (rt *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if path := r.URL.Path; len(path) > 1 && strings.HasSuffix(path, "/") {
+		trimmed := *r.URL
+		trimmed.Path = strings.TrimRight(path, "/")
+		if trimmed.Path == "" {
+			trimmed.Path = "/"
+		}
+		normalised := *r
+		normalised.URL = &trimmed
+		r = &normalised
+	}
+	rt.mux.ServeHTTP(w, r)
+}
 
 // NewRouter builds the Router from cfg.
 func NewRouter(cfg Config) *Router {

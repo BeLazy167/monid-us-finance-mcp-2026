@@ -31,77 +31,12 @@ TIMEOUT = 120
 # request is 200 with a browser agent and 403 with "Python-urllib/3.13".
 USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) monid-headtohead/1.0"
 
-TICKER = "AAPL"
-# A fixed, recent window so both sides answer the same question.
-PRICE_START, PRICE_END = "2026-08-24", "2026-09-02"
+# The route table lives in parity.py so the benchmark and the parity
+# checker cannot disagree about which routes exist.
+from parity import GET_ROUTES as _GET, POST_ROUTES as _POST  # noqa: E402
 
-# Every path the spec registers, with parameters chosen so the call is
-# answerable. Grouped for the page's own sections.
-MATRIX = [
-    ("Financial statements", "/financials/income-statements", f"ticker={TICKER}&period=annual&limit=2"),
-    ("Financial statements", "/financials/balance-sheets", f"ticker={TICKER}&period=annual&limit=2"),
-    ("Financial statements", "/financials/cash-flow-statements", f"ticker={TICKER}&period=annual&limit=2"),
-    ("Financial statements", "/financials", f"ticker={TICKER}&period=annual&limit=1"),
-    ("Financial statements", "/financials/as-reported", f"ticker={TICKER}&period=annual&limit=1"),
-    ("Financial statements", "/financials/income-statements/as-reported", f"ticker={TICKER}&period=annual&limit=1"),
-    ("Financial statements", "/financials/balance-sheets/as-reported", f"ticker={TICKER}&period=annual&limit=1"),
-    ("Financial statements", "/financials/cash-flow-statements/as-reported", f"ticker={TICKER}&period=annual&limit=1"),
-    ("Segments", "/financials/segments", f"ticker={TICKER}&period=annual&limit=1"),
-    ("Segments", "/financials/income-statements/segments", f"ticker={TICKER}&period=annual&limit=1"),
-    ("Segments", "/financials/balance-sheets/segments", f"ticker={TICKER}&period=annual&limit=1"),
-    ("Segments", "/financials/cash-flow-statements/segments", f"ticker={TICKER}&period=annual&limit=1"),
-    ("Metrics", "/financial-metrics", f"ticker={TICKER}&period=annual&limit=2"),
-    ("Metrics", "/financial-metrics/snapshot", f"ticker={TICKER}"),
-    ("Prices", "/prices", f"ticker={TICKER}&interval=day&interval_multiplier=1&start_date={PRICE_START}&end_date={PRICE_END}"),
-    ("Prices", "/prices/snapshot", f"ticker={TICKER}"),
-    ("Prices", "/prices/snapshot/market", ""),
-    ("Prices", "/prices/tickers", "limit=5"),
-    ("Company", "/company/facts", f"ticker={TICKER}"),
-    ("Company", "/company/facts/tickers", "limit=5"),
-    ("Company", "/company/facts/ciks", "limit=5"),
-    ("Filings", "/filings", f"ticker={TICKER}&limit=3"),
-    ("Filings", "/filings/types", "limit=5"),
-    ("Filings", "/filings/tickers", "limit=5"),
-    ("Filings", "/filings/ciks", "limit=5"),
-    # Financial Datasets accepts only the hyphenated item form; ours takes
-    # either, so the shared call uses theirs.
-    ("Filings", "/filings/items", f"ticker={TICKER}&filing_type=10-K&year=2025&item=Item-1"),
-    ("Filings", "/filings/items/types", ""),
-    ("Earnings", "/earnings", f"ticker={TICKER}"),
-    ("Earnings", "/earnings/tickers", "limit=5"),
-    ("News", "/news", f"ticker={TICKER}&limit=3"),
-    ("Ownership", "/insider-trades", f"ticker={TICKER}&limit=3"),
-    ("Ownership", "/insider-ownership", f"ticker={TICKER}&limit=3"),
-    ("Ownership", "/beneficial-ownership", f"ticker={TICKER}&limit=3"),
-    ("Ownership", "/activist-ownership", f"ticker={TICKER}&limit=3"),
-    ("Ownership", "/institutional-holdings", f"ticker={TICKER}&limit=3"),
-    ("Ownership", "/institutional-holdings/investors", f"ticker={TICKER}&limit=3"),
-    ("Ownership", "/institutional-holdings/tickers", "limit=5"),
-    ("KPI", "/kpi/metrics", f"ticker={TICKER}&period=quarterly&limit=1"),
-    ("KPI", "/kpi/guidance", f"ticker={TICKER}&period=quarterly&limit=1"),
-    ("KPI", "/kpi/non-gaap", f"ticker={TICKER}&period=quarterly&limit=1"),
-    ("KPI", "/kpi/metrics/tickers", "limit=5"),
-    ("KPI", "/kpi/metrics/sectors", ""),
-    # Financial Datasets requires bank on this route; ours makes it optional.
-    ("Macro", "/macro/interest-rates", "bank=FED"),
-    ("Macro", "/macro/interest-rates/snapshot", ""),
-    ("Macro", "/macro/interest-rates/banks", ""),
-    ("Funds", "/index-funds", "ticker=SPY&limit=5"),
-    ("Funds", "/index-funds/tickers", ""),
-    ("Screener", "/financials/search/screener/filters", ""),
-    ("IPOs", "/ipos", "ticker=RDDT&limit=2"),
-    ("Metrics", "/financial-metrics/snapshot/tickers", "limit=5"),
-    ("Prices", "/prices/snapshot/tickers", "limit=5"),
-    ("Filings", "/filings/items/requests/does-not-exist", ""),
-]
-
-# The two routes Financial Datasets defines as POST.
-POST_MATRIX = [
-    ("Screener", "/financials/search/screener",
-     {"filters": [{"field": "market_cap", "operator": "eq", "value": 3000000000000}], "limit": 2}),
-    ("Line items", "/financials/search/line-items",
-     {"tickers": ["AAPL"], "line_items": ["revenue", "net_income"], "period": "annual", "limit": 2}),
-]
+MATRIX = list(_GET)
+POST_MATRIX = [(g, p, b) for g, p, b in _POST]
 
 
 def fetch(url, headers, timeout=TIMEOUT):
