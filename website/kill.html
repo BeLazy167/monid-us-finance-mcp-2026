@@ -50,10 +50,15 @@ h1,h2,h3{line-height:1.1;letter-spacing:-.02em;margin:0}
 @keyframes strike{to{transform:scaleX(1)}}
 
 /* ---------- scoreboard ---------- */
-.board{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:1px;background:var(--line);
+/* Borders live on the cells, not on a background showing through gaps: a
+   row that does not fill would otherwise leave a grey rectangle. */
+.board{display:grid;grid-template-columns:repeat(auto-fit,minmax(158px,1fr));background:var(--paper);
   border:1px solid var(--line);border-radius:16px;overflow:hidden;margin:0}
-.cell{background:var(--paper);padding:26px 22px}
-.cell .n{font-family:var(--mono);font-size:clamp(28px,4.4vw,44px);font-weight:600;letter-spacing:-.03em}
+.cell{background:var(--paper);padding:24px 20px;border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
+.cell .n{font-family:var(--mono);font-size:clamp(26px,3.4vw,38px);font-weight:600;letter-spacing:-.03em;white-space:nowrap}
+.cell .n.cmp{font-size:clamp(16px,1.8vw,22px)}
+.cell .n.cmp b{font-weight:600}
+.cell .n.cmp span{color:var(--dim);font-weight:400}
 .cell .l{color:var(--dim);font-size:13px;margin-top:6px}
 section{padding:96px 0}
 .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent)}
@@ -383,8 +388,11 @@ function render(){
     ['cold', fmtMs(s.cold.ours)+' vs '+fmtMs(s.cold.fd), 'median cold: they win'],
     ['warm', fmtMs(s.warm.ours)+' vs '+fmtMs(s.warm.fd), 'median cached: we win'],
   ];
+  const num=v=>v.includes(' vs ')
+    ? `<div class="n cmp"><b>${esc(v.split(' vs ')[0])}</b> <span>vs</span> <b>${esc(v.split(' vs ')[1])}</b></div>`
+    : `<div class="n">${esc(v)}</div>`;
   $('#board').innerHTML=cells.map(([k,v,l])=>
-    `<div class="cell"><div class="n" data-v="${esc(v)}">${esc(v)}</div><div class="l">${esc(l)}</div></div>`).join('');
+    `<div class="cell">${num(v)}<div class="l">${esc(l)}</div></div>`).join('');
 
   const groups=[...new Set(DATA.map(r=>r.group))];
   $('#filters').innerHTML=['All',...groups].map((g,i)=>
@@ -399,7 +407,7 @@ function render(){
     ['warm', s.warm, 'inside the five-minute cache'],
     ['local', s.local, 'answered with no upstream call'],
   ].map(([k,v,l])=>`<div class="cell">
-      <div class="n" style="font-size:clamp(20px,3vw,30px)">${fmtMs(v.ours)} <span style="color:var(--dim);font-size:.6em">vs</span> ${fmtMs(v.fd)}</div>
+      <div class="n cmp"><b>${fmtMs(v.ours)}</b> <span>vs</span> <b>${fmtMs(v.fd)}</b></div>
       <div class="l">${esc(k)} · ${v.n} routes · ${esc(l)}</div></div>`).join('');
   $('#thesisCost').textContent=fmtUSD(s.cost);
   buildMatrix(); buildReceipt(); buildWeak(); buildConsole();
