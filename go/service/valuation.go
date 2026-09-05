@@ -41,6 +41,16 @@ type valuationInputs struct {
 	hasEBITDA       bool
 }
 
+// The OHLCV normaliser keeps a bar only while earliestDay <= day <=
+// latestDay, compared as strings. An empty bound is therefore not
+// "unbounded": every real date sorts after "", so passing "" as the end
+// discarded every bar and left this whole file dead in production while
+// its unit test, which supplied a price directly, still passed.
+const (
+	earliestDay = "0001-01-01"
+	latestDay   = "9999-12-31"
+)
+
 // closesByDate maps a trading day to that day's close.
 type closesByDate map[string]float64
 
@@ -51,7 +61,7 @@ func (c *callCtx) dailyCloses(ticker string) (closesByDate, []time.Time, error) 
 	if err != nil {
 		return nil, nil, err
 	}
-	bars, err := providers.NormalizePrices(run.Output, "", "", "day")
+	bars, err := providers.NormalizePrices(run.Output, earliestDay, latestDay, "day")
 	if err != nil {
 		return nil, nil, err
 	}
@@ -204,7 +214,6 @@ func (c *callCtx) withValuation(ticker, period string, statements any, rows []ma
 	if ierr != nil || berr != nil || cerr != nil {
 		return rows
 	}
-	annual := period == "annual"
 	for _, row := range rows {
 		reportPeriod, ok := row["report_period"].(string)
 		if !ok {
@@ -220,9 +229,9 @@ func (c *callCtx) withValuation(ticker, period string, statements any, rows []ma
 		}
 		growth, _ := row["earnings_per_share_growth"].(float64)
 		in := inputsFor(
-			periodValues(income, asOf, annual),
-			periodValues(balance, asOf, annual),
-			periodValues(cash, asOf, annual),
+			periodValues(income, "income", period, asOf),
+			periodValues(balance, "balance", period, asOf),
+			periodValues(cash, "cash", period, asOf),
 			growth,
 		)
 		for key, value := range valuationFields(price, in) {
@@ -232,14 +241,15 @@ func (c *callCtx) withValuation(ticker, period string, statements any, rows []ma
 	return rows
 }
 
-// periodValues finds the statement row for one report period. A ttm row
-// has no statement of its own, so it reads the newest one, which is the
-// window it was built from.
-func periodValues(series providers.StatementSeries, asOf time.Time, annual bool) map[string]any {
-	rows := series.Quarterly
-	if annual {
-		rows = series.Annual
-	}
+// periodValues finds the statement values behind one metrics row, built
+// the same way the /financials routes build them. A ttm row is summed
+// over four quarters rather than read from the newest quarter alone:
+// reading one quarter gave Apple an EPS of 2.02 against its trailing
+// figure of 8.83, and so a P/E of 151 against the real 35.
+func periodValues(
+	series providers.StatementSeries, statement, period string, asOf time.Time,
+) map[string]any {
+	rows := statementRowsForPeriod(series, period, statement)
 	var best providers.PeriodRow
 	found := false
 	for _, row := range rows {
