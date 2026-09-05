@@ -89,6 +89,7 @@ func restRoutes(rt *restAPI) []restRoute {
 		{http.MethodGet, "/financials/search/screener/filters", rt.screenerFilters},
 		{http.MethodGet, "/company/facts", rt.companyFacts},
 		{http.MethodGet, "/filings/items", rt.filingItems},
+		{http.MethodGet, "/insider-trades/names", rt.insiderNames},
 
 		// ---- All financials / line-item search (get_all_financials, search_line_items) ----
 		{http.MethodGet, "/financials", rt.allFinancials},
@@ -353,6 +354,19 @@ func (rt *restAPI) insiderTrades(w http.ResponseWriter, r *http.Request, id call
 	rt.callAndRespond(w, r, id, "get_insider_trades", args, nil)
 }
 
+// insiderNames answers /insider-trades/names: the filed spellings of
+// every insider on file for one issuer, which is how a client turns the
+// name a person is known by into the one their Form 4 carries.
+func (rt *restAPI) insiderNames(w http.ResponseWriter, r *http.Request, id callerIdentity) {
+	ticker := strings.TrimSpace(r.URL.Query().Get("ticker"))
+	if ticker == "" {
+		writeFDError(w, http.StatusBadRequest, "bad_request", "ticker is required")
+		return
+	}
+	rt.callCapabilityAndRespond(w, r, id, "list_insider_names",
+		map[string]any{"ticker": ticker}, nil)
+}
+
 // ---- Screener ----
 
 type screenerRequest struct {
@@ -410,15 +424,20 @@ func (rt *restAPI) filingItems(w http.ResponseWriter, r *http.Request, id caller
 		writeFDError(w, http.StatusBadRequest, "bad_request", "filing_type is required")
 		return
 	}
+	// year is optional: a caller that already holds an accession number
+	// names the filing outright, and one that holds neither means the
+	// most recent filing of that type. The tool resolves both from the
+	// filings feed, so refusing the request here just denied a caller a
+	// selector the tool already understood.
 	yearRaw := q.Get("year")
-	if yearRaw == "" {
-		writeFDError(w, http.StatusBadRequest, "bad_request", "year is required")
-		return
-	}
-	year, err := strconv.Atoi(yearRaw)
-	if err != nil {
-		writeFDError(w, http.StatusBadRequest, "bad_request", "year must be an integer")
-		return
+	var year *int
+	if yearRaw != "" {
+		parsed, err := strconv.Atoi(yearRaw)
+		if err != nil {
+			writeFDError(w, http.StatusBadRequest, "bad_request", "year must be an integer")
+			return
+		}
+		year = &parsed
 	}
 	includeExhibits, err := queryBool(q, "include_exhibits", false)
 	if err != nil {
@@ -428,8 +447,10 @@ func (rt *restAPI) filingItems(w http.ResponseWriter, r *http.Request, id caller
 	args := map[string]any{
 		"ticker":           ticker,
 		"filing_type":      filingType,
-		"year":             float64(year),
 		"include_exhibits": includeExhibits,
+	}
+	if year != nil {
+		args["year"] = float64(*year)
 	}
 	if q.Get("quarter") != "" {
 		quarter, err := strconv.Atoi(q.Get("quarter"))

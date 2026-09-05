@@ -16,6 +16,12 @@ func (s *Service) ListCompanyFactsTickers(ctx context.Context, apiKey string, ar
 	return s.capability(ctx, apiKey, "list_company_facts_tickers", func(c *callCtx) (Result, error) { return c.listCompanyFactsTickers(args) })
 }
 
+// ListInsiderNames returns every insider on file for one issuer, the
+// directory /insider-trades/names answers with (see insidernames.go).
+func (s *Service) ListInsiderNames(ctx context.Context, apiKey string, args map[string]any) (Result, error) {
+	return s.capability(ctx, apiKey, "list_insider_names", func(c *callCtx) (Result, error) { return c.getInsiderNames(args) })
+}
+
 // ListEarningsTickers returns the tickers list_earnings_tickers' coverage-
 // list request can serve.
 func (s *Service) ListEarningsTickers(ctx context.Context, apiKey string, args map[string]any) (Result, error) {

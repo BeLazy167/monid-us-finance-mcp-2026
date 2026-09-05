@@ -63,6 +63,7 @@ GET_ROUTES = [
     ("Earnings", "/earnings/tickers", "limit=2"),
     ("News", "/news", f"ticker={T}&limit=2"),
     ("Ownership", "/insider-trades", f"ticker={T}&limit=2"),
+    ("Ownership", "/insider-trades/names", f"ticker={T}"),
     ("Ownership", "/insider-ownership", f"ticker={T}&limit=2"),
     ("Ownership", "/beneficial-ownership", f"ticker={T}&limit=2"),
     ("Ownership", "/activist-ownership", f"ticker={T}&limit=2"),

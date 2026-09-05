@@ -1640,3 +1640,59 @@ func TestAsReportedRoute_ForwardsCIKAndReportPeriodFilters(t *testing.T) {
 		}
 	}
 }
+
+// TestFilingItems_AccessionNumberSelectsWithoutYear pins that a caller
+// holding an accession number need not also supply a year. The route used
+// to refuse the request outright, though the tool behind it already
+// resolves the filing from the accession number.
+func TestFilingItems_AccessionNumberSelectsWithoutYear(t *testing.T) {
+	caller := newFakeCaller()
+	rt := newTestRouter(caller, nil)
+	caller.results["get_filing_items"] = Result{Value: map[string]any{"items": []any{}}}
+
+	rec := doGet(t, rt,
+		"/filings/items?ticker=AAPL&filing_type=10-Q&accession_number=0000320193-26-000020&item=Item-2",
+		map[string]string{apiKeyHeader: testAPIKey})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	args := caller.lastCall().args
+	if _, present := args["year"]; present {
+		t.Fatalf("year = %#v, want it absent so the tool resolves it", args["year"])
+	}
+	if args["accession_number"] != "0000320193-26-000020" {
+		t.Fatalf("accession_number = %#v, want it forwarded", args["accession_number"])
+	}
+}
+
+// TestInsiderNames_ReachesCapability checks /insider-trades/names answers
+// through the capability surface, and refuses a request naming no issuer
+// before it costs the caller anything.
+func TestInsiderNames_ReachesCapability(t *testing.T) {
+	caller := newFakeCaller()
+	rt := newTestRouter(caller, nil)
+	caller.capabilityResult["list_insider_names"] = Result{
+		Value: map[string]any{"names": []string{"COOK TIMOTHY D"}},
+	}
+
+	rec := doGet(t, rt, "/insider-trades/names?ticker=AAPL", map[string]string{apiKeyHeader: testAPIKey})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	if len(caller.calls) != 0 {
+		t.Fatalf("the directory is not an MCP tool and must issue no Caller.Call, got %d", len(caller.calls))
+	}
+	if len(caller.capabilityCalls) != 1 {
+		t.Fatalf("Caller.Capability reached %d times, want 1", len(caller.capabilityCalls))
+	}
+
+	caller2 := newFakeCaller()
+	rt2 := newTestRouter(caller2, nil)
+	rec2 := doGet(t, rt2, "/insider-trades/names", map[string]string{apiKeyHeader: testAPIKey})
+	if rec2.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 when no ticker is named", rec2.Code)
+	}
+	if len(caller2.capabilityCalls) != 0 {
+		t.Fatalf("a rejected request reached the capability %d times, want 0", len(caller2.capabilityCalls))
+	}
+}

@@ -66,6 +66,12 @@ route itself:
   scrapes, not Financial Datasets' ten.
 - `/filings/items/requests/{request_id}` answers `not_found` for any id.
   Filing-item extraction runs inline, so no request id is ever issued.
+- `/insider-trades/names` reads the same SECForm4 feed `/insider-trades`
+  reads, so the directory never names an insider whose trades this server
+  cannot then return.
+- `/filings/items` takes `year`, an `accession_number`, or neither, which
+  selects the most recent filing of that type. Financial Datasets accepts
+  the same three; `item` selects one item per request, not several.
 
 Three envelope-key details are worth naming, because each is a place where
 reusing one implementation across two routes would have been wrong.

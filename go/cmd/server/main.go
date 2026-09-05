@@ -204,6 +204,7 @@ var capabilityHandlers = map[string]func(*service.Service, context.Context, stri
 	"list_price_snapshot_tickers":         (*service.Service).ListPriceSnapshotTickers,
 	"list_institutional_holdings_tickers": (*service.Service).ListInstitutionalHoldingsTickers,
 	"list_kpi_tickers":                    (*service.Service).ListKPITickers,
+	"list_insider_names":                  (*service.Service).ListInsiderNames,
 	"list_filing_types":                   (*service.Service).ListFilingTypes,
 	"list_filing_item_types":              (*service.Service).ListFilingItemTypes,
 	"list_kpi_sectors":                    (*service.Service).ListKPISectors,
