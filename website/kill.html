@@ -302,6 +302,8 @@ footer p+p{margin-top:12px}
     <p class="lede" style="margin-top:12px">That is four datasets for every one of the 8,005 listed companies
       in America, refreshed every month, forever. If that is you, congratulations, you are a hedge fund.
       Why are you shopping for an API? Go build your own pipeline. That is what the carry is for.</p>
+    <p class="lede" style="margin-top:14px">For the record, that is the only place their $200 subscription
+      starts to pay for itself. Everywhere below it, you are buying a monthly bill you do not need.</p>
     <p class="lede" style="margin-top:14px">For everyone else, here is the arithmetic on a workload a person
       actually runs.</p>
     <div class="ledger" id="workloads" style="margin-top:26px"></div>
@@ -498,10 +500,10 @@ function workloads(s){
     ['Every US listed company, one statement, monthly',`${TICKERS.toLocaleString('en-US')} × 1`,TICKERS],
   ];
   $('#workloads').innerHTML=
-    `<div class="h">Workload</div><div class="h">Ours, all cold</div><div class="h">Financial Datasets</div>`+
+    `<div class="h">Workload</div><div class="h">Ours, all cold</div><div class="h">Theirs, no subscription</div>`+
     W.map(([name,arith,n])=>{
       const ours=ourMonthly(n,s.perCold);
-      const theirs=Math.min(FD.payg*n,fdMonthly(n,FD.build),n<=FD.scale.included?FD.scale.fee:Infinity);
+      const theirs=FD.payg*n;
       return `<div class="k">${esc(name)}<div class="grp mono">${esc(arith)} = ${n.toLocaleString('en-US')} calls</div></div>
         <div class="v ${ours<theirs?'us':''}">${money(ours)}</div>
         <div class="v b ${theirs<ours?'them':''}">${money(theirs)}</div>`;
@@ -513,10 +515,11 @@ function ledger(s){
   const rows=[
     ['Routes that answered',`${s.oursOK} of ${s.n}`,`${s.fdOK} of ${s.n}`],
     ['MCP tool names','27','27'],
-    ['Price of entry','none, self-hosted','$20 for 1,000 requests'],
-    ['Cost per call, cold',usd(per),'$0.002 inside a $200/mo plan'],
-    ['1,000 calls a month',money(ourMonthly(1000,per)),money(Math.min(FD.payg*1000,fdMonthly(1000,FD.build)))],
-    ['10,000 calls a month',money(ourMonthly(10000,per)),money(Math.min(FD.payg*10000,fdMonthly(10000,FD.build)))],
+    ['Subscription required','none','$200/mo for the cheap rate'],
+    ['Cost per call, no subscription',usd(per)+' measured','$0.02'],
+    ['1,000 calls',money(ourMonthly(1000,per)),money(FD.payg*1000)],
+    ['10,000 calls',money(ourMonthly(10000,per)),money(FD.payg*10000)],
+    ['100,000 calls',money(ourMonthly(100000,per)),money(FD.payg*100000)],
   ];
   $('#ledger').innerHTML=
     `<div class="h">&nbsp;</div><div class="h">Monid Finance MCP</div><div class="h">Financial Datasets</div>`+
@@ -531,9 +534,11 @@ function ledger(s){
   $('#heroCost').textContent=usd(s.cost);
   // Where the two lines cross, solved rather than asserted.
   const cross=Math.round(FD.build.fee/s.perCold/1000)*1000;
-  $('#pivot').innerHTML=`Under ten thousand calls a month it is not close, and we stay cheaper up to about
-    <b>${cross.toLocaleString('en-US')} a month</b>. Both columns assume every single call is cold, which is
-    the least flattering way to count ours: the cache makes them cheaper, and nothing makes theirs cheaper.`;
+  $('#pivot').innerHTML=`Neither column has a subscription, so theirs is the rate anyone can buy today:
+    <b>$0.02 a call</b>, against <b>${usd(per)}</b> here. We are about
+    <b>${(FD.payg/per).toFixed(1)}× cheaper at every volume</b>, with no floor and nothing to cancel. They do
+    sell a cheaper rate, $0.002, and it costs $200 every month before the first call lands. Ours is counted
+    the least flattering way possible, every call cold; the cache only makes it cheaper from there.`;
 }
 
 function filters(){
@@ -670,22 +675,24 @@ async function race(){
   let trace=[]; try{trace=JSON.parse(a?.h.get('x-monid-trace')||'[]')}catch(e){}
   const cost=parseFloat(a?.h.get('x-monid-cost-usd')||'0')||0;
   const theirs=b?parseFloat(b.h.get('x-fd-elapsed-ms')||'')||b.ms:null;
-  const weWin=a&&b&&a.status===200&&b.status===200&&a.ms<theirs;
 
   const pane=(title,won,t,sub,extra,body)=>`<div>
     <h4>${esc(title)}${won?CHECK:''}</h4><div class="t">${t}</div><div class="sub">${esc(sub)}</div>
     ${extra||''}<pre style="margin-top:12px">${esc((body||'').slice(0,2400))}</pre></div>`;
+  const cheaper=!!a&&a.status===200&&cost<FD.payg;
 
   $('#out').innerHTML=
-    pane('Ours',weWin,a?ms(a.ms):'—',
-      a?`${a.status} · ${usd(cost)} · ${(a.body.length/1024).toFixed(1)} KB`:'no Monid key given',
+    pane('Ours',cheaper,a?usd(cost):'—',
+      a?`${a.status} · ${(a.body.length/1024).toFixed(1)} KB · measured, not estimated`:'no Monid key given',
       a?`<div style="margin-top:10px">${hops(trace)}</div>`:'',a?.body)+
-    pane('Financial Datasets',!!b&&!weWin&&b.status===200,b?ms(theirs):'—',
-      b?`${b.status} · ${(b.body.length/1024).toFixed(1)} KB · one relay hop`:'no Financial Datasets key given','',b?.body);
+    pane('Financial Datasets',false,b?'$0.02':'—',
+      b?`${b.status} · ${(b.body.length/1024).toFixed(1)} KB · list price, $20 per 1,000`:'no Financial Datasets key given',
+      '',b?.body);
 
   go.disabled=false; go.innerHTML=PLAY+' Run both';
-  $('#say').textContent=a&&b?(weWin?'We answered first. Their number carries one relay hop.':'They answered first.')
-    :'Done. Add the other key to race both sides.';
+  $('#say').textContent=a&&b
+    ? `This call cost ${usd(cost)} here against their $0.02 list rate. Their billing is not something we can measure, so theirs is list.`
+    : 'Done. Add the other key to run both sides.';
 }
 </script>
 </body>
