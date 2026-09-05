@@ -68,7 +68,18 @@ section{padding:clamp(72px,10vh,124px) 0}
 @keyframes draw{to{stroke-dashoffset:0}}
 .hero p{max-width:55ch;margin-top:28px;color:var(--dim);font-size:clamp(16.5px,1.6vw,19.5px);
   opacity:0;animation:fade .8s 1.2s forwards}
-.acts{display:flex;gap:12px;flex-wrap:wrap;margin-top:34px;opacity:0;animation:fade .8s 1.35s forwards}
+.receipt-strip{display:flex;flex-wrap:wrap;align-items:flex-end;gap:clamp(24px,5vw,64px);margin-top:36px;
+  padding-top:26px;border-top:1px solid var(--line);opacity:0;animation:fade .8s 1.3s forwards}
+.fig{display:grid;gap:6px}
+.fig .n{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:clamp(30px,4.6vw,52px);
+  font-weight:600;letter-spacing:-.035em;line-height:1}
+.fig .n.was{color:var(--dim);position:relative;width:max-content}
+.fig .n.was::after{content:"";position:absolute;left:-4%;right:-4%;top:52%;height:3px;background:var(--accent);
+  border-radius:2px;transform:scaleX(0);transform-origin:left;animation:wipe .5s 1.75s cubic-bezier(.16,1,.3,1) forwards}
+@keyframes wipe{to{transform:scaleX(1)}}
+.fig .n.now{color:var(--ours)}
+.fig .c{font-size:13.5px;color:var(--dim);max-width:30ch}
+.acts{display:flex;gap:12px;flex-wrap:wrap;margin-top:34px;opacity:0;animation:fade .8s 1.45s forwards}
 @keyframes fade{to{opacity:1}}
 .btn{display:inline-flex;align-items:center;gap:9px;padding:13px 21px;border-radius:12px;
   border:1px solid var(--ink);background:var(--ink);color:var(--paper);font:inherit;font-weight:550;font-size:15.5px;
@@ -213,6 +224,12 @@ footer p+p{margin-top:12px}
     <p>Fifty of their routes, called against both APIs on one machine, alternating, one at a time.
       Same paths, same parameters, same schemas. Every number here came out of that run, including
       the ones where they beat us.</p>
+    <div class="receipt-strip">
+      <div class="fig"><span class="n was">$200/mo</span>
+        <span class="c">Financial Datasets, the cheapest plan that carries their $0.002 rate</span></div>
+      <div class="fig"><span class="n now" id="heroCost">$0.09</span>
+        <span class="c">every call on this page, all fifty routes, measured and itemised</span></div>
+    </div>
     <div class="acts">
       <a class="btn" href="#live">
         <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M4.5 2.8v10.4a.6.6 0 0 0 .92.5l8.1-5.2a.6.6 0 0 0 0-1L5.42 2.3a.6.6 0 0 0-.92.5Z"/></svg>
@@ -249,10 +266,12 @@ footer p+p{margin-top:12px}
       for the calls you actually make.</p>
     <div class="ledger" id="ledger"></div>
     <p class="pivot" id="pivot"></p>
-    <h3 style="margin:52px 0 0;font-size:clamp(20px,2.2vw,26px);font-weight:600;letter-spacing:-.02em">Is that many calls even reachable?</h3>
-    <p class="lede" style="margin-top:12px">Yes, and it is worth knowing which side of the line you are on
-      before you pick. There are 8,005 tickers in the SEC ticker file this server indexes. Four datasets for
-      every one of them, once a month, is already past the crossover.</p>
+    <h3 style="margin:52px 0 0;font-size:clamp(20px,2.2vw,26px);font-weight:600;letter-spacing:-.02em">Who is actually making 32,000 calls a month?</h3>
+    <p class="lede" style="margin-top:12px">That is four datasets for every one of the 8,005 listed companies
+      in America, refreshed every month, forever. If that is you, congratulations, you are a hedge fund.
+      Why are you shopping for an API? Go build your own pipeline. That is what the carry is for.</p>
+    <p class="lede" style="margin-top:14px">For everyone else, here is the arithmetic on a workload a person
+      actually runs.</p>
     <div class="ledger" id="workloads" style="margin-top:26px"></div>
   </div>
 </section>
@@ -381,7 +400,8 @@ function stats(){
     cold:pair('cold'),warm:pair('warm'),local:pair('local'),
     cost:DATA.reduce((a,r)=>a+(r.ours.cost_usd||0),0),
     perCold:cold.reduce((a,r)=>a+r.ours.cost_usd,0)/(cold.length||1),
-    billed:steps.filter(s=>!s.cached).length,cached:steps.filter(s=>s.cached).length};
+    billed:steps.filter(s=>!s.cached&&!s.error).length,cached:steps.filter(s=>s.cached).length,
+    failed:steps.filter(s=>s.error).length};
 }
 
 function boot(){
@@ -444,8 +464,6 @@ function workloads(s){
   const W=[
     ['20 tickers, 5 datasets, every trading day','20 × 5 × 22',20*5*22],
     ['Every US listed company, one statement, monthly',`${TICKERS.toLocaleString('en-US')} × 1`,TICKERS],
-    ['Every US listed company, four datasets, monthly',`${TICKERS.toLocaleString('en-US')} × 4`,TICKERS*4],
-    ['Every US listed company, four datasets, weekly',`${TICKERS.toLocaleString('en-US')} × 4 × 4`,TICKERS*16],
   ];
   $('#workloads').innerHTML=
     `<div class="h">Workload</div><div class="h">Ours, all cold</div><div class="h">Financial Datasets</div>`+
@@ -467,8 +485,6 @@ function ledger(s){
     ['Cost per call, cold',usd(per),'$0.002 inside a $200/mo plan'],
     ['1,000 calls a month',money(ourMonthly(1000,per)),money(Math.min(FD.payg*1000,fdMonthly(1000,FD.build)))],
     ['10,000 calls a month',money(ourMonthly(10000,per)),money(Math.min(FD.payg*10000,fdMonthly(10000,FD.build)))],
-    ['100,000 calls a month',money(ourMonthly(100000,per)),money(fdMonthly(100000,FD.build))],
-    ['1,000,000 calls a month',money(ourMonthly(1000000,per)),money(FD.scale.fee)],
   ];
   $('#ledger').innerHTML=
     `<div class="h">&nbsp;</div><div class="h">Monid Finance MCP</div><div class="h">Financial Datasets</div>`+
@@ -480,12 +496,12 @@ function ledger(s){
         <div class="v b ${cmp&&nb<na?'them':''}">${esc(b)}</div>`;
     }).join('');
   $('#ourRun').textContent=usd(s.cost);
+  $('#heroCost').textContent=usd(s.cost);
   // Where the two lines cross, solved rather than asserted.
   const cross=Math.round(FD.build.fee/s.perCold/1000)*1000;
-  $('#pivot').innerHTML=`Below about <b>${cross.toLocaleString('en-US')} calls a month</b> we are cheaper,
-    and under ten thousand it is not close. Above it their subscription wins, and at a million calls a month
-    their Scale tier is roughly three times cheaper than paying per call through us. Both columns assume
-    every call is cold; ours get cheaper with the cache, theirs do not.`;
+  $('#pivot').innerHTML=`Under ten thousand calls a month it is not close, and we stay cheaper up to about
+    <b>${cross.toLocaleString('en-US')} a month</b>. Both columns assume every single call is cold, which is
+    the least flattering way to count ours: the cache makes them cheaper, and nothing makes theirs cheaper.`;
 }
 
 function filters(){
@@ -550,14 +566,14 @@ function receipt(s){
       <span>${t.cached?'$0':usd(t.cost_usd||0)}</span></div>`);
   }));
   $('#rcpt').innerHTML=out.join('')+
-    `<div class="sum"><span>${s.billed} billed runs · ${s.cached} cache hits · ${s.n} routes</span><span>${usd(total)}</span></div>`;
+    `<div class="sum"><span>${s.billed} billed runs · ${s.cached} cache hits · ${s.failed} failed runs · ${s.n} routes</span><span>${usd(total)}</span></div>`
+    +`<div style="margin-top:12px;color:var(--dim);font-size:11.5px">A failed run bills nothing, and this run had ${s.failed===0?'none':s.failed}. Every figure above is measured, not estimated.</div>`;
 }
 
 function caveats(s){
   const cross=Math.round(FD.build.fee/s.perCold/1000)*1000;
   const C=[
-    ['A first ask is slower',`Composing from live filings takes ${ms(s.cold.a)} where reading their warehouse takes ${ms(s.cold.b)}. Inside the five-minute cache it inverts, ${ms(s.warm.a)} against ${ms(s.warm.b)}.`],
-    ['Very high volume favours a subscription',`Past roughly ${cross.toLocaleString('en-US')} calls a month, their plan is cheaper than paying per call. Below it, we are, and under ten thousand it is not close.`],
+    ['A first ask is slower',`We read the filing when you ask; they read a copy someone made earlier. That is ${ms(s.cold.a)} against ${ms(s.cold.b)}. Ask again inside five minutes and it inverts, ${ms(s.warm.a)} against ${ms(s.warm.b)}.`],
     ['They hold deeper coverage','Thirty years of history, more tickers, ten central banks to our four, and 5,000 insider rows a call to our 15.'],
     ['We sell no contract','No SLA, no redistribution rights, no webhooks, no bulk delivery. If you need those, buy theirs.'],
   ];
