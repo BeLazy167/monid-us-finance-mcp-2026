@@ -4,9 +4,9 @@
   "name": "Monid Finance MCP",
   "description": "Financial Datasets-compatible US finance API and MCP server, backed by pay-per-call Monid providers.",
   "colors": {
-    "primary": "#1D5F49",
-    "light": "#5CBE92",
-    "dark": "#113A2D"
+    "primary": "#26251E",
+    "light": "#F7F7F4",
+    "dark": "#14120B"
   },
   "logo": {
     "light": "/logo/logo-light.svg",
@@ -184,12 +184,18 @@
   },
   "fonts": {
     "heading": {
-      "family": "Geist",
+      "family": "Inter",
       "weight": 600
     },
     "body": {
-      "family": "Geist",
+      "family": "Inter",
       "weight": 400
+    }
+  },
+  "background": {
+    "color": {
+      "light": "#F7F7F4",
+      "dark": "#14120B"
     }
   }
 }
