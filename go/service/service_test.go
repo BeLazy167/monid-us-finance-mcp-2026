@@ -1079,12 +1079,20 @@ func TestInterestRates_BOJReadsTheStatementPDF(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+	// The route reports the rate in force at the start of each month, so
+	// one decision becomes one point per month it covers.
 	records := asRecords(t, result.Value)
-	if len(records) != 1 {
-		t.Fatalf("expected the BOJ record alone, got %d", len(records))
+	if len(records) == 0 {
+		t.Fatalf("expected a BOJ series, got nothing")
 	}
-	rate := jsonRoundTrip(t, records[0])
-	if rate["bank"] != "BOJ" || rate["rate"] != 1.0 || rate["date"] != "2026-07-31" {
-		t.Fatalf("unexpected BOJ record: %#v", rate)
+	for _, r := range records {
+		rate := jsonRoundTrip(t, r)
+		if rate["bank"] != "BOJ" || rate["rate"] != 1.0 {
+			t.Fatalf("unexpected BOJ record: %#v", rate)
+		}
+		day, ok := rate["date"].(string)
+		if !ok || !strings.HasSuffix(day, "-01") {
+			t.Fatalf("series points must fall on the first of a month, got %v", rate["date"])
+		}
 	}
 }

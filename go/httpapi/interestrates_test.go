@@ -28,8 +28,14 @@ func TestInterestRates_BankFilterAndNoHistory(t *testing.T) {
 		t.Fatalf("bank=ecb must keep only the ECB row, got %v", rates)
 	}
 
-	rec = doGet(t, rt, "/macro/interest-rates?start_date=2025-01-01", map[string]string{apiKeyHeader: testAPIKey})
-	if rec.Code != http.StatusBadRequest || decodeBody(t, rec)["error"] != "bad_request" {
-		t.Fatalf("a date range must be refused, not answered with a snapshot: %d %s", rec.Code, rec.Body.String())
+	// The window is forwarded to the tool now that a history is sourced.
+	rec = doGet(t, rt, "/macro/interest-rates?start_date=2025-01-01&end_date=2025-06-01",
+		map[string]string{apiKeyHeader: testAPIKey})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("a date range must be accepted: %d %s", rec.Code, rec.Body.String())
+	}
+	last := caller.lastCall()
+	if last.args["start_date"] != "2025-01-01" || last.args["end_date"] != "2025-06-01" {
+		t.Fatalf("the window was not forwarded: %#v", last.args)
 	}
 }

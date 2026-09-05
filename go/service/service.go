@@ -2228,37 +2228,73 @@ func (c *callCtx) getKPINonGAAP(args map[string]any) (Result, error) {
 // when every bank fails the call fails too: an empty list would read as
 // "no rates exist", which is never true.
 func (c *callCtx) getInterestRates(args map[string]any) (Result, error) {
-	results := make([]*fd.InterestRate, len(bankSpecs))
+	from, to, err := interestRateRange(args)
+	if err != nil {
+		return Result{}, err
+	}
+	results := make([][]bankRate, len(bankSpecs))
 	failures := make([]error, len(bankSpecs))
 	var wg sync.WaitGroup
 	wg.Add(len(bankSpecs))
 	for i, spec := range bankSpecs {
 		go func(i int, spec bankSpec) {
 			defer wg.Done()
-			rate, err := spec.Read(c, spec)
+			history, err := spec.Read(c, spec)
 			if err != nil {
 				failures[i] = fmt.Errorf("%s: %w", spec.Bank, err)
 				return
 			}
-			if rate == nil {
+			if len(history) == 0 {
 				failures[i] = fmt.Errorf("%s: no policy rate found on %s", spec.Bank, spec.URL)
 				return
 			}
-			bank, name, value := rate.Bank, rate.Name, rate.Rate
-			results[i] = &fd.InterestRate{Bank: &bank, Name: &name, Rate: &value, Date: rate.Date}
+			results[i] = monthlySeries(history, from, to)
 		}(i, spec)
 	}
 	wg.Wait()
-	records := make([]any, 0, len(bankSpecs))
-	for _, r := range results {
-		if r != nil {
-			records = append(records, *r)
+	records := make([]any, 0, len(bankSpecs)*12)
+	for _, series := range results {
+		for _, point := range series {
+			bank, name, value := point.Bank, point.Name, point.Rate
+			records = append(records, fd.InterestRate{Bank: &bank, Name: &name, Rate: &value, Date: point.Date})
 		}
 	}
 	if len(records) == 0 {
 		return Result{}, fmt.Errorf("no central bank page could be read: %w", errors.Join(failures...))
 	}
 	return Result{Value: records, WrapperKey: "interest_rates"}, nil
+}
+
+// interestRateRange reads the reporting window from the caller's
+// start_date and end_date, defaulting to the last twelve months.
+func interestRateRange(args map[string]any) (from, to time.Time, err error) {
+	startArg, err := argString(args, "start_date")
+	if err != nil {
+		return from, to, err
+	}
+	endArg, err := argString(args, "end_date")
+	if err != nil {
+		return from, to, err
+	}
+	start, err := validateDate(startArg, "start_date")
+	if err != nil {
+		return from, to, err
+	}
+	end, err := validateDate(endArg, "end_date")
+	if err != nil {
+		return from, to, err
+	}
+	from, to = interestRateWindow(time.Now().UTC())
+	if start != nil {
+		from = *start
+	}
+	if end != nil {
+		to = *end
+	}
+	if to.Before(from) {
+		return from, to, &providers.InputError{Msg: "end_date must not be before start_date"}
+	}
+	return from, to, nil
 }
 
 // --- get_index_fund ---

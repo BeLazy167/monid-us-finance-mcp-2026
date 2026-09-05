@@ -667,18 +667,15 @@ func (rt *restAPI) kpiRoute(tool string) routeHandler {
 // ---- Central bank interest rates (get_interest_rates) ----
 
 // interestRates answers /macro/interest-rates and /macro/interest-rates/snapshot.
-// The tool itself takes no parameters (see tool_schemas.json) and always
-// returns the current rate for every bank it can reach, so the Financial
-// Datasets query parameters are applied here: bank narrows the list, and
-// a date range is refused rather than silently answered with today's
-// snapshot, because no rate history is sourced.
+// Each bank's page carries its whole decision history, so start_date and
+// end_date select the reporting window and bank narrows the list; with no
+// dates the tool reports the last twelve months, as Financial Datasets does.
 func (rt *restAPI) interestRates(w http.ResponseWriter, r *http.Request, id callerIdentity) {
 	q := r.URL.Query()
-	if q.Has("start_date") || q.Has("end_date") {
-		writeFDError(w, http.StatusBadRequest, "bad_request", "start_date and end_date are not supported: only each bank's current rate is sourced, no history")
-		return
-	}
-	result, err := rt.caller.Call(r.Context(), id.monidAPIKey, "get_interest_rates", map[string]any{})
+	args := map[string]any{}
+	putQueryString(args, q, "start_date")
+	putQueryString(args, q, "end_date")
+	result, err := rt.caller.Call(r.Context(), id.monidAPIKey, "get_interest_rates", args)
 	if err != nil {
 		writeServiceError(w, err)
 		return

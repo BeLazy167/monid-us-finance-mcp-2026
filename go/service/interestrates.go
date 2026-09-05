@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -25,8 +26,9 @@ type bankSpec struct {
 	Name string
 	// URL is the page read; for the BOJ it is a format string taking the
 	// year of the releases listing.
-	URL  string
-	Read func(c *callCtx, spec bankSpec) (*bankRate, error)
+	URL string
+	// Read returns every decision the bank publishes, newest first.
+	Read func(c *callCtx, spec bankSpec) ([]bankRate, error)
 }
 
 // bankSpecs is the coverage list; /macro/interest-rates/banks derives from it.
@@ -47,8 +49,8 @@ func interestRateScrapeQuery(url string, links bool) map[string]any {
 	}
 }
 
-// readScrapedRate reads a bank whose page states the rate in its text.
-func readScrapedRate(c *callCtx, spec bankSpec) (*bankRate, error) {
+// readScrapedRate reads a bank whose page states its decisions in the text.
+func readScrapedRate(c *callCtx, spec bankSpec) ([]bankRate, error) {
 	run, err := c.run(contextDev, scrapeEndpoint, nil, interestRateScrapeQuery(spec.URL, false))
 	if err != nil {
 		return nil, err
@@ -57,11 +59,15 @@ func readScrapedRate(c *callCtx, spec bankSpec) (*bankRate, error) {
 	if err != nil {
 		return nil, err
 	}
+	if history := interestRateHistory(markdown, spec.Bank, spec.Name); len(history) > 0 {
+		return history, nil
+	}
+	// A page whose table did not parse can still state a current rate.
 	rate, date := parsePolicyRate(markdown, spec.Bank)
 	if rate == nil {
 		return nil, nil
 	}
-	return &bankRate{Bank: spec.Bank, Name: spec.Name, Rate: *rate, Date: date}, nil
+	return []bankRate{{Bank: spec.Bank, Name: spec.Name, Rate: *rate, Date: date}}, nil
 }
 
 // bojStatementRE matches one row of the BOJ releases table that links a
@@ -94,7 +100,7 @@ const bojExtractInstructions = "Read this Bank of Japan Statement on Monetary Po
 // Monetary Policy and its date, and has the extractor read the rate from
 // the PDF. In January the new year's listing may hold no statement yet,
 // so the previous year is tried next.
-func readBOJRate(c *callCtx, spec bankSpec) (*bankRate, error) {
+func readBOJRate(c *callCtx, spec bankSpec) ([]bankRate, error) {
 	year := time.Now().UTC().Year()
 	for _, y := range []int{year, year - 1} {
 		url := fmt.Sprintf(spec.URL, y)
@@ -114,7 +120,8 @@ func readBOJRate(c *callCtx, spec bankSpec) (*bankRate, error) {
 		if err != nil {
 			return nil, err
 		}
-		return &bankRate{Bank: spec.Bank, Name: spec.Name, Rate: rate, Date: monthDayYearToISO(statement[1], statement[2], statement[3])}, nil
+		return []bankRate{{Bank: spec.Bank, Name: spec.Name, Rate: rate,
+			Date: monthDayYearToISO(statement[1], statement[2], statement[3])}}, nil
 	}
 	return nil, nil
 }
@@ -219,6 +226,117 @@ var (
 	dateISORE  = regexp.MustCompile(`(20\d{2})-(\d{2})-(\d{2})`)
 )
 
+// boeAnnouncementRE matches one Bank Rate announcement heading, which
+// carries the rate it set:
+//
+//	### Bank Rate maintained at 3.75% - July 2026
+var boeAnnouncementRE = regexp.MustCompile(`(?i)#+\s*bank\s+rate\s+(?:maintained|held|increased|raised|reduced|cut)\s+(?:at|to)\s+(\d{1,2}\.\d{1,2})\s*%`)
+
+// interestRateHistory returns every decision the bank's page carries, in
+// the order the page lists them. One scrape already contains it; reading
+// only the newest row threw the rest away.
+func interestRateHistory(markdown, bank, name string) []bankRate {
+	var out []bankRate
+	add := func(rate float64, date *string) {
+		if date == nil {
+			return
+		}
+		out = append(out, bankRate{Bank: bank, Name: name, Rate: rate, Date: date})
+	}
+	switch bank {
+	case "FED":
+		// One table per year, under a "#### 2025" heading.
+		years := fedYearRE.FindAllStringSubmatchIndex(markdown, -1)
+		for i, y := range years {
+			end := len(markdown)
+			if i+1 < len(years) {
+				end = years[i+1][0]
+			}
+			year := markdown[y[2]:y[3]]
+			for _, row := range fedRowRE.FindAllStringSubmatch(markdown[y[1]:end], -1) {
+				rate, err := strconv.ParseFloat(row[3], 64)
+				if err != nil {
+					continue
+				}
+				if row[4] != "" {
+					upper, uerr := strconv.ParseFloat(row[4], 64)
+					if uerr != nil {
+						continue
+					}
+					rate = (rate + upper) / 2
+				}
+				add(rate, monthDayYearToISO(row[1], row[2], year))
+			}
+		}
+	case "ECB":
+		// Rows are newest first and only the first row of a year carries
+		// the year, so it is carried forward.
+		year := ""
+		for _, row := range ecbRowRE.FindAllStringSubmatch(markdown, -1) {
+			if row[1] != "" {
+				year = row[1]
+			}
+			if year == "" {
+				continue
+			}
+			rate, err := strconv.ParseFloat(row[5], 64)
+			if err != nil {
+				continue
+			}
+			if row[4] != "" {
+				rate = -rate
+			}
+			add(rate, monthDayYearToISO(row[3], row[2], year))
+		}
+	case "BOE":
+		for _, loc := range boeAnnouncementRE.FindAllStringSubmatchIndex(markdown, -1) {
+			rate, err := strconv.ParseFloat(markdown[loc[2]:loc[3]], 64)
+			if err != nil {
+				continue
+			}
+			add(rate, dateBefore(markdown, loc[0]))
+		}
+	}
+	return out
+}
+
+// monthlySeries samples a decision history at the first of each month in
+// [from, to], which is the shape Financial Datasets publishes. A month
+// before the first decision on the page has no answer and is skipped
+// rather than back-filled with a guess.
+func monthlySeries(history []bankRate, from, to time.Time) []bankRate {
+	type point struct {
+		day  time.Time
+		rate bankRate
+	}
+	decisions := make([]point, 0, len(history))
+	for _, h := range history {
+		day, err := time.Parse(dateLayout, *h.Date)
+		if err != nil {
+			continue
+		}
+		decisions = append(decisions, point{day: day, rate: h})
+	}
+	sort.Slice(decisions, func(i, j int) bool { return decisions[i].day.Before(decisions[j].day) })
+
+	var out []bankRate
+	for m := time.Date(from.Year(), from.Month(), 1, 0, 0, 0, 0, time.UTC); !m.After(to); m = m.AddDate(0, 1, 0) {
+		var inForce *bankRate
+		for i := range decisions {
+			if decisions[i].day.After(m) {
+				break
+			}
+			inForce = &decisions[i].rate
+		}
+		if inForce == nil {
+			continue
+		}
+		day := m.Format(dateLayout)
+		out = append(out, bankRate{Bank: inForce.Bank, Name: inForce.Name, Rate: inForce.Rate, Date: &day})
+	}
+	return out
+}
+
 // parsePolicyRate reads one bank's page. A nil rate, not an error, means
 // the page does not carry the rate in the shape that bank publishes.
 func parsePolicyRate(markdown, bank string) (rate *float64, date *string) {
@@ -291,6 +409,14 @@ func boeProse(markdown string) (*float64, *string) {
 		date = dateBefore(markdown, loc[0])
 	}
 	return &rate, date
+}
+
+// interestRateWindow is the default reporting window: the rate in force at
+// the start of each of the last twelve months, ending with the most recent
+// complete month. It is the shape Financial Datasets publishes.
+func interestRateWindow(now time.Time) (from, to time.Time) {
+	to = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC).AddDate(0, -1, 0)
+	return to.AddDate(0, -10, 0), to
 }
 
 // dateBeforeWindow bounds how far back dateBefore looks for the date a

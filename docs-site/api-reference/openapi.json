@@ -2826,7 +2826,7 @@
           "Macroeconomics"
         ],
         "summary": "Interest Rates (Historical)",
-        "description": "Returns each major central bank's current policy interest rate (Federal Reserve, European Central Bank, Bank of England, Bank of Japan), scraped live from each bank's own site and parsed on the fly by go/service/interestrates.go - not a historical time series database. This server has no historical rate storage, so both /macro/interest-rates (Financial Datasets' historical route) and /macro/interest-rates/snapshot (its real-time route) call the exact same tool and answer with today's scraped rate per bank; neither accepts a bank, start_date, or end_date parameter, since the underlying get_interest_rates tool takes no parameters at all (it always fetches every bank it can reach). A bank whose page cannot be scraped or parsed in a given call is left out of the response rather than failing the whole request. Query parameters: bank narrows the list. start_date and end_date answer 400 bad_request: only each bank's current rate is sourced, never a history. Rates come from each bank's own page: the Fed target-range midpoint, the ECB deposit facility rate, the BOE Bank Rate, the BOJ policy rate; date is the decision date. A bank whose page cannot be read is omitted; if none can be, the call answers 502 upstream_error. The Bank of Japan publishes each decision only as a PDF statement, so its rate takes two Monid calls: the year's releases listing supplies the newest Statement on Monetary Policy and its date, and Context.dev's extractor reads the rate out of that PDF.",
+        "description": "Returns each major central bank's current policy interest rate (Federal Reserve, European Central Bank, Bank of England, Bank of Japan), scraped live from each bank's own site and parsed on the fly by go/service/interestrates.go - not a historical time series database. This server has no historical rate storage, so both /macro/interest-rates (Financial Datasets' historical route) and /macro/interest-rates/snapshot (its real-time route) call the exact same tool and answer with today's scraped rate per bank; neither accepts a bank, start_date, or end_date parameter, since the underlying get_interest_rates tool takes no parameters at all (it always fetches every bank it can reach). A bank whose page cannot be scraped or parsed in a given call is left out of the response rather than failing the whole request. Query parameters: bank narrows the list; start_date and end_date select the reporting window, which defaults to the last twelve months. Each bank's page carries its full decision history, and the route reports the rate in force at the start of each month. Rates come from each bank's own page: the Fed target-range midpoint, the ECB deposit facility rate, the BOE Bank Rate, the BOJ policy rate; date is the decision date. A bank whose page cannot be read is omitted; if none can be, the call answers 502 upstream_error. The Bank of Japan publishes each decision only as a PDF statement, so its rate takes two Monid calls: the year's releases listing supplies the newest Statement on Monetary Policy and its date, and Context.dev's extractor reads the rate out of that PDF.",
         "parameters": [
           {
             "name": "bank",
@@ -2842,6 +2842,26 @@
               ]
             },
             "description": "Keep only this central bank's row. Case-insensitive. Omit for every bank the server could read."
+          },
+          {
+            "name": "start_date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "First day of the reporting window, YYYY-MM-DD. Defaults to twelve months back."
+          },
+          {
+            "name": "end_date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Last day of the reporting window, YYYY-MM-DD. Defaults to the most recent complete month."
           }
         ],
         "responses": {
@@ -2915,7 +2935,7 @@
           "Macroeconomics"
         ],
         "summary": "Interest Rates (Real-Time)",
-        "description": "Returns each major central bank's current policy interest rate (Federal Reserve, European Central Bank, Bank of England, Bank of Japan), scraped live from each bank's own site and parsed on the fly by go/service/interestrates.go - not a historical time series database. This server has no historical rate storage, so both /macro/interest-rates (Financial Datasets' historical route) and /macro/interest-rates/snapshot (its real-time route) call the exact same tool and answer with today's scraped rate per bank; neither accepts a bank, start_date, or end_date parameter, since the underlying get_interest_rates tool takes no parameters at all (it always fetches every bank it can reach). A bank whose page cannot be scraped or parsed in a given call is left out of the response rather than failing the whole request. Query parameters: bank narrows the list. start_date and end_date answer 400 bad_request: only each bank's current rate is sourced, never a history. Rates come from each bank's own page: the Fed target-range midpoint, the ECB deposit facility rate, the BOE Bank Rate, the BOJ policy rate; date is the decision date. A bank whose page cannot be read is omitted; if none can be, the call answers 502 upstream_error. The Bank of Japan publishes each decision only as a PDF statement, so its rate takes two Monid calls: the year's releases listing supplies the newest Statement on Monetary Policy and its date, and Context.dev's extractor reads the rate out of that PDF.",
+        "description": "Returns each major central bank's current policy interest rate (Federal Reserve, European Central Bank, Bank of England, Bank of Japan), scraped live from each bank's own site and parsed on the fly by go/service/interestrates.go - not a historical time series database. This server has no historical rate storage, so both /macro/interest-rates (Financial Datasets' historical route) and /macro/interest-rates/snapshot (its real-time route) call the exact same tool and answer with today's scraped rate per bank; neither accepts a bank, start_date, or end_date parameter, since the underlying get_interest_rates tool takes no parameters at all (it always fetches every bank it can reach). A bank whose page cannot be scraped or parsed in a given call is left out of the response rather than failing the whole request. Query parameters: bank narrows the list; start_date and end_date select the reporting window, which defaults to the last twelve months. Each bank's page carries its full decision history, and the route reports the rate in force at the start of each month. Rates come from each bank's own page: the Fed target-range midpoint, the ECB deposit facility rate, the BOE Bank Rate, the BOJ policy rate; date is the decision date. A bank whose page cannot be read is omitted; if none can be, the call answers 502 upstream_error. The Bank of Japan publishes each decision only as a PDF statement, so its rate takes two Monid calls: the year's releases listing supplies the newest Statement on Monetary Policy and its date, and Context.dev's extractor reads the rate out of that PDF.",
         "parameters": [
           {
             "name": "bank",
@@ -2931,6 +2951,26 @@
               ]
             },
             "description": "Keep only this central bank's row. Case-insensitive. Omit for every bank the server could read."
+          },
+          {
+            "name": "start_date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "First day of the reporting window, YYYY-MM-DD. Defaults to twelve months back."
+          },
+          {
+            "name": "end_date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Last day of the reporting window, YYYY-MM-DD. Defaults to the most recent complete month."
           }
         ],
         "responses": {
