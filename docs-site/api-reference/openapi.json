@@ -5958,7 +5958,7 @@
         "type": "apiKey",
         "in": "header",
         "name": "X-API-KEY",
-        "description": "The caller's own Monid API key (get one at https://monid.ai). Passed straight through to Monid on every call, so usage bills the caller's own wallet — this is never a shared server-side credential, and the server never logs or stores it. Missing, empty, or malformed values answer 401 unauthorized before any paid call is attempted."
+        "description": "The caller's own Monid API key (get one at https://monid.ai?fpr=dhruv-15136b). Passed straight through to Monid on every call, so usage bills the caller's own wallet — this is never a shared server-side credential, and the server never logs or stores it. Missing, empty, or malformed values answer 401 unauthorized before any paid call is attempted."
       }
     },
     "schemas": {

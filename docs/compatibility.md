@@ -8,7 +8,7 @@ Every request (REST and MCP) carries the caller's own Monid API key in the
 `X-API-KEY` header. This is not a shared server key: it is passed straight
 through to Monid, so **usage bills the caller's own Monid wallet**, not the
 operator's. The server never logs or stores a caller's key. Get a key at
-[monid.ai](https://monid.ai).
+[monid.ai](https://monid.ai?fpr=dhruv-15136b).
 
 - Missing, empty, or malformed `X-API-KEY` answers `401 {"error": "unauthorized", ...}`.
 - An operator may optionally set `API_KEYS` to further restrict which

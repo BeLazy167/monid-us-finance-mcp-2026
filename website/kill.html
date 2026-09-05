@@ -256,6 +256,7 @@ footer p+p{margin-top:12px}
         <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M4.5 2.8v10.4a.6.6 0 0 0 .92.5l8.1-5.2a.6.6 0 0 0 0-1L5.42 2.3a.6.6 0 0 0-.92.5Z"/></svg>
         Run it with your own keys
       </a>
+      <a class="btn line" href="https://monid.ai?fpr=dhruv-15136b">Get a Monid key</a>
       <a class="btn line" href="#evidence">Read the run</a>
     </div>
   </div>
@@ -270,8 +271,9 @@ footer p+p{margin-top:12px}
     <div class="swap">
       <div class="l"><span class="s">−</span><span class="old">https://api.financialdatasets.ai/financials/income-statements?ticker=AAPL</span></div>
       <div class="l"><span class="s">+</span><span class="new">https://monid-finance-api.fly.dev/financials/income-statements?ticker=AAPL</span></div>
-      <div class="foot"><b>X-API-KEY:</b> your own Monid key. There is no account here, no seat, no
-        dashboard and no subscription. Usage bills your Monid wallet and the key is never stored or logged.</div>
+      <div class="foot"><b>X-API-KEY:</b> your own <a href="https://monid.ai?fpr=dhruv-15136b">Monid key</a>. There is no account here,
+        no seat, no dashboard and no subscription. Usage bills your Monid wallet and the key is never stored
+        or logged.</div>
     </div>
     <div class="mcpline">For an agent, the whole integration is one line:<br>
       <b>claude mcp add --transport http monid-finance https://monid-finance-api.fly.dev/mcp --header "X-API-KEY: &lt;your-monid-key&gt;"</b></div>
@@ -356,7 +358,7 @@ footer p+p{margin-top:12px}
       Financial Datasets sends browsers no <code class="mono">Access-Control-Allow-Origin</code>, so their
       side is relayed by this server, and that costs them one hop the table above does not charge them.</p>
     <div class="panel">
-      <div class="head">Keys stay in this tab. Each is sent only to the API it belongs to, and nothing is stored or logged.</div>
+      <div class="head">Need a key? <a href="https://monid.ai?fpr=dhruv-15136b">Start on Monid</a>. Keys stay in this tab. Each is sent only to the API it belongs to, and nothing is stored or logged.</div>
       <div class="body">
         <div class="fields">
           <div><label for="mk">Monid API key</label><input id="mk" type="password" placeholder="monid_live_…" autocomplete="off" spellcheck="false"></div>
@@ -399,7 +401,8 @@ footer p+p{margin-top:12px}
   <p>An independent implementation, not affiliated with or endorsed by Financial Datasets, using none of
   their data or code. Their API is called with your own key, for comparison only. Their pricing and coverage
   figures are quoted from their public pages, checked on 5 September 2026.</p>
-  <p><a href="https://github.com/BeLazy167/monid-us-finance-mcp-2026">Source</a> ·
+  <p><a href="https://monid.ai?fpr=dhruv-15136b">Get a Monid key</a> ·
+     <a href="https://github.com/BeLazy167/monid-us-finance-mcp-2026">Source</a> ·
      <a href="https://ripfinancialdatasets.mintlify.app">Documentation</a> ·
      <a href="/">API home</a> · <span class="mono" id="build"></span></p>
 </div></footer>

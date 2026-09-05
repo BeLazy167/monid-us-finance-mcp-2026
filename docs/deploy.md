@@ -66,7 +66,7 @@ fly status
 curl -s https://monid-finance-api.fly.dev/healthz
 # {"status":"ok"}
 
-# Bring your own Monid API key — get one at https://monid.ai:
+# Bring your own Monid API key — get one at https://monid.ai?fpr=dhruv-15136b:
 curl -s -H "X-API-KEY: <your-monid-api-key>" \
   "https://monid-finance-api.fly.dev/financials/income-statements?ticker=AAPL"
 
