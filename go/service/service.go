@@ -1237,6 +1237,9 @@ func (c *callCtx) getEarnings(args map[string]any) (Result, error) {
 		symbol, err = validateTicker(*tickerArg)
 		if err == nil {
 			records, err = c.earningsForTicker(symbol, earningsFeedLimit)
+			if err == nil {
+				records = c.withEarningsSurprise(symbol, records)
+			}
 		}
 	}
 	if err != nil {
