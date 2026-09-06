@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -19,6 +20,17 @@ const (
 	ttlPricesAndNews = 60 * time.Second
 	ttlFinancials    = 600 * time.Second
 	ttlDefault       = 300 * time.Second
+	// ttlSettled is how long an answer about a period that has already
+	// closed is kept. Ten minutes is the right ceiling for "the latest
+	// figures", and the wrong one for a quarter that ended last year: the
+	// answer cannot change, so expiring it only makes the next caller pay
+	// a provider again to be told the same thing. Measured 2026-09-06, a
+	// cold ask took a median 5,256ms against 69ms once cached.
+	//
+	// A day rather than forever, because a company can restate a closed
+	// period in a later filing. A restatement is rare and this bounds how
+	// long one would go unnoticed.
+	ttlSettled = 24 * time.Hour
 )
 
 // cacheStore is where a cached response body lives.
@@ -138,6 +150,55 @@ func cacheKey(r *http.Request, identity string) string {
 	return sb.String()
 }
 
+// settledDateParams bound a request above, to a period that has closed.
+// A parameter that only bounds it below (start_date, report_period_gte)
+// leaves the newest period in the answer, which has not.
+var settledDateParams = []string{
+	"end_date", "report_period", "report_period_lte", "report_period_lt",
+	"filing_date", "filing_date_lte", "filing_date_lt",
+}
+
+// namesSettledPeriod reports whether a request can only be answered with
+// figures that are already fixed.
+func namesSettledPeriod(q url.Values, now time.Time) bool {
+	// A trailing-twelve-month row is priced at the latest close whatever
+	// else the request asks for (see service/valuation.go), so it always
+	// carries a live figure and is never settled.
+	if strings.EqualFold(strings.TrimSpace(q.Get("period")), "ttm") {
+		return false
+	}
+	// An accession number names one filed document, and a filed document
+	// does not change.
+	if strings.TrimSpace(q.Get("accession_number")) != "" {
+		return true
+	}
+	today := now.UTC().Truncate(24 * time.Hour)
+	for _, name := range settledDateParams {
+		value := strings.TrimSpace(q.Get(name))
+		if value == "" {
+			continue
+		}
+		day, err := time.Parse("2006-01-02", value)
+		if err == nil && day.Before(today) {
+			return true
+		}
+	}
+	if raw := strings.TrimSpace(q.Get("year")); raw != "" {
+		if year, err := strconv.Atoi(raw); err == nil && year < now.UTC().Year() {
+			return true
+		}
+	}
+	return false
+}
+
+// ttlForRequest returns how long one request's answer may be cached.
+func ttlForRequest(r *http.Request, now time.Time) time.Duration {
+	if namesSettledPeriod(r.URL.Query(), now) {
+		return ttlSettled
+	}
+	return ttlForPath(r.URL.Path)
+}
+
 // ttlForPath returns the cache TTL for a REST path per the TTL policy.
 func ttlForPath(p string) time.Duration {
 	switch {
@@ -204,7 +265,7 @@ func withCache(cache cacheStore, next http.HandlerFunc) http.HandlerFunc {
 				body:        tw.body,
 				contentType: w.Header().Get("Content-Type"),
 				status:      tw.status,
-				expiresAt:   time.Now().Add(ttlForPath(r.URL.Path)),
+				expiresAt:   time.Now().Add(ttlForRequest(r, time.Now())),
 			})
 		}
 	}

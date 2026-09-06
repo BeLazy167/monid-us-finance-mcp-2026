@@ -73,7 +73,12 @@ route itself:
   record.
 - Responses are cached per machine in memory, and additionally in Upstash
   or any Redis when `CACHE_URL` is set (see `.env.example`). A cache that
-  cannot be reached costs a slower response, never an error.
+  cannot be reached costs a slower response, never an error. A request
+  bounded to a period that has already closed - an `accession_number`, an
+  `end_date` or `report_period` in the past, a past `year` - is kept for a
+  day rather than ten minutes, because its answer cannot change. A
+  `period=ttm` request never counts as settled: a trailing row is priced
+  at the latest close whatever else the request asks for.
 - `/filings/items` takes `year`, an `accession_number`, or neither, which
   selects the most recent filing of that type. Financial Datasets accepts
   the same three; `item` selects one item per request, not several.
