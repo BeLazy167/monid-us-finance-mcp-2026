@@ -77,6 +77,8 @@ func main() {
 		DemoMonidAPIKey:    cfg.demoMonidAPIKey,
 		RateLimitPerMinute: cfg.rateLimitPerMinute,
 		CORSAllowedOrigins: cfg.corsAllowedOrigins,
+		CacheURL:           cfg.cacheURL,
+		CacheToken:         cfg.cacheToken,
 	})
 
 	httpServer := &http.Server{
@@ -117,6 +119,8 @@ type envConfig struct {
 	receiptsPath       string
 	rateLimitPerMinute int
 	corsAllowedOrigins []string
+	cacheURL           string
+	cacheToken         string
 	demoMonidAPIKey    string
 	apiKeys            []string
 }
@@ -142,6 +146,8 @@ func loadEnvConfig() (envConfig, error) {
 	cfg.corsAllowedOrigins = splitList(os.Getenv("CORS_ALLOWED_ORIGINS"))
 	// DEMO_MONID_API_KEY is never logged; only its presence, never its
 	// value, is observable.
+	cfg.cacheURL = strings.TrimSpace(os.Getenv("CACHE_URL"))
+	cfg.cacheToken = strings.TrimSpace(os.Getenv("CACHE_TOKEN"))
 	cfg.demoMonidAPIKey = strings.TrimSpace(os.Getenv("DEMO_MONID_API_KEY"))
 	cfg.apiKeys = splitList(os.Getenv("API_KEYS"))
 

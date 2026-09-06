@@ -21,6 +21,20 @@ const (
 	ttlDefault       = 300 * time.Second
 )
 
+// cacheStore is where a cached response body lives.
+//
+// The in-memory store is the default and needs no configuration. A shared
+// store is worth having because this one is not shared and not durable:
+// every machine keeps its own, and a deploy throws all of them away. That
+// is the whole reason a first ask stays slow no matter how much traffic
+// this server has already answered. A miss and a broken backend are the
+// same answer here, because a cache that cannot be reached must cost the
+// caller a slower response and never an error.
+type cacheStore interface {
+	get(key string, now time.Time) (cacheEntry, bool)
+	put(key string, entry cacheEntry)
+}
+
 // cacheEntry is a single cached response body.
 type cacheEntry struct {
 	body        []byte
@@ -162,7 +176,7 @@ func (w *cachingResponseWriter) Write(b []byte) (int, error) {
 // withCache serves a cached GET response when present, else runs next and
 // caches a successful (status < 400) response body. /mcp and /api are never
 // routed through this: their handler is registered separately.
-func withCache(cache *responseCache, next http.HandlerFunc) http.HandlerFunc {
+func withCache(cache cacheStore, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// A request asking for provenance must reach the handler: a
 		// replayed body carries no route, and the point of asking is to

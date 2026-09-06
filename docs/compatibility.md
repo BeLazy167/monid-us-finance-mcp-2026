@@ -68,7 +68,12 @@ route itself:
   Filing-item extraction runs inline, so no request id is ever issued.
 - `/insider-trades/names` reads the same SECForm4 feed `/insider-trades`
   reads, so the directory never names an insider whose trades this server
-  cannot then return.
+  cannot then return. It answers 8 insiders for AAPL against Financial
+  Datasets' 51: that feed reports recent filers, not every insider on
+  record.
+- Responses are cached per machine in memory, and additionally in Upstash
+  or any Redis when `CACHE_URL` is set (see `.env.example`). A cache that
+  cannot be reached costs a slower response, never an error.
 - `/filings/items` takes `year`, an `accession_number`, or neither, which
   selects the most recent filing of that type. Financial Datasets accepts
   the same three; `item` selects one item per request, not several.

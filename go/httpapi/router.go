@@ -93,6 +93,13 @@ type Config struct {
 	// CORSAllowedOrigins restricts which Origins receive CORS headers.
 	// Empty means any Origin is reflected.
 	CORSAllowedOrigins []string
+	// CacheURL optionally names a cache several machines and successive
+	// deploys share (see cacheshared.go): an Upstash HTTPS endpoint, or
+	// redis:// for any Redis. Empty keeps the per-machine memory cache.
+	CacheURL string
+	// CacheToken authenticates against CacheURL: the Upstash REST token,
+	// or a Redis password when the URL carries none.
+	CacheToken string
 }
 
 // Router is the single HTTP entry point: health check, REST routes, the MCP
@@ -134,7 +141,7 @@ func NewRouter(cfg Config) *Router {
 	}
 	cors := corsConfig{allowedOrigins: toSet(cfg.CORSAllowedOrigins)}
 	limiter := newRateLimiter()
-	cache := newResponseCache()
+	cache := newCacheStore(cfg.CacheURL, cfg.CacheToken)
 
 	rt := &restAPI{caller: cfg.Caller}
 
