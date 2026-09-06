@@ -79,6 +79,7 @@ func main() {
 		CORSAllowedOrigins: cfg.corsAllowedOrigins,
 		CacheURL:           cfg.cacheURL,
 		CacheToken:         cfg.cacheToken,
+		CachePerCaller:     cfg.cachePerCaller,
 	})
 
 	httpServer := &http.Server{
@@ -121,6 +122,7 @@ type envConfig struct {
 	corsAllowedOrigins []string
 	cacheURL           string
 	cacheToken         string
+	cachePerCaller     bool
 	demoMonidAPIKey    string
 	apiKeys            []string
 }
@@ -148,6 +150,7 @@ func loadEnvConfig() (envConfig, error) {
 	// value, is observable.
 	cfg.cacheURL = strings.TrimSpace(os.Getenv("CACHE_URL"))
 	cfg.cacheToken = strings.TrimSpace(os.Getenv("CACHE_TOKEN"))
+	cfg.cachePerCaller = strings.TrimSpace(os.Getenv("CACHE_PER_CALLER")) != ""
 	cfg.demoMonidAPIKey = strings.TrimSpace(os.Getenv("DEMO_MONID_API_KEY"))
 	cfg.apiKeys = splitList(os.Getenv("API_KEYS"))
 

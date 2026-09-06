@@ -115,8 +115,16 @@ func (c *responseCache) removeLocked(el *list.Element) {
 
 // cacheKey builds a stable cache key from the request path plus its query
 // parameters sorted by name (and value) so order-independent queries share
-// one entry. The caller identity is folded in so two callers never share a
-// cached response for a keyed route.
+// one entry.
+//
+// identity is the caller the entry belongs to, and is empty when every
+// caller shares one entry. Sharing is the default because a response here
+// is public filing and market data, identical whoever asks: keying it per
+// caller stored one copy of the same bytes per caller and made each of
+// them pay a provider for an answer another had already bought. Nothing
+// caller-specific can be served to the wrong person, because the only
+// per-caller content this server produces is the provenance and cost on a
+// traced request, and a traced request never reaches the cache at all.
 func cacheKey(r *http.Request, identity string) string {
 	q := r.URL.Query()
 	var sb strings.Builder
@@ -237,7 +245,11 @@ func (w *cachingResponseWriter) Write(b []byte) (int, error) {
 // withCache serves a cached GET response when present, else runs next and
 // caches a successful (status < 400) response body. /mcp and /api are never
 // routed through this: their handler is registered separately.
-func withCache(cache cacheStore, next http.HandlerFunc) http.HandlerFunc {
+//
+// perCaller keys each entry to the caller that paid for it, which an
+// operator wants only when callers must not benefit from each other's
+// spend. Shared is the default; see cacheKey.
+func withCache(cache cacheStore, perCaller bool, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// A request asking for provenance must reach the handler: a
 		// replayed body carries no route, and the point of asking is to
@@ -247,7 +259,10 @@ func withCache(cache cacheStore, next http.HandlerFunc) http.HandlerFunc {
 			next(w, r)
 			return
 		}
-		identity := r.Header.Get(apiKeyHeader)
+		identity := ""
+		if perCaller {
+			identity = r.Header.Get(apiKeyHeader)
+		}
 		key := cacheKey(r, identity)
 		if entry, hit := cache.get(key, time.Now()); hit {
 			w.Header().Set("X-Cache", "hit")

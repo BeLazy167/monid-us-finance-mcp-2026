@@ -100,6 +100,12 @@ type Config struct {
 	// CacheToken authenticates against CacheURL: the Upstash REST token,
 	// or a Redis password when the URL carries none.
 	CacheToken string
+	// CachePerCaller keys each cached response to the caller that paid
+	// for it. The default shares one entry between every caller, because
+	// a response here is public filing and market data that is identical
+	// whoever asks. Set this only where callers must not benefit from
+	// each other's spend.
+	CachePerCaller bool
 }
 
 // Router is the single HTTP entry point: health check, REST routes, the MCP
@@ -163,7 +169,7 @@ func NewRouter(cfg Config) *Router {
 				writeFDError(w, http.StatusTooManyRequests, "rate_limited", "Rate limit exceeded. Retry shortly.")
 				return
 			}
-			cached := withCache(cache, func(w http.ResponseWriter, r *http.Request) {
+			cached := withCache(cache, cfg.CachePerCaller, func(w http.ResponseWriter, r *http.Request) {
 				route.handler(w, r, id)
 			})
 			cached(w, r)

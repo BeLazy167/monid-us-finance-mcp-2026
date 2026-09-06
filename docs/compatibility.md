@@ -78,7 +78,11 @@ route itself:
   `end_date` or `report_period` in the past, a past `year` - is kept for a
   day rather than ten minutes, because its answer cannot change. A
   `period=ttm` request never counts as settled: a trailing row is priced
-  at the latest close whatever else the request asks for.
+  at the latest close whatever else the request asks for. One cache entry
+  is shared by every caller, so the first ask for a given question pays a
+  provider and every later one does not; `CACHE_PER_CALLER=1` keys entries
+  per caller instead. Nothing caller-specific is ever cached: the
+  provenance and cost on a traced request bypass the cache entirely.
 - `/filings/items` takes `year`, an `accession_number`, or neither, which
   selects the most recent filing of that type. Financial Datasets accepts
   the same three; `item` selects one item per request, not several.
