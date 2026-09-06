@@ -65,5 +65,8 @@ func (c *callCtx) getInsiderNames(args map[string]any) (Result, error) {
 		names = append(names, name)
 	}
 	sort.Strings(names)
-	return Result{Value: map[string]any{"names": names}}, nil
+	// Returned under a wrapper key so the REST layer can name the resource
+	// and echo the issuer alongside the list, which is the envelope
+	// Financial Datasets answers with.
+	return Result{Value: names, WrapperKey: "names"}, nil
 }

@@ -1672,12 +1672,26 @@ func TestInsiderNames_ReachesCapability(t *testing.T) {
 	caller := newFakeCaller()
 	rt := newTestRouter(caller, nil)
 	caller.capabilityResult["list_insider_names"] = Result{
-		Value: map[string]any{"names": []string{"COOK TIMOTHY D"}},
+		Value: []string{"COOK TIMOTHY D"}, WrapperKey: "names",
 	}
 
 	rec := doGet(t, rt, "/insider-trades/names?ticker=AAPL", map[string]string{apiKeyHeader: testAPIKey})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	// Financial Datasets answers {resource, ticker, names}; anything less
+	// is a different envelope from the one a client parses.
+	var envelope map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &envelope); err != nil {
+		t.Fatalf("body is not an object: %v", err)
+	}
+	for _, key := range []string{"resource", "ticker", "names"} {
+		if _, present := envelope[key]; !present {
+			t.Fatalf("envelope omits %q: %v", key, rec.Body.String())
+		}
+	}
+	if envelope["resource"] != "insider_trades" || envelope["ticker"] != "AAPL" {
+		t.Fatalf("envelope = %v, want resource insider_trades and ticker AAPL", envelope)
 	}
 	if len(caller.calls) != 0 {
 		t.Fatalf("the directory is not an MCP tool and must issue no Caller.Call, got %d", len(caller.calls))

@@ -363,8 +363,11 @@ func (rt *restAPI) insiderNames(w http.ResponseWriter, r *http.Request, id calle
 		writeFDError(w, http.StatusBadRequest, "bad_request", "ticker is required")
 		return
 	}
+	// Financial Datasets names the resource and echoes the issuer beside
+	// the list, so the envelope carries all three.
 	rt.callCapabilityAndRespond(w, r, id, "list_insider_names",
-		map[string]any{"ticker": ticker}, nil)
+		map[string]any{"ticker": ticker},
+		map[string]any{"resource": "insider_trades", "ticker": strings.ToUpper(ticker)})
 }
 
 // ---- Screener ----

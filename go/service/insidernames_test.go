@@ -34,13 +34,12 @@ func TestListInsiderNames_DistinctAndSorted(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListInsiderNames: %v", err)
 	}
-	body, ok := result.Value.(map[string]any)
-	if !ok {
-		t.Fatalf("value is %T, want a map naming the directory", result.Value)
+	if result.WrapperKey != "names" {
+		t.Fatalf("wrapper key is %q, want \"names\"", result.WrapperKey)
 	}
-	names, ok := body["names"].([]string)
+	names, ok := result.Value.([]string)
 	if !ok {
-		t.Fatalf("names is %T, want a list of strings", body["names"])
+		t.Fatalf("value is %T, want a list of strings", result.Value)
 	}
 	if len(names) != 3 {
 		t.Fatalf("got %d names, want 3 distinct insiders: %v", len(names), names)
