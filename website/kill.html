@@ -286,8 +286,10 @@ footer p+p{margin-top:12px}
       <h2>Their entire surface, answered.</h2>
       <p class="lede">All 55 routes, 55 answers. Twenty-seven MCP tools, all of them. They read a
         warehouse they spent years filling; we assemble each answer from live filings and feeds at the
-        moment you ask, then hold it for five minutes. That is the whole trade: their first ask is
-        quicker, every repeat ask of ours is quicker, and ours costs a tenth as much to try.</p>
+        moment you ask, then keep it. A closed quarter cannot change, so its answer is held for a day,
+        shared by every caller, and survives a deploy: one person pays for it and nobody pays again.
+        That is the whole trade: their first ask is quicker, every repeat ask of ours is quicker, and
+        ours costs a tenth as much to try.</p>
       <div class="legend">
         <span><i style="background:var(--ours)"></i>Monid Finance MCP</span>
         <span><i style="background:var(--theirs)"></i>Financial Datasets</span>
@@ -529,6 +531,7 @@ function ledger(s){
   const rows=[
     ['Routes that answered',`${s.oursOK} of ${s.n}`,`${s.fdOK} of ${s.n}`],
     ['Stubbed routes','none, all 55 live','—'],
+    ['Repeat asks','free, shared by every caller','$0.02 again'],
     ['MCP tool names','27','27'],
     ['Subscription required','none','$200/mo for the cheap rate'],
     ['Cost per call, no subscription',usd(per)+' measured','$0.02'],
@@ -625,7 +628,7 @@ function receipt(s){
 function caveats(s){
   const cross=Math.round(FD.build.fee/s.perCold/1000)*1000;
   const C=[
-    ['A first ask is slower',`We read the filing when you ask; they read a copy someone made earlier. That is ${ms(s.cold.a)} against ${ms(s.cold.b)}. Ask again inside five minutes and it inverts, ${ms(s.warm.a)} against ${ms(s.warm.b)}.`],
+    ['A first ask is slower',`We read the filing when you ask; they read a copy someone made earlier. That is ${ms(s.cold.a)} against ${ms(s.cold.b)}. Ask again and it inverts, ${ms(s.warm.a)} against ${ms(s.warm.b)} — and the second asker is not the first one, because one entry is shared by everybody.`],
     ['They hold deeper coverage','Thirty years of history, more tickers, ten central banks to our four, and 5,000 insider rows a call to our 15.'],
     ['We sell no contract','No SLA, no redistribution rights, no webhooks, no bulk delivery. If you need those, buy theirs.'],
   ];
