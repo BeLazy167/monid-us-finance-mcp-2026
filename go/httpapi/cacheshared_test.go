@@ -7,6 +7,8 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -195,7 +197,7 @@ func TestRedisStore_RoundTrip(t *testing.T) {
 	address, stop := fakeRedis(t)
 	defer stop()
 
-	store := newRedisStore(address, "secret")
+	store := newRedisStore(address, "secret", false)
 	if _, hit := store.get("absent", time.Now()); hit {
 		t.Fatal("a key the server does not hold reported a hit")
 	}
@@ -213,7 +215,7 @@ func TestRedisStore_RoundTrip(t *testing.T) {
 // TestRedisStore_UnreachableIsAMiss checks a Redis that is not running
 // costs a miss rather than an error.
 func TestRedisStore_UnreachableIsAMiss(t *testing.T) {
-	store := newRedisStore("127.0.0.1:1", "")
+	store := newRedisStore("127.0.0.1:1", "", false)
 	store.put("key", sampleEntry("body", time.Minute)) // must not panic
 	if _, hit := store.get("key", time.Now()); hit {
 		t.Fatal("an unreachable Redis reported a hit")
@@ -250,6 +252,15 @@ func TestSharedStoreFor_SelectsBackend(t *testing.T) {
 	if redis.password != "pass" {
 		t.Fatalf("password is %q, want it read from the URL", redis.password)
 	}
+	if redis.useTLS {
+		t.Fatal("a redis:// URL asked for TLS")
+	}
+	// A hosted Redis is reached over TLS, and dialling it in the clear
+	// fails as a permanent miss rather than as an error.
+	secure, ok := sharedStoreFor("rediss://:pass@db.upstash.io:6379", "").(*redisStore)
+	if !ok || !secure.useTLS {
+		t.Fatal("a rediss:// URL did not ask for TLS")
+	}
 	for _, bad := range []string{"", "  ", "memcached://host"} {
 		if store := sharedStoreFor(bad, "token"); store != nil {
 			t.Fatalf("%q selected a backend", bad)
@@ -285,4 +296,38 @@ func TestTieredStore_SharedHitFillsMemory(t *testing.T) {
 	if _, hit := local.get("key", time.Now()); !hit {
 		t.Fatal("a shared hit was not written back into memory")
 	}
+}
+
+// TestSharedCache_AgainstRealBackend exercises whichever backend
+// CACHE_URL names, so the codec is checked against a real server rather
+// than only against this file's fake one. It skips when nothing is
+// configured, which is how it stays out of an ordinary test run and how
+// no credential ever reaches this repository.
+//
+//	CACHE_URL=rediss://:<token>@<host>:6379 go test ./httpapi/ -run RealBackend -v
+func TestSharedCache_AgainstRealBackend(t *testing.T) {
+	cacheURL, token := os.Getenv("CACHE_URL"), os.Getenv("CACHE_TOKEN")
+	store := sharedStoreFor(cacheURL, token)
+	if store == nil {
+		t.Skip("CACHE_URL names no backend; set it to run this against a real one")
+	}
+
+	key := "monid-integration-" + strconv.FormatInt(time.Now().UnixNano(), 36)
+	if _, hit := store.get(key, time.Now()); hit {
+		t.Fatal("a key that cannot exist yet reported a hit")
+	}
+
+	want := `{"financial_metrics":[{"ticker":"AAPL"}]}`
+	store.put(key, sampleEntry(want, time.Minute))
+	entry, hit := store.get(key, time.Now())
+	if !hit {
+		t.Fatalf("%T stored an entry that did not come back", store)
+	}
+	if string(entry.body) != want {
+		t.Fatalf("body came back as %q, want %q", entry.body, want)
+	}
+	if entry.status != http.StatusOK || entry.contentType != "application/json" {
+		t.Fatalf("entry came back as %d %q", entry.status, entry.contentType)
+	}
+	t.Logf("%T round-tripped %d bytes", store, len(entry.body))
 }

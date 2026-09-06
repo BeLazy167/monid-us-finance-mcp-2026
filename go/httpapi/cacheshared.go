@@ -17,6 +17,7 @@ package httpapi
 import (
 	"bufio"
 	"crypto/sha256"
+	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -163,16 +164,34 @@ func (s *upstashStore) put(key string, entry cacheEntry) {
 type redisStore struct {
 	address  string
 	password string
+	// useTLS is set for rediss://, which every hosted Redis requires and
+	// which a plaintext dial fails at silently: the failure surfaces as a
+	// permanent miss, so a cache configured that way would look
+	// configured and never hold anything.
+	useTLS bool
 }
 
-func newRedisStore(address, password string) *redisStore {
-	return &redisStore{address: address, password: password}
+func newRedisStore(address, password string, useTLS bool) *redisStore {
+	return &redisStore{address: address, password: password, useTLS: useTLS}
+}
+
+// dial opens one connection, negotiating TLS when the URL asked for it.
+func (s *redisStore) dial() (net.Conn, error) {
+	dialer := &net.Dialer{Timeout: sharedCacheTimeout}
+	if !s.useTLS {
+		return dialer.Dial("tcp", s.address)
+	}
+	host, _, err := net.SplitHostPort(s.address)
+	if err != nil {
+		host = s.address
+	}
+	return tls.DialWithDialer(dialer, "tcp", s.address, &tls.Config{ServerName: host})
 }
 
 // command writes one RESP array and returns the reply's bulk string.
 // A nil bulk string reports absent rather than empty.
 func (s *redisStore) command(args ...string) (string, bool) {
-	conn, err := net.DialTimeout("tcp", s.address, sharedCacheTimeout)
+	conn, err := s.dial()
 	if err != nil {
 		return "", false
 	}
@@ -324,7 +343,7 @@ func sharedStoreFor(cacheURL, token string) cacheStore {
 		if password == "" {
 			password = token
 		}
-		return newRedisStore(address, password)
+		return newRedisStore(address, password, parsed.Scheme == "rediss")
 	default:
 		return nil
 	}
